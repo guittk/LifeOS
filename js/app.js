@@ -5,6 +5,11 @@
     if(!m) return { r:127, g:163, b:122 };
     return { r: parseInt(m[1],16), g: parseInt(m[2],16), b: parseInt(m[3],16) };
   }
+  const COR_PRINCIPAL_PRESETS = [
+    '#7fa37a', '#5a8f6e', '#3f7d9e', '#6a91b4', '#4f6fd1', '#9b86c9',
+    '#c26fb0', '#b46a5c', '#d1745f', '#e08a3c', '#ffc400', '#c9a227',
+    '#8a9a3f', '#4fae8f', '#5cb3b0', '#7d6f5c'
+  ];
   function applyCorPrincipal(hex){
     if(!hex) hex = COR_PRINCIPAL_PADRAO;
     const { r, g, b } = hexToRgb(hex);
@@ -12,8 +17,12 @@
     root.setProperty('--sage', hex);
     root.setProperty('--sage-soft', `rgba(${r},${g},${b},0.14)`);
     root.setProperty('--sage-line', `rgba(${r},${g},${b},0.4)`);
-    const corInput = document.getElementById('corPrincipalInput');
-    if(corInput) corInput.value = hex;
+    root.setProperty('--sage-dark', `rgb(${Math.round(r*0.56)},${Math.round(g*0.56)},${Math.round(b*0.56)})`);
+    const swatchBtn = document.getElementById('corPrincipalSwatchBtn');
+    if(swatchBtn) swatchBtn.style.background = hex;
+    document.querySelectorAll('.cor-swatch-option').forEach(el => {
+      el.classList.toggle('active', el.getAttribute('data-cor') === hex);
+    });
   }
   applyCorPrincipal(localStorage.getItem('corPrincipal') || COR_PRINCIPAL_PADRAO);
 
@@ -643,6 +652,12 @@
     const atividadeSelect = document.getElementById('casaAtividadeResponsavelInput');
     const regraSelect = document.getElementById('casaRegraResponsavelInput');
     const mondaySelect = document.getElementById('mondayResponsavelModalInput');
+    const erroSelect = document.getElementById('casaErroPessoaInput');
+    if(erroSelect){
+      const current = erroSelect.value;
+      erroSelect.innerHTML = '<option value="">Ninguém específico</option>' + nomes.map(([id, nome]) => `<option value="${escapeHtml(nome)}">${escapeHtml(nome)}</option>`).join('');
+      erroSelect.value = current;
+    }
     if(atividadeSelect){
       const current = atividadeSelect.value;
       atividadeSelect.innerHTML = '<option value="">Ninguém específico</option>' + nomes.map(([id, nome]) => `<option value="${escapeHtml(nome)}">${escapeHtml(nome)}</option>`).join('');
@@ -811,6 +826,7 @@
     if(!entries.length){ el.innerHTML = '<p class="empty-state">Nenhum erro registrado. 🎉</p>'; return; }
     el.innerHTML = entries.map(([id, er]) => `
       <div class="casa-card" data-id="${id}">
+        ${er.imagem ? `<img class="casa-erro-thumb" src="${escapeHtml(er.imagem)}" alt="">` : ''}
         <div class="casa-card-main">
           <p class="casa-card-title">${escapeHtml(er.descricao)}</p>
           <div class="casa-card-meta">
@@ -828,17 +844,377 @@
   }
   document.getElementById('casaAddErroBtn').addEventListener('click', () => {
     document.getElementById('casaErroDescricaoInput').value = '';
+    populateCasaResponsavelSelects();
     document.getElementById('casaErroPessoaInput').value = '';
+    document.getElementById('casaErroFotoInput').value = '';
+    document.getElementById('casaErroFotoPreview').style.display = 'none';
+    document.getElementById('casaErroFotoPreview').removeAttribute('src');
+    document.getElementById('casaErroFotoRemoveBtn').style.display = 'none';
     document.getElementById('casaErroModal').classList.add('active');
   });
   document.getElementById('casaErroCancelBtn').addEventListener('click', () => document.getElementById('casaErroModal').classList.remove('active'));
+  document.getElementById('casaErroFotoInput').addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    try{
+      const dataUrl = await resizeImageDataUrl(file, 900);
+      const preview = document.getElementById('casaErroFotoPreview');
+      preview.src = dataUrl;
+      preview.style.display = 'block';
+      document.getElementById('casaErroFotoRemoveBtn').style.display = 'inline-block';
+    }catch(err){
+      showAppMessage('Não consegui ler essa imagem.', 'error');
+    }
+  });
+  document.getElementById('casaErroFotoRemoveBtn').addEventListener('click', () => {
+    document.getElementById('casaErroFotoInput').value = '';
+    const preview = document.getElementById('casaErroFotoPreview');
+    preview.style.display = 'none';
+    preview.removeAttribute('src');
+    document.getElementById('casaErroFotoRemoveBtn').style.display = 'none';
+  });
   document.getElementById('casaErroOkBtn').addEventListener('click', async () => {
     const descricao = document.getElementById('casaErroDescricaoInput').value.trim();
     if(!descricao){ showAppMessage('Descreva o que aconteceu.', 'error'); return; }
     const pessoa = document.getElementById('casaErroPessoaInput').value.trim();
-    await dbPut(userPath('/casa/erros/' + newId()), { descricao, pessoa, autorEmail: session.email, criadoEm: new Date().toISOString() });
+    const imagem = document.getElementById('casaErroFotoPreview').getAttribute('src') || null;
+    await dbPut(userPath('/casa/erros/' + newId()), { descricao, pessoa, imagem, autorEmail: session.email, criadoEm: new Date().toISOString() });
     document.getElementById('casaErroModal').classList.remove('active');
     await renderCasaErros();
+  });
+
+  /* ---------- FINANÇAS (planilha com células e fórmulas, tipo Excel) ---------- */
+  const FIN_DEFAULT_COLS = 7;
+  const FIN_DEFAULT_ROWS = 60;
+  const FIN_COLORS = ['', '#3a4a3a', '#3a4250', '#4a3a55', '#553a3a', '#554a2a', '#2a4a4a', '#40403a'];
+  let finCells = {}; // { "A1": { f: "texto ou =formula", bg: "#hex"|null, b: bool, cur: bool } }
+  let finRows = FIN_DEFAULT_ROWS;
+  let finCols = FIN_DEFAULT_COLS;
+  let finSelectedKey = null;
+  let finSaveTimer = null;
+
+  function finColLetter(n){
+    let s = '', x = n + 1;
+    while(x > 0){ const r = (x - 1) % 26; s = String.fromCharCode(65 + r) + s; x = Math.floor((x - 1) / 26); }
+    return s;
+  }
+  function finCellKey(col, row){ return finColLetter(col) + (row + 1); }
+  function finParseKey(key){
+    const m = /^([A-Z]+)([0-9]+)$/.exec(key || '');
+    if(!m) return null;
+    let col = 0;
+    for(const c of m[1]) col = col * 26 + (c.charCodeAt(0) - 64);
+    return { col: col - 1, row: parseInt(m[2], 10) - 1 };
+  }
+  function finExpandRange(a, b){
+    const pa = finParseKey(a), pb = finParseKey(b);
+    if(!pa || !pb) return [];
+    const keys = [];
+    for(let c = Math.min(pa.col, pb.col); c <= Math.max(pa.col, pb.col); c++){
+      for(let r = Math.min(pa.row, pb.row); r <= Math.max(pa.row, pb.row); r++){
+        keys.push(finCellKey(c, r));
+      }
+    }
+    return keys;
+  }
+  function finEvalCell(key, cache, visiting){
+    if(cache.hasOwnProperty(key)) return cache[key];
+    if(visiting.has(key)){ cache[key] = '#CIRC'; return '#CIRC'; }
+    const cell = finCells[key];
+    const raw = cell && cell.f != null ? String(cell.f) : '';
+    if(!raw){ cache[key] = ''; return ''; }
+    if(raw[0] !== '='){
+      const n = Number(raw.replace(',', '.'));
+      const val = raw.trim() !== '' && !isNaN(n) ? n : raw;
+      cache[key] = val;
+      return val;
+    }
+    visiting.add(key);
+    let expr = raw.slice(1).toUpperCase();
+    // funções SUM(range) e AVG(range) primeiro, pra não confundir com refs simples
+    expr = expr.replace(/(SUM|AVG)\(\s*([A-Z]+[0-9]+)\s*:\s*([A-Z]+[0-9]+)\s*\)/g, (m0, fn, a, b) => {
+      const keys = finExpandRange(a, b);
+      const vals = keys.map(k => { const v = finEvalCell(k, cache, visiting); return typeof v === 'number' ? v : 0; });
+      const sum = vals.reduce((s, v) => s + v, 0);
+      return String(fn === 'AVG' ? (vals.length ? sum / vals.length : 0) : sum);
+    });
+    // referências de célula avulsas
+    expr = expr.replace(/[A-Z]+[0-9]+/g, (ref) => {
+      const v = finEvalCell(ref, cache, visiting);
+      return String(typeof v === 'number' ? v : 0);
+    });
+    visiting.delete(key);
+    let result;
+    if(/^[0-9+\-*/().\seE]*$/.test(expr) && expr.trim() !== ''){
+      try{ result = Function('"use strict"; return (' + expr + ')')(); }catch(e){ result = '#ERRO'; }
+      if(typeof result !== 'number' || !isFinite(result)) result = '#ERRO';
+    } else {
+      result = '#ERRO';
+    }
+    cache[key] = result;
+    return result;
+  }
+  function finFormatValue(key, val){
+    const cell = finCells[key];
+    if(typeof val === 'number'){
+      if(cell && cell.cur){
+        return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      }
+      return val.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+    }
+    return val == null ? '' : String(val);
+  }
+  function finSeedTemplate(){
+    // Estrutura pensada pro fluxo real do usuário: contas que vencem no dia 10,
+    // salário/vale que entra no dia 20, fatura do cartão (com suas 4 subcategorias)
+    // e Mercado Pago — pra ver se sobra ou falta depois do dia 20. No fim, uma
+    // tabela simples com as categorias fixas do dia a dia.
+    const meses = ['Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    const nMeses = meses.length;
+    const cells = {};
+    let row = 0;
+    const setCell = (col, r, val) => { cells[finCellKey(col, r)] = val; };
+    const bannerRow = (label, bg) => {
+      setCell(0, row, { f: label, b: true, bg });
+      for(let c = 1; c <= nMeses; c++) setCell(c, row, { bg });
+      row++;
+    };
+    const subHeaderRow = (label) => { setCell(0, row, { f: label, b: true }); row++; };
+    const valueRow = (label, valores) => {
+      setCell(0, row, { f: label });
+      for(let c = 1; c <= nMeses; c++) setCell(c, row, { f: String((valores && valores[c - 1]) || 0), cur: true });
+      const r = row; row++; return r;
+    };
+    const sumRow = (label, fromRow, toRow, bg) => {
+      setCell(0, row, { f: label, b: true, bg });
+      for(let c = 1; c <= nMeses; c++){
+        setCell(c, row, { f: `=SUM(${finCellKey(c, fromRow)}:${finCellKey(c, toRow)})`, cur: true, b: true, bg });
+      }
+      const r = row; row++; return r;
+    };
+    const blankRow = () => { row++; };
+
+    // cabeçalho de meses
+    setCell(0, row, { f: 'Categoria', b: true });
+    meses.forEach((m, i) => setCell(i + 1, row, { f: m, b: true }));
+    row++;
+    blankRow();
+
+    // DIA 10 — contas fixas
+    bannerRow('DIA 10 DO MÊS — CONTAS FIXAS', '#3a4250');
+    const dia10Start = row;
+    valueRow('Aluguel', []);
+    valueRow('Condomínio', []);
+    valueRow('Luz', []);
+    valueRow('Água', []);
+    valueRow('Internet', []);
+    const dia10End = row - 1;
+    const dia10Total = sumRow('Total Dia 10', dia10Start, dia10End, '#3a4250');
+    blankRow();
+
+    // DIA 20 — salário e vale
+    bannerRow('DIA 20 DO MÊS — ENTRADAS', '#3a4a3a');
+    const dia20Start = row;
+    valueRow('Salário', []);
+    valueRow('Vale', []);
+    const dia20End = row - 1;
+    const dia20Total = sumRow('Total Dia 20', dia20Start, dia20End, '#3a4a3a');
+    blankRow();
+
+    // CARTÃO DE CRÉDITO — SANTANDER (com as 4 subcategorias)
+    bannerRow('CARTÃO DE CRÉDITO — SANTANDER', '#553a3a');
+    subHeaderRow('Estimativas');
+    const estStart = row;
+    valueRow('Remédios', []);
+    valueRow('Supermercado', []);
+    valueRow('Gasolina', []);
+    valueRow('Imprevistos', []);
+    const estEnd = row - 1;
+    const estTotal = sumRow('Subtotal Estimativas', estStart, estEnd, '#4a3a3a');
+    blankRow();
+    subHeaderRow('Renovação Automática');
+    const renovStart = row;
+    valueRow('Assinatura 1', []);
+    valueRow('Assinatura 2', []);
+    const renovEnd = row - 1;
+    const renovTotal = sumRow('Subtotal Renovação Automática', renovStart, renovEnd, '#4a3a3a');
+    blankRow();
+    subHeaderRow('Parcelas');
+    const parcStart = row;
+    valueRow('Parcela 1', []);
+    valueRow('Parcela 2', []);
+    const parcEnd = row - 1;
+    const parcTotal = sumRow('Subtotal Parcelas', parcStart, parcEnd, '#4a3a3a');
+    blankRow();
+    subHeaderRow('Compras');
+    const compStart = row;
+    valueRow('Compra 1', []);
+    valueRow('Compra 2', []);
+    const compEnd = row - 1;
+    const compTotal = sumRow('Subtotal Compras', compStart, compEnd, '#4a3a3a');
+    setCell(0, row, { f: 'Total Fatura Santander', b: true, bg: '#553a3a' });
+    for(let c = 1; c <= nMeses; c++){
+      setCell(c, row, { f: `=${finCellKey(c, estTotal)}+${finCellKey(c, renovTotal)}+${finCellKey(c, parcTotal)}+${finCellKey(c, compTotal)}`, cur: true, b: true, bg: '#553a3a' });
+    }
+    const santanderTotal = row; row++;
+    blankRow();
+
+    // MERCADO PAGO
+    bannerRow('MERCADO PAGO', '#554a2a');
+    const mpStart = row;
+    valueRow('Fatura Mercado Pago', []);
+    valueRow('Taxa Mercado Pago', []);
+    const mpEnd = row - 1;
+    const mpTotal = sumRow('Total Mercado Pago', mpStart, mpEnd, '#554a2a');
+    blankRow();
+
+    // RESUMO — sobra ou falta depois do dia 20
+    bannerRow('RESUMO — SOBRA/FALTA APÓS O DIA 20', '#2a4a4a');
+    setCell(0, row, { f: 'Total Disponível (Dia 20)' });
+    for(let c = 1; c <= nMeses; c++) setCell(c, row, { f: `=${finCellKey(c, dia20Total)}`, cur: true });
+    row++;
+    setCell(0, row, { f: 'Total Cartões (Santander + Mercado Pago)' });
+    for(let c = 1; c <= nMeses; c++) setCell(c, row, { f: `=${finCellKey(c, santanderTotal)}+${finCellKey(c, mpTotal)}`, cur: true });
+    const cartoesRow = row; row++;
+    setCell(0, row, { f: 'Sobra / Falta do Mês', b: true, bg: '#2a4a4a' });
+    for(let c = 1; c <= nMeses; c++){
+      setCell(c, row, { f: `=${finCellKey(c, dia20Total)}-${finCellKey(c, cartoesRow)}`, cur: true, b: true, bg: '#2a4a4a' });
+    }
+    row++;
+    blankRow();
+
+    // TABELA DE VALORES — lista simples das categorias fixas do dia a dia
+    bannerRow('TABELA DE VALORES', '#40403a');
+    valueRow('Salário', []);
+    valueRow('Vale', []);
+    valueRow('Remédios', []);
+    valueRow('Supermercado', []);
+    valueRow('Gasolina', []);
+    valueRow('Condomínio', []);
+    valueRow('Aluguel', []);
+    valueRow('Luz', []);
+    valueRow('Internet', []);
+    valueRow('Água', []);
+
+    return cells;
+  }
+  function finScheduleSave(){
+    const statusEl = document.getElementById('finSaveStatus');
+    if(statusEl) statusEl.textContent = 'Salvando...';
+    clearTimeout(finSaveTimer);
+    finSaveTimer = setTimeout(async () => {
+      try{
+        await dbPutSilent(userPath('/Financas'), { cells: finCells, rows: finRows, cols: finCols });
+        if(statusEl) statusEl.textContent = 'Tudo salvo';
+      }catch(e){
+        if(statusEl) statusEl.textContent = 'Erro ao salvar';
+      }
+    }, 500);
+  }
+  function finRenderColorRow(){
+    const row = document.getElementById('finColorRow');
+    if(row.children.length) return;
+    row.innerHTML = FIN_COLORS.map(hex => hex
+      ? `<button type="button" class="fin-color-dot" data-fin-color="${hex}" style="background:${hex};" title="cor de fundo"></button>`
+      : `<button type="button" class="fin-color-dot fin-color-none" data-fin-color="" title="sem cor"></button>`
+    ).join('');
+    row.querySelectorAll('[data-fin-color]').forEach(btn => btn.addEventListener('click', () => {
+      if(!finSelectedKey) return;
+      finCells[finSelectedKey] = finCells[finSelectedKey] || {};
+      const hex = btn.getAttribute('data-fin-color');
+      if(hex) finCells[finSelectedKey].bg = hex; else delete finCells[finSelectedKey].bg;
+      finScheduleSave();
+      renderFinancas(true);
+    }));
+  }
+  function renderFinancas(skipFetch){
+    return (async () => {
+      if(!skipFetch){
+        const data = await dbGet(userPath('/Financas'));
+        if(data && data.cells){
+          finCells = data.cells;
+          finRows = data.rows || FIN_DEFAULT_ROWS;
+          finCols = data.cols || FIN_DEFAULT_COLS;
+        } else {
+          finCells = finSeedTemplate();
+          finRows = FIN_DEFAULT_ROWS;
+          finCols = FIN_DEFAULT_COLS;
+          await dbPutSilent(userPath('/Financas'), { cells: finCells, rows: finRows, cols: finCols });
+        }
+      }
+      finRenderColorRow();
+      const table = document.getElementById('finSheetTable');
+      const cache = {};
+      let thead = '<tr><th class="fin-corner"></th>';
+      for(let c = 0; c < finCols; c++) thead += `<th>${finColLetter(c)}</th>`;
+      thead += '</tr>';
+      let tbody = '';
+      for(let r = 0; r < finRows; r++){
+        tbody += `<tr><td class="fin-row-head-cell">${r + 1}</td>`;
+        for(let c = 0; c < finCols; c++){
+          const key = finCellKey(c, r);
+          const cell = finCells[key];
+          const val = finEvalCell(key, cache, new Set());
+          const display = finFormatValue(key, val);
+          const raw = cell && cell.f != null ? cell.f : '';
+          const classes = ['fin-cell'];
+          if(cell && cell.b) classes.push('fin-bold');
+          if(val === '#ERRO' || val === '#CIRC') classes.push('fin-error');
+          if(key === finSelectedKey) classes.push('selected');
+          const style = cell && cell.bg ? ` style="background:${cell.bg};"` : '';
+          tbody += `<td class="${classes.join(' ')}" data-fin-key="${key}"${style}><input class="fin-cell-input" data-fin-key="${key}" data-raw="${escapeHtml(raw)}" value="${escapeHtml(display)}"></td>`;
+        }
+        tbody += '</tr>';
+      }
+      table.innerHTML = thead + tbody;
+      table.querySelectorAll('.fin-cell-input').forEach(input => {
+        input.addEventListener('focus', () => {
+          finSelectedKey = input.getAttribute('data-fin-key');
+          input.value = input.getAttribute('data-raw') || '';
+          table.querySelectorAll('.fin-cell.selected').forEach(td => td.classList.remove('selected'));
+          input.closest('.fin-cell').classList.add('selected');
+        });
+        input.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); input.blur(); } });
+        input.addEventListener('blur', () => {
+          const key = input.getAttribute('data-fin-key');
+          const value = input.value;
+          finCells[key] = finCells[key] || {};
+          if(value === ''){ delete finCells[key].f; } else { finCells[key].f = value; }
+          finScheduleSave();
+          renderFinancas(true);
+        });
+      });
+    })();
+  }
+  document.getElementById('finAddRowBtn').addEventListener('click', () => { finRows++; finScheduleSave(); renderFinancas(true); });
+  document.getElementById('finAddColBtn').addEventListener('click', () => { finCols++; finScheduleSave(); renderFinancas(true); });
+  document.getElementById('finCurrencyBtn').addEventListener('click', () => {
+    if(!finSelectedKey) return;
+    finCells[finSelectedKey] = finCells[finSelectedKey] || {};
+    finCells[finSelectedKey].cur = !finCells[finSelectedKey].cur;
+    finScheduleSave();
+    renderFinancas(true);
+  });
+  document.getElementById('finBoldBtn').addEventListener('click', () => {
+    if(!finSelectedKey) return;
+    finCells[finSelectedKey] = finCells[finSelectedKey] || {};
+    finCells[finSelectedKey].b = !finCells[finSelectedKey].b;
+    finScheduleSave();
+    renderFinancas(true);
+  });
+  document.getElementById('finClearBtn').addEventListener('click', () => {
+    if(!finSelectedKey) return;
+    delete finCells[finSelectedKey];
+    finScheduleSave();
+    renderFinancas(true);
+  });
+  document.getElementById('finResetTemplateBtn').addEventListener('click', async () => {
+    if(!await showConfirm('Isso substitui TODAS as células da planilha pelo modelo padrão. Continuar?')) return;
+    finCells = finSeedTemplate();
+    finRows = FIN_DEFAULT_ROWS;
+    finCols = FIN_DEFAULT_COLS;
+    finScheduleSave();
+    renderFinancas(true);
   });
 
   /* ---------- OBJETIVOS (objetivo grande + pontos menores que dependem dele) ---------- */
@@ -865,9 +1241,49 @@
   const OBJ_PRIORIDADE_ORDER = { alta:0, media:1, baixa:2 };
   function objCategoria(key){ return OBJ_CATEGORIAS.find(c => c.key === key) || OBJ_CATEGORIAS[OBJ_CATEGORIAS.length - 1]; }
 
+  const OBJ_AUTO_TIPOS = {
+    fluencia: 'cards de Fluência estudados',
+    academia: 'exercícios concluídos na Academia',
+    tarefas: 'tarefas concluídas',
+    diario: 'entradas no Diário',
+    monday: 'tarefas concluídas no Monday'
+  };
+  async function fetchAutoActionCounts(){
+    const [cards, academiaDias, tasks, diario, monday] = await Promise.all([
+      dbGet(userPath('/Cards')).catch(() => null),
+      dbGet(userPath('/AcademiaDias')).catch(() => null),
+      dbGet(userPath('/Tasks')).catch(() => null),
+      dbGet(userPath('/DiarioEntradas')).catch(() => null),
+      dbGet(userPath('/MondayTasks')).catch(() => null)
+    ]);
+    let fluencia = 0;
+    Object.values(cards || {}).forEach(c => { fluencia += (c.History || []).length; });
+    let academia = 0;
+    Object.values(academiaDias || {}).forEach(dia => {
+      Object.values((dia && dia.exercicios) || {}).forEach(ex => { academia += Object.keys(ex.doneDates || {}).length; });
+    });
+    const tarefas = Object.values(tasks || {}).filter(t => t.done).length;
+    const diarioCount = Object.keys(diario || {}).length;
+    const mondayCount = Object.values(monday || {}).filter(t => t.status === 'done').length;
+    return { fluencia, academia, tarefas, diario: diarioCount, monday: mondayCount };
+  }
+  function aplicarAutoProgresso(data, counts){
+    Object.values(data).forEach(o => {
+      Object.values(o.pontos || {}).forEach(p => {
+        if(p.autoTipo && counts[p.autoTipo] !== undefined){
+          const atual = counts[p.autoTipo];
+          const base = p.autoBase || 0;
+          const meta = p.autoMeta || 1;
+          p.progresso = Math.max(0, Math.min(100, Math.round((atual - base) / meta * 100)));
+        }
+      });
+    });
+  }
   async function renderObjetivos(){
     const el = document.getElementById('objetivosList');
     const data = await dbGet(userPath('/objetivos')) || {};
+    const counts = await fetchAutoActionCounts();
+    aplicarAutoProgresso(data, counts);
     const entries = Object.entries(data).sort((a,b) => {
       const pa = OBJ_PRIORIDADE_ORDER[a[1].prioridade] ?? 1;
       const pb = OBJ_PRIORIDADE_ORDER[b[1].prioridade] ?? 1;
@@ -932,6 +1348,7 @@
               <div class="obj-ponto-meta">
                 <div class="obj-ponto-progress-track"><div class="obj-ponto-progress-fill" style="width:${progresso}%;"></div></div>
                 <span class="obj-ponto-progress-pct">${progresso}%</span>
+                ${p.autoTipo ? `<span class="obj-ponto-auto-tag">⚡ auto: ${OBJ_AUTO_TIPOS[p.autoTipo] || p.autoTipo}</span>` : ''}
                 ${bloqueado ? `<span class="obj-ponto-blocked-tag">🔒 depende de: ${escapeHtml(dep.nome)}</span>` : ''}
                 ${p.prazo ? `<span class="obj-ponto-prazo ${overdue ? 'is-overdue' : ''}">prazo: ${fmtShortDate(p.prazo)}</span>` : ''}
               </div>
@@ -1053,6 +1470,9 @@
     document.getElementById('pontoPrazoInput').disabled = false;
     document.getElementById('pontoProgressoInput').value = 0;
     document.getElementById('pontoProgressoValue').textContent = '0%';
+    document.getElementById('pontoAutoTipoInput').value = '';
+    document.getElementById('pontoAutoMetaInput').value = '';
+    pontoAtualizarVisibilidadeAuto();
     dbGet(userPath('/objetivos/' + objId + '/pontos')).then(pontosMap => {
       pontosMap = pontosMap || {};
       const depSelect = document.getElementById('pontoDependeDeInput');
@@ -1066,6 +1486,11 @@
         document.getElementById('pontoProgressoInput').value = progresso;
         document.getElementById('pontoProgressoValue').textContent = progresso + '%';
         depSelect.value = p.dependeDe || '';
+        if(p.autoTipo){
+          document.getElementById('pontoAutoTipoInput').value = p.autoTipo;
+          document.getElementById('pontoAutoMetaInput').value = p.autoMeta || '';
+          pontoAtualizarVisibilidadeAuto();
+        }
         if(p.prazo){
           document.getElementById('pontoPrazoInput').value = p.prazo;
         } else {
@@ -1076,6 +1501,13 @@
     });
     document.getElementById('pontoModal').classList.add('active');
   }
+  function pontoAtualizarVisibilidadeAuto(){
+    const tipo = document.getElementById('pontoAutoTipoInput').value;
+    document.getElementById('pontoAutoMetaRow').style.display = tipo ? 'flex' : 'none';
+    document.getElementById('pontoProgressoLabel').style.display = tipo ? 'none' : '';
+    document.getElementById('pontoProgressoInput').style.display = tipo ? 'none' : '';
+  }
+  document.getElementById('pontoAutoTipoInput').addEventListener('change', pontoAtualizarVisibilidadeAuto);
   document.getElementById('pontoProgressoInput').addEventListener('input', (e) => {
     document.getElementById('pontoProgressoValue').textContent = e.target.value + '%';
   });
@@ -1096,10 +1528,27 @@
     const prazo = semPrazo ? '' : document.getElementById('pontoPrazoInput').value;
     const progresso = Number(document.getElementById('pontoProgressoInput').value) || 0;
     const dependeDe = document.getElementById('pontoDependeDeInput').value;
-    if(pontoEditingId){
-      await dbPatch(userPath('/objetivos/' + pontoEditingObjId + '/pontos/' + pontoEditingId), { nome, descricao, prazo, progresso, dependeDe });
+    const autoTipo = document.getElementById('pontoAutoTipoInput').value;
+    const autoMeta = autoTipo ? Math.max(1, Number(document.getElementById('pontoAutoMetaInput').value) || 1) : null;
+    let extra = { nome, descricao, prazo, dependeDe };
+    if(autoTipo){
+      let autoBase = null;
+      if(pontoEditingId){
+        const existente = await dbGet(userPath('/objetivos/' + pontoEditingObjId + '/pontos/' + pontoEditingId));
+        if(existente && existente.autoTipo === autoTipo) autoBase = existente.autoBase;
+      }
+      if(autoBase === null){
+        const counts = await fetchAutoActionCounts();
+        autoBase = counts[autoTipo] || 0;
+      }
+      extra = { ...extra, autoTipo, autoMeta, autoBase, progresso: 0 };
     } else {
-      await dbPut(userPath('/objetivos/' + pontoEditingObjId + '/pontos/' + newId()), { nome, descricao, prazo, progresso, dependeDe, criadoEm: new Date().toISOString() });
+      extra = { ...extra, autoTipo: null, autoMeta: null, autoBase: null, progresso };
+    }
+    if(pontoEditingId){
+      await dbPatch(userPath('/objetivos/' + pontoEditingObjId + '/pontos/' + pontoEditingId), extra);
+    } else {
+      await dbPut(userPath('/objetivos/' + pontoEditingObjId + '/pontos/' + newId()), { ...extra, criadoEm: new Date().toISOString() });
     }
     document.getElementById('pontoModal').classList.remove('active');
     await renderObjetivos();
@@ -1131,59 +1580,293 @@
       reader.readAsDataURL(file);
     });
   }
-  function visionBoardAutoLayout(count){
+  function loadImageAspect(src){
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve((img.naturalHeight / img.naturalWidth) || 1.2);
+      img.onerror = () => resolve(1.2);
+      img.src = src;
+    });
+  }
+  async function visionBoardAutoLayout(srcs){
+    const count = srcs.length;
     if(count <= 0) return [];
-    const cols = Math.max(2, Math.round(Math.sqrt(count * 1.6)));
-    const rows = Math.max(1, Math.ceil(count / cols));
+    // Usa a proporção real de cada imagem (em vez de estimar) pra empacotar em
+    // colunas (masonry) sem sobrar vão nem uma foto cobrir a outra por engano.
+    const aspects = await Promise.all(srcs.map(loadImageAspect));
+    const cols = Math.max(2, Math.min(5, Math.round(Math.sqrt(count * 1.05))));
     const cellW = 100 / cols;
-    const cellH = 100 / rows;
-    // Tamanho base ocupa a maior parte da célula (em vez de um valor fixo pequeno),
-    // então com poucas fotos elas ficam grandes, e com muitas, a grade compensa.
-    const baseWidthPct = Math.min(38, cellW * 0.94);
-    const positions = [];
-    for(let i = 0; i < count; i++){
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const jitterX = (Math.random() - 0.5) * cellW * 0.22;
-      const jitterY = (Math.random() - 0.5) * cellH * 0.22;
-      const left = col * cellW + cellW / 2 + jitterX;
-      const top = row * cellH + cellH / 2 + jitterY;
-      const widthPct = baseWidthPct * (0.9 + Math.random() * 0.22);
-      const rotate = Math.round((Math.random() - 0.5) * 14);
-      positions.push({
-        left: Math.min(97, Math.max(3, left)),
-        top: Math.min(96, Math.max(4, top)),
-        widthPct, rotate, z: i + 1
-      });
+    const widthPct = Math.min(40, cellW * 0.94);
+    const colHeights = new Array(cols).fill(0);
+    const order = [...Array(count).keys()];
+    for(let i = order.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
     }
+    const positions = new Array(count);
+    order.forEach((i) => {
+      // sempre entra na coluna mais curta no momento — mantém o preenchimento parelho,
+      // sem vãos grandes nem uma foto avançando sobre a coluna vizinha.
+      const col = colHeights.indexOf(Math.min(...colHeights));
+      const w = widthPct * (0.9 + Math.random() * 0.2);
+      const heightEst = w * Math.min(1.6, Math.max(0.55, aspects[i]));
+      const jitterX = (Math.random() - 0.5) * cellW * 0.08;
+      const left = col * cellW + cellW / 2 + jitterX;
+      const top = colHeights[col] + heightEst / 2;
+      colHeights[col] += heightEst + 3;
+      const rotate = Math.round((Math.random() - 0.5) * 8);
+      positions[i] = { left: Math.min(98, Math.max(2, left)), top, widthPct: w, rotate };
+    });
+    const maxHeight = Math.max(...colHeights, 1);
+    positions.forEach((p, i) => {
+      p.top = Math.min(97, Math.max(3, (p.top / maxHeight) * 94 + 3));
+      p.z = i + 1;
+    });
     return positions;
   }
+  // dados do board em cache local + camadas pendentes de um "Embaralhar" ainda não salvo
+  const VISION_DEFAULT_WIDTH = 24;
+  const VISION_MIN_WIDTH = 10;
+  const VISION_MAX_WIDTH = 45;
+  const VISION_SIZE_STEP = 3;
+  let visionData = {};
+  let visionPendingShuffle = null; // { id: {left,top,widthPct,rotate,z} } — só em memória até salvar
+
+  function visionSortedEntries(data){
+    return Object.entries(data).sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
+  }
+  function visionShowShuffleBar(show){
+    document.getElementById('visionShuffleBar').classList.toggle('active', show);
+    document.getElementById('visionLayersBtn').disabled = show;
+    document.getElementById('visionAddOpenBtn').disabled = show;
+  }
   async function shuffleVisionBoard(){
-    const data = await dbGet(userPath('/VisionBoard')) || {};
-    const entries = Object.entries(data).sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
+    visionData = await dbGet(userPath('/VisionBoard')) || {};
+    const entries = visionSortedEntries(visionData);
     if(!entries.length) return;
-    const layout = visionBoardAutoLayout(entries.length);
+    const layout = await visionBoardAutoLayout(entries.map(([, v]) => v.src));
+    visionPendingShuffle = {};
+    entries.forEach(([id], i) => { visionPendingShuffle[id] = layout[i]; });
+    paintVisionBoard();
+    visionShowShuffleBar(true);
+  }
+  async function saveVisionShuffle(){
+    if(!visionPendingShuffle) return;
     const updates = {};
-    entries.forEach(([id], i) => {
-      updates[id] = { ...data[id], ...layout[i] };
+    Object.entries(visionData).forEach(([id, v]) => {
+      updates[id] = { ...v, ...(visionPendingShuffle[id] || {}) };
     });
     await dbPutSilent(userPath('/VisionBoard'), updates);
-    await renderVisionBoard();
+    visionData = updates;
+    visionPendingShuffle = null;
+    visionShowShuffleBar(false);
+    paintVisionBoard();
   }
-  async function renderVisionBoard(){
+  function cancelVisionShuffle(){
+    visionPendingShuffle = null;
+    visionShowShuffleBar(false);
+    paintVisionBoard();
+  }
+  // Arraste manual: só ativo com o painel de Camadas aberto. Clique numa foto pra
+  // selecionar (contorno destacado), clique de novo + arraste pra reposicionar.
+  let visionManualSelectedId = null;
+  function visionLayersOpen(){
+    const panel = document.getElementById('visionLayersPanel');
+    return !!(panel && panel.classList.contains('open')) && !visionPendingShuffle;
+  }
+  function paintVisionBoard(){
     const el = document.getElementById('visionBoard');
     if(!el) return;
-    const data = await dbGet(userPath('/VisionBoard')) || {};
-    const entries = Object.entries(data).sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
+    const entries = visionSortedEntries(visionData).map(([id, v]) => {
+      const override = visionPendingShuffle && visionPendingShuffle[id];
+      return [id, override ? { ...v, ...override } : v];
+    });
     if(!entries.length){
+      el.style.minHeight = '260px';
       el.innerHTML = '<p class="empty-state" style="padding:40px;">Seu Vision Board está vazio. Clique em "Gerenciar imagens" pra começar a montar.</p>';
       return;
     }
+    // o board cresce conforme a quantidade de fotos, em vez de um tamanho fixo
+    // grande demais que deixa vão sobrando quando tem poucas imagens.
+    el.style.minHeight = Math.min(920, Math.max(320, 110 + entries.length * 95)) + 'px';
+    el.classList.toggle('layers-mode', visionLayersOpen());
     el.innerHTML = entries.map(([id, v]) => `
-      <div class="vision-item" data-vision-id="${id}" style="left:${v.left}%; top:${v.top}%; width:${v.widthPct}%; --v-rot:${v.rotate}deg; z-index:${v.z || 1};">
-        <img src="${escapeHtml(v.src)}" alt="" loading="lazy">
+      <div class="vision-item${id === visionManualSelectedId ? ' selected' : ''}" data-vision-id="${id}" style="left:${v.left}%; top:${v.top}%; width:${v.widthPct}%; --v-rot:${v.rotate}deg; z-index:${v.z || 1};">
+        <img src="${escapeHtml(v.src)}" alt="" loading="lazy" draggable="false">
       </div>`).join('');
+    el.querySelectorAll('.vision-item').forEach(itemEl => {
+      itemEl.addEventListener('pointerdown', (e) => {
+        if(!visionLayersOpen()) return;
+        const id = itemEl.getAttribute('data-vision-id');
+        if(id !== visionManualSelectedId){
+          e.preventDefault();
+          visionManualSelectedId = id;
+          paintVisionBoard();
+          return;
+        }
+        e.preventDefault();
+        const boardRect = el.getBoundingClientRect();
+        itemEl.classList.add('vision-dragging');
+        itemEl.setPointerCapture(e.pointerId);
+        const onMove = (ev) => {
+          const left = Math.min(98, Math.max(2, ((ev.clientX - boardRect.left) / boardRect.width) * 100));
+          const top = Math.min(97, Math.max(3, ((ev.clientY - boardRect.top) / boardRect.height) * 100));
+          itemEl.style.left = left + '%';
+          itemEl.style.top = top + '%';
+          visionData[id] = { ...visionData[id], left, top };
+        };
+        const onUp = () => {
+          itemEl.classList.remove('vision-dragging');
+          itemEl.removeEventListener('pointermove', onMove);
+          itemEl.removeEventListener('pointerup', onUp);
+          const { left, top } = visionData[id];
+          dbPatchSilent(userPath('/VisionBoard/' + id), { left, top }).catch(err => console.error('Erro ao salvar posição da imagem', err));
+        };
+        itemEl.addEventListener('pointermove', onMove);
+        itemEl.addEventListener('pointerup', onUp);
+      });
+    });
   }
+  async function renderVisionBoard(){
+    if(!document.getElementById('visionBoard')) return;
+    visionData = await dbGet(userPath('/VisionBoard')) || {};
+    visionPendingShuffle = null;
+    visionManualSelectedId = null;
+    visionShowShuffleBar(false);
+    paintVisionBoard();
+    if(document.getElementById('visionLayersPanel').classList.contains('open')) renderVisionLayers();
+  }
+
+  /* Painel "Camadas" — lista as imagens do topo (frente) pro fundo, permite arrastar
+     pra reordenar (define o z-index) e ajustar o tamanho individual de cada uma. */
+  let visionLayerDragId = null;
+  function visionLayersGetAfterElement(container, y){
+    const rows = [...container.querySelectorAll('.vision-layer-row:not(.dragging)')];
+    return rows.reduce((closest, row) => {
+      const box = row.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if(offset < 0 && offset > closest.offset) return { offset, element: row };
+      return closest;
+    }, { offset: -Infinity, element: null }).element;
+  }
+  function renderVisionLayers(){
+    const list = document.getElementById('visionLayersList');
+    const entries = visionSortedEntries(visionData);
+    if(!entries.length){
+      list.innerHTML = '<p class="empty-state" style="margin:0;">Nenhuma imagem ainda.</p>';
+      return;
+    }
+    // topo da lista = maior z-index (mais na frente), como nas Camadas do Canva
+    const byZDesc = [...entries].sort((a, b) => (b[1].z || 0) - (a[1].z || 0));
+    list.innerHTML = byZDesc.map(([id, v]) => `
+      <li class="vision-layer-row" data-vision-id="${id}">
+        <span class="vision-layer-drag" draggable="true">⠿</span>
+        <img class="vision-layer-thumb" src="${escapeHtml(v.src)}" alt="" draggable="false">
+        <div class="vision-layer-size-controls">
+          <button type="button" class="vision-layer-size-btn" data-vision-size-dec="${id}" title="Diminuir">−</button>
+          <span class="vision-layer-size-val">${Math.round(v.widthPct || VISION_DEFAULT_WIDTH)}%</span>
+          <button type="button" class="vision-layer-size-btn" data-vision-size-inc="${id}" title="Aumentar">+</button>
+          <button type="button" class="vision-layer-size-reset" data-vision-size-reset="${id}" title="Restaurar tamanho padrão">↺</button>
+        </div>
+      </li>`).join('');
+
+    // Só a "alça" (⠿) é arrastável — assim a régua de tamanho e a miniatura
+    // respondem ao próprio clique/arraste delas, sem disparar reordenar a linha.
+    list.querySelectorAll('.vision-layer-drag').forEach(handle => {
+      handle.addEventListener('dragstart', (e) => {
+        const row = handle.closest('.vision-layer-row');
+        visionLayerDragId = row.getAttribute('data-vision-id');
+        row.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        try{ e.dataTransfer.setDragImage(row, 20, 20); }catch(err){ /* ignora navegadores sem suporte */ }
+      });
+      handle.addEventListener('dragend', async () => {
+        const row = handle.closest('.vision-layer-row');
+        row.classList.remove('dragging');
+        visionLayerDragId = null;
+        // topo da lista = maior z; reatribui z sequencial na nova ordem e salva
+        const rows = [...list.querySelectorAll('.vision-layer-row')];
+        const total = rows.length;
+        const updates = {};
+        rows.forEach((r, i) => {
+          const id = r.getAttribute('data-vision-id');
+          const z = total - i;
+          visionData[id] = { ...visionData[id], z };
+          updates[id] = z;
+        });
+        paintVisionBoard();
+        await Promise.all(Object.entries(updates).map(([id, z]) => dbPatchSilent(userPath('/VisionBoard/' + id), { z })));
+      });
+    });
+    list.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if(!visionLayerDragId) return;
+      const dragEl = list.querySelector('.vision-layer-row.dragging');
+      if(!dragEl) return;
+      const afterEl = visionLayersGetAfterElement(list, e.clientY);
+      if(afterEl == null) list.appendChild(dragEl); else list.insertBefore(dragEl, afterEl);
+    });
+
+    const sizeSaveTimers = {};
+    function applyVisionSize(id, widthPct, row){
+      widthPct = Math.max(VISION_MIN_WIDTH, Math.min(VISION_MAX_WIDTH, widthPct));
+      row.querySelector('.vision-layer-size-val').textContent = Math.round(widthPct) + '%';
+      visionData[id] = { ...visionData[id], widthPct };
+      paintVisionBoard();
+      clearTimeout(sizeSaveTimers[id]);
+      sizeSaveTimers[id] = setTimeout(() => {
+        dbPatchSilent(userPath('/VisionBoard/' + id), { widthPct }).catch(err => console.error('Erro ao salvar tamanho da imagem', err));
+      }, 400);
+    }
+    list.querySelectorAll('[data-vision-size-dec]').forEach(btn => btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-vision-size-dec');
+      const row = btn.closest('.vision-layer-row');
+      const current = (visionData[id] && visionData[id].widthPct) || VISION_DEFAULT_WIDTH;
+      applyVisionSize(id, current - VISION_SIZE_STEP, row);
+    }));
+    list.querySelectorAll('[data-vision-size-inc]').forEach(btn => btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-vision-size-inc');
+      const row = btn.closest('.vision-layer-row');
+      const current = (visionData[id] && visionData[id].widthPct) || VISION_DEFAULT_WIDTH;
+      applyVisionSize(id, current + VISION_SIZE_STEP, row);
+    }));
+    list.querySelectorAll('[data-vision-size-reset]').forEach(btn => btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-vision-size-reset');
+      const row = btn.closest('.vision-layer-row');
+      applyVisionSize(id, VISION_DEFAULT_WIDTH, row);
+    }));
+  }
+  document.getElementById('visionLayersBtn').addEventListener('click', async () => {
+    const panel = document.getElementById('visionLayersPanel');
+    const opening = !panel.classList.contains('open');
+    panel.classList.toggle('open', opening);
+    if(opening) renderVisionLayers();
+    else visionManualSelectedId = null;
+    paintVisionBoard();
+  });
+  document.getElementById('visionLayersCloseBtn').addEventListener('click', () => {
+    document.getElementById('visionLayersPanel').classList.remove('open');
+    visionManualSelectedId = null;
+    paintVisionBoard();
+  });
+  document.getElementById('visionShuffleSaveBtn').addEventListener('click', saveVisionShuffle);
+  document.getElementById('visionShuffleCancelBtn').addEventListener('click', cancelVisionShuffle);
+  document.getElementById('visionRestoreAllBtn').addEventListener('click', async () => {
+    visionData = await dbGet(userPath('/VisionBoard')) || {};
+    const entries = visionSortedEntries(visionData);
+    if(!entries.length) return;
+    if(!await showConfirm('Isso restaura o tamanho e a posição de TODAS as fotos pro arranjo automático, desfazendo ajustes manuais. Continuar?')) return;
+    const layout = await visionBoardAutoLayout(entries.map(([, v]) => v.src));
+    const updates = {};
+    entries.forEach(([id], i) => { updates[id] = { ...visionData[id], ...layout[i] }; });
+    await dbPutSilent(userPath('/VisionBoard'), updates);
+    visionData = updates;
+    visionPendingShuffle = null;
+    visionManualSelectedId = null;
+    visionShowShuffleBar(false);
+    paintVisionBoard();
+    if(document.getElementById('visionLayersPanel').classList.contains('open')) renderVisionLayers();
+  });
 
   /* Modal "Gerenciar imagens": lista tudo que já está no board (com opção de excluir) e permite
      adicionar várias imagens de uma vez, tanto por link quanto por upload. */
@@ -1238,8 +1921,8 @@
     }
     const data = await dbGet(userPath('/VisionBoard')) || {};
     const existingEntries = Object.entries(data).sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
-    const totalCount = existingEntries.length + novasSrcs.length;
-    const layout = visionBoardAutoLayout(totalCount);
+    const allSrcs = existingEntries.map(([, v]) => v.src).concat(novasSrcs);
+    const layout = await visionBoardAutoLayout(allSrcs);
     const updates = {};
     existingEntries.forEach(([id], i) => { updates[id] = { ...data[id], ...layout[i] }; });
     const novasEntries = novasSrcs.map((src, i) => {
@@ -1419,16 +2102,33 @@
     }
   });
 
-  document.getElementById('corPrincipalInput').addEventListener('input', (e) => {
-    const hex = e.target.value;
+  function escolherCorPrincipal(hex){
     applyCorPrincipal(hex);
     localStorage.setItem('corPrincipal', hex);
     dbPatchSilent(userPath('/Config'), { corPrincipal: hex }).catch(err => console.error('Erro ao salvar cor principal', err));
+  }
+  function renderCorPrincipalPopover(){
+    const pop = document.getElementById('corPrincipalPopover');
+    if(!pop || pop.children.length) return;
+    pop.innerHTML = COR_PRINCIPAL_PRESETS.map(hex => `<button type="button" class="cor-swatch-option" data-cor="${hex}" style="background:${hex};" aria-label="${hex}"></button>`).join('');
+    pop.querySelectorAll('.cor-swatch-option').forEach(btn => btn.addEventListener('click', () => {
+      escolherCorPrincipal(btn.getAttribute('data-cor'));
+      pop.classList.remove('active');
+    }));
+  }
+  document.getElementById('corPrincipalSwatchBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    renderCorPrincipalPopover();
+    document.getElementById('corPrincipalPopover').classList.toggle('active');
+  });
+  document.addEventListener('click', (e) => {
+    const pop = document.getElementById('corPrincipalPopover');
+    if(pop && pop.classList.contains('active') && !pop.contains(e.target) && e.target.id !== 'corPrincipalSwatchBtn'){
+      pop.classList.remove('active');
+    }
   });
   document.getElementById('corPrincipalResetBtn').addEventListener('click', () => {
-    applyCorPrincipal(COR_PRINCIPAL_PADRAO);
-    localStorage.setItem('corPrincipal', COR_PRINCIPAL_PADRAO);
-    dbPatchSilent(userPath('/Config'), { corPrincipal: COR_PRINCIPAL_PADRAO }).catch(err => console.error('Erro ao salvar cor principal', err));
+    escolherCorPrincipal(COR_PRINCIPAL_PADRAO);
   });
   async function loadCorPrincipal(){
     try{
@@ -2043,17 +2743,56 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
     return d.toLocaleDateString('pt-BR') + ', ' + hora;
   }
 
+  const DIARIO_THEMES = [
+    { key: 'navy', label: 'Meia-noite', swatch: '#212e3f' },
+    { key: 'dark', label: 'Noturno', swatch: '#3a332a' },
+    { key: 'green', label: 'Verde', swatch: '#243a2b' },
+    { key: 'wine', label: 'Vinho', swatch: '#402228' },
+    { key: 'plum', label: 'Roxo', swatch: '#332a44' }
+  ];
+  function applyDiarioTheme(key){
+    const book = document.getElementById('diarioBook');
+    if(!book) return;
+    DIARIO_THEMES.forEach(t => book.classList.remove('theme-' + t.key));
+    if(key && key !== 'navy') book.classList.add('theme-' + key);
+    document.querySelectorAll('.diary-theme-dot').forEach(d => {
+      d.classList.toggle('active', d.getAttribute('data-diary-theme') === (key || 'navy'));
+    });
+  }
+  function renderDiarioThemeSwatches(){
+    const row = document.getElementById('diarioThemeSwatches');
+    if(!row || row.children.length) return;
+    row.innerHTML = DIARIO_THEMES.map(t => `<button type="button" class="diary-theme-dot" data-diary-theme="${t.key}" style="background:${t.swatch};" title="${t.label}"></button>`).join('');
+    row.querySelectorAll('.diary-theme-dot').forEach(btn => btn.addEventListener('click', () => {
+      const key = btn.getAttribute('data-diary-theme');
+      applyDiarioTheme(key);
+      localStorage.setItem('diarioTheme', key);
+      dbPatchSilent(userPath('/Config'), { diarioTheme: key }).catch(err => console.error('Erro ao salvar tema do diário', err));
+    }));
+    applyDiarioTheme(localStorage.getItem('diarioTheme'));
+  }
+  async function loadDiarioTheme(){
+    try{
+      const config = await dbGet(userPath('/Config')) || {};
+      if(config.diarioTheme){
+        localStorage.setItem('diarioTheme', config.diarioTheme);
+        applyDiarioTheme(config.diarioTheme);
+      }
+    }catch(e){ /* mantém o tema já aplicado a partir do localStorage */ }
+  }
   async function renderDiario(){
     const listEl = document.getElementById('diarioEntriesList');
-    const insightsEl = document.getElementById('diarioInsights');
-    const moodSummaryEl = document.getElementById('diarioMoodSummary');
+    const countEl = document.getElementById('diarioEntryCount');
+    const labelEl = document.getElementById('diarioTodayLabel');
+    if(labelEl) labelEl.textContent = fmtShortDate(todayStr()) || 'Hoje';
+    renderDiarioThemeSwatches();
     const data = await dbGet(userPath('/DiarioEntradas')) || {};
     const entries = Object.entries(data).sort((a,b) => (b[1].createdAt||'').localeCompare(a[1].createdAt||''));
 
+    if(countEl) countEl.textContent = entries.length ? `${entries.length} página${entries.length===1?'':'s'} escritas` : '';
+
     if(!entries.length){
-      listEl.innerHTML = '<p class="empty-state">Nenhuma entrada ainda. Escreva sobre o seu dia acima.</p>';
-      insightsEl.innerHTML = '<p class="empty-state">Escreva algumas entradas para ver padrões aqui.</p>';
-      moodSummaryEl.innerHTML = '<span>sem entradas ainda</span>';
+      listEl.innerHTML = '<p class="empty-state">Nenhuma entrada ainda. Escreva sobre o seu dia ao lado.</p>';
       return;
     }
 
@@ -2073,21 +2812,6 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
         await renderDiario();
       });
     });
-
-    // Estatísticas simples, calculadas apenas a partir do que foi escrito —
-    // sem reescrever ou interpretar o conteúdo em si.
-    const now = new Date();
-    const last30 = entries.filter(([id,e]) => (now - new Date(e.createdAt)) <= 30*86400000);
-    const moodCounts = {};
-    last30.forEach(([id,e]) => { const m = e.mood || '🙂'; moodCounts[m] = (moodCounts[m]||0) + 1; });
-    const predominant = Object.entries(moodCounts).sort((a,b) => b[1]-a[1])[0];
-    const perWeekAvg = (last30.length / (30/7)).toFixed(1);
-
-    insightsEl.innerHTML = `
-      <div class="insight-note">✦ Você escreveu ${last30.length} entrada${last30.length===1?'':'s'} nos últimos 30 dias — uma média de ${perWeekAvg} por semana.</div>
-      ${entries.length >= 3 ? `<div class="insight-note">✦ Ao todo, ${entries.length} entradas registradas no Diário.</div>` : ''}
-    `;
-    moodSummaryEl.innerHTML = predominant ? `<span>humor predominante: ${escapeHtml(predominant[0])}</span>` : '<span>sem entradas ainda</span>';
   }
 
   /* ---------- HOJE — painel "Plano alimentar hoje" ----------
@@ -3896,6 +4620,27 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
     }, 4000);
   }
 
+  /* ---------- BATERIA ---------- */
+  const BATERIA_URL = 'https://drum.guilherme-oliveira.com';
+  function renderBateria(){
+    const wrap = document.getElementById('bateriaFrameWrap');
+    const note = document.getElementById('bateriaEmbedNote');
+    const openBtn = document.getElementById('bateriaOpenTabBtn');
+    const email = session && session.email ? session.email : '';
+    const src = BATERIA_URL + (email ? ('?email=' + encodeURIComponent(email)) : '');
+    openBtn.href = src;
+    note.textContent = 'Tentando carregar aqui dentro — se não aparecer, use "Abrir em nova aba".';
+    wrap.innerHTML = `<iframe id="bateriaIframe" src="${escapeHtml(src)}" title="Bateria"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-modals"
+      referrerpolicy="no-referrer-when-downgrade"></iframe>`;
+    clearTimeout(renderBateria._fallbackTimer);
+    renderBateria._fallbackTimer = setTimeout(() => {
+      if(document.getElementById('bateriaIframe')){
+        note.textContent = 'Se a tela acima estiver em branco, é porque a Bateria não permite ser exibida dentro de outro site — abra em nova aba.';
+      }
+    }, 4000);
+  }
+
   /* ---------- BOOT ---------- */
   // Antes, se QUALQUER seção falhasse ao buscar dados no Firebase (token expirado,
   // rede instável, regra de segurança negando, etc.), o Promise.all simplesmente
@@ -3938,6 +4683,7 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
     if(configBoardNameEl) configBoardNameEl.value = (myBoards[session.uid] && myBoards[session.uid].name) || 'Meu Quadro';
     await loadCasaMembros();
     loadCorPrincipal();
+    loadDiarioTheme();
     renderConfigCasaMembros();
     populateCasaResponsavelSelects();
     await Promise.allSettled([
@@ -3963,6 +4709,8 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
       guardRender(renderPlanoAlimentar, 'o Plano Alimentar', 'paDaysGrid'),
       guardRender(renderRotina, 'a Rotina', 'rotinaDaysGrid'),
       guardRender(renderFluencia, 'o Fluência', []),
+      guardRender(renderBateria, 'a Bateria', []),
+      guardRender(() => renderFinancas(false), 'as Finanças', ['finSheetTable']),
       guardRender(renderCasaAtividades, 'as atividades da Casa', 'casaAtividadesList'),
       guardRender(renderCasaRegras, 'as regras da Casa', 'casaRegrasList'),
       guardRender(renderCasaErros, 'os erros da Casa', 'casaErrosList'),

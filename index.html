@@ -74,11 +74,13 @@
     <div class="nav-item" data-view="agenda"><span class="dot"></span> Agenda</div>
     <div class="nav-item" data-view="rotina"><span class="dot"></span> Rotina</div>
     <div class="nav-item" data-view="casa"><span class="dot"></span> Casa</div>
+    <div class="nav-item" data-view="financas"><span class="dot"></span> Finanças</div>
   </nav>
 
   <nav class="nav-level">
     <div class="nav-level-label">Evoluir</div>
     <div class="nav-item" data-view="fluencia"><span class="dot"></span> Fluência</div>
+    <div class="nav-item" data-view="bateria"><span class="dot"></span> Bateria</div>
     <div class="nav-item" data-view="academia"><span class="dot"></span> Academia</div>
     <div class="nav-item" data-view="diario"><span class="dot"></span> Diário</div>
     <div class="nav-item" data-view="planoalimentar"><span class="dot"></span> Plano Alimentar</div>
@@ -340,7 +342,15 @@
     <label class="modal-field-label">O que aconteceu</label>
     <textarea id="casaErroDescricaoInput" class="modal-text-input" rows="3" placeholder="ex: Não levou os pratos pra pia" style="resize:vertical;"></textarea>
     <label class="modal-field-label" style="margin-top:10px;">Quem (opcional)</label>
-    <input type="text" id="casaErroPessoaInput" class="modal-text-input" placeholder="ex: Guilherme">
+    <select id="casaErroPessoaInput" class="modal-text-input">
+      <option value="">Ninguém específico</option>
+    </select>
+    <label class="modal-field-label" style="margin-top:10px;">Foto (opcional)</label>
+    <div class="casa-erro-foto-row">
+      <input type="file" id="casaErroFotoInput" accept="image/*" capture="environment">
+      <img id="casaErroFotoPreview" style="display:none;" alt="">
+      <button type="button" id="casaErroFotoRemoveBtn" style="display:none;">remover foto</button>
+    </div>
     <div class="confirm-modal-actions">
       <button class="btn btn-ghost btn-sm" id="casaErroCancelBtn">Cancelar</button>
       <button class="btn btn-primary btn-sm" id="casaErroOkBtn">Registrar</button>
@@ -399,7 +409,22 @@
       </div>
       <button type="button" class="nodate-toggle" id="pontoNoPrazoToggle">Sem prazo</button>
     </div>
-    <label class="modal-field-label">Progresso: <span id="pontoProgressoValue">0%</span></label>
+    <label class="modal-field-label">Progresso automático (opcional)</label>
+    <select id="pontoAutoTipoInput" class="modal-text-input">
+      <option value="">Manual — arraste o progresso abaixo</option>
+      <option value="fluencia">Cards de Fluência estudados</option>
+      <option value="academia">Exercícios concluídos na Academia</option>
+      <option value="tarefas">Tarefas concluídas</option>
+      <option value="diario">Entradas no Diário</option>
+      <option value="monday">Tarefas concluídas no Monday</option>
+    </select>
+    <div class="modal-field-row" id="pontoAutoMetaRow" style="display:none;">
+      <div>
+        <label class="modal-field-label">Meta — quantas ações a partir de agora = 100%</label>
+        <input type="number" min="1" step="1" id="pontoAutoMetaInput" class="modal-text-input" placeholder="ex: 20">
+      </div>
+    </div>
+    <label class="modal-field-label" id="pontoProgressoLabel">Progresso: <span id="pontoProgressoValue">0%</span></label>
     <input type="range" id="pontoProgressoInput" min="0" max="100" step="5" value="0" style="width:100%; margin-bottom:20px;">
     <label class="modal-field-label">Depende de outro ponto (opcional)</label>
     <select id="pontoDependeDeInput" class="modal-text-input">
@@ -650,7 +675,7 @@
     <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
       <button class="btn btn-primary btn-sm" id="addMondayTaskBtn">+ Nova task</button>
     </div>
-    <div class="panel">
+    <div class="panel panel-flush-bottom">
       <div id="mondayList"><p class="empty-state">Carregando...</p></div>
     </div>
   </section>
@@ -737,6 +762,32 @@
     </div>
   </section>
 
+  <!-- FINANÇAS (planilha com fórmulas) -->
+  <section class="view" id="view-financas">
+    <div class="view-head">
+      <div>
+        <p class="eyebrow">Organizar</p>
+        <h1 class="view-title">Finanças</h1>
+        <p class="view-desc">Sua planilha — clique numa célula pra editar, use <code>=</code> pra fórmulas (ex: <code>=B2+B3</code>, <code>=SUM(B4:B11)</code>).</p>
+      </div>
+      <span id="finSaveStatus" style="font-family:var(--mono); font-size:11px; color:var(--text-dim); align-self:center;">Tudo salvo</span>
+    </div>
+
+    <div class="fin-toolbar">
+      <button class="btn btn-ghost btn-sm" id="finAddRowBtn">+ Linha</button>
+      <button class="btn btn-ghost btn-sm" id="finAddColBtn">+ Coluna</button>
+      <button class="btn btn-ghost btn-sm" id="finCurrencyBtn">R$ moeda</button>
+      <button class="btn btn-ghost btn-sm" id="finBoldBtn"><b>N</b> negrito</button>
+      <button class="btn btn-ghost btn-sm" id="finClearBtn">Limpar célula</button>
+      <div class="fin-color-row" id="finColorRow"></div>
+      <button class="btn btn-ghost btn-sm" id="finResetTemplateBtn" style="margin-left:auto; color:var(--coral);">Recarregar modelo</button>
+    </div>
+
+    <div class="fin-sheet-wrap">
+      <table class="fin-sheet" id="finSheetTable"></table>
+    </div>
+  </section>
+
   <!-- OBJETIVOS (mesclado com Projetos: 1 objetivo grande central + os pontos menores que dependem dele) -->
   <!-- OBJETIVOS -->
   <section class="view" id="view-objetivos">
@@ -764,11 +815,30 @@
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <button class="btn btn-ghost btn-sm" id="visionShuffleBtn">🔀 Embaralhar</button>
+        <button class="btn btn-ghost btn-sm" id="visionLayersBtn">🗂 Camadas</button>
         <button class="btn btn-primary btn-sm" id="visionAddOpenBtn">🖼 Gerenciar imagens</button>
       </div>
     </div>
-    <div class="vision-board" id="visionBoard">
-      <p class="empty-state">Carregando...</p>
+
+    <div class="vision-shuffle-bar" id="visionShuffleBar">
+      <span>Novo arranjo — salvar essa mudança?</span>
+      <button class="btn btn-ghost btn-sm" id="visionShuffleCancelBtn">Cancelar</button>
+      <button class="btn btn-primary btn-sm" id="visionShuffleSaveBtn">Salvar</button>
+    </div>
+
+    <div class="vision-board-wrap">
+      <div class="vision-board" id="visionBoard">
+        <p class="empty-state">Carregando...</p>
+      </div>
+      <aside class="vision-layers-panel" id="visionLayersPanel">
+        <div class="vision-layers-head">
+          <p class="panel-title" style="margin:0;">Camadas</p>
+          <button type="button" id="visionLayersCloseBtn" class="vision-layers-close">×</button>
+        </div>
+        <p class="vision-layers-hint">Arraste pra reordenar — o topo da lista fica na frente. Clique numa foto no board pra selecionar e arraste pra reposicionar. Ajuste o tamanho de cada imagem nos botões.</p>
+        <ul class="vision-layers-list" id="visionLayersList"></ul>
+        <button type="button" class="btn btn-ghost btn-sm" id="visionRestoreAllBtn" style="margin:10px 14px 14px; color:var(--coral);">↺ Restaurar tudo</button>
+      </aside>
     </div>
   </section>
 
@@ -784,6 +854,21 @@
       <a class="btn btn-primary btn-sm" id="fluenciaOpenTabBtn" href="#" target="_blank" rel="noopener">Abrir em nova aba ↗</a>
     </div>
     <div class="fluencia-frame-wrap" id="fluenciaFrameWrap">
+      <p class="empty-state">Carregando...</p>
+    </div>
+  </section>
+
+  <!-- BATERIA -->
+  <section class="view" id="view-bateria">
+    <div class="view-head" style="margin-bottom:12px;">
+      <div>
+        <p class="eyebrow">Evoluir</p>
+        <h1 class="view-title">Bateria</h1>
+        <p class="view-desc" id="bateriaEmbedNote">Carregando...</p>
+      </div>
+      <a class="btn btn-primary btn-sm" id="bateriaOpenTabBtn" href="#" target="_blank" rel="noopener">Abrir em nova aba ↗</a>
+    </div>
+    <div class="fluencia-frame-wrap" id="bateriaFrameWrap">
       <p class="empty-state">Carregando...</p>
     </div>
   </section>
@@ -837,42 +922,36 @@
       <div>
         <p class="eyebrow">Evoluir</p>
         <h1 class="view-title">Diário</h1>
-        <p class="view-desc">Registro pessoal, sem interferência da IA. A IA só resume e reflete padrões — nunca altera o que você escreveu.</p>
+        <p class="view-desc">Seu registro pessoal — só suas palavras, do jeito que você escreveu.</p>
       </div>
     </div>
 
-    <div class="panel diary-capture" style="margin-bottom:18px;">
-      <p class="panel-title">Como foi hoje?</p>
-      <div class="mood-row" id="diarioMoodRow">
-        <div class="mood-chip" data-mood="😞">😞</div>
-        <div class="mood-chip" data-mood="😕">😕</div>
-        <div class="mood-chip active" data-mood="🙂">🙂</div>
-        <div class="mood-chip" data-mood="😄">😄</div>
-        <div class="mood-chip" data-mood="🤩">🤩</div>
-      </div>
-      <textarea id="diarioTextInput" placeholder="Escreva livremente sobre o seu dia..."></textarea>
-      <div class="diary-capture-foot">
-        <button class="btn btn-primary btn-sm" id="diarioSaveBtn">Salvar entrada</button>
-      </div>
+    <div class="diary-theme-row">
+      <span class="diary-theme-label">Cor do livro</span>
+      <div id="diarioThemeSwatches" style="display:flex; gap:8px;"></div>
     </div>
 
-    <div class="grid-2">
-      <div class="panel">
-        <p class="panel-title">Entradas recentes</p>
-        <div id="diarioEntriesList"><p class="empty-state">Carregando...</p></div>
-      </div>
-
-      <div style="display:flex; flex-direction:column; gap:18px;">
-        <div class="panel">
-          <p class="panel-title">Padrões da IA</p>
-          <div id="diarioInsights"><p class="empty-state">Escreva algumas entradas para ver padrões aqui.</p></div>
-        </div>
-        <div class="panel">
-          <p class="panel-title">Humor ao longo do mês</p>
-          <div class="card-metrics" style="margin:0 0 8px;" id="diarioMoodSummary">
-            <span>sem entradas ainda</span>
+    <div class="diary-book-wrap">
+      <div class="diary-book" id="diarioBook">
+        <div class="diary-page diary-page-left">
+          <p class="diary-page-kicker" id="diarioTodayLabel">Hoje</p>
+          <div class="mood-row" id="diarioMoodRow">
+            <div class="mood-chip" data-mood="😞">😞</div>
+            <div class="mood-chip" data-mood="😕">😕</div>
+            <div class="mood-chip active" data-mood="🙂">🙂</div>
+            <div class="mood-chip" data-mood="😄">😄</div>
+            <div class="mood-chip" data-mood="🤩">🤩</div>
           </div>
-          <p style="font-size:12px; color:var(--text-dim); margin:0; line-height:1.5;">Este resumo é gerado a partir do que você escreveu — nenhuma entrada é alterada ou reescrita pela IA.</p>
+          <textarea id="diarioTextInput" placeholder="Querido diário..."></textarea>
+          <div class="diary-capture-foot">
+            <span class="diary-page-count" id="diarioEntryCount"></span>
+            <button class="btn btn-primary btn-sm" id="diarioSaveBtn">Salvar entrada</button>
+          </div>
+        </div>
+        <div class="diary-book-spine"></div>
+        <div class="diary-page diary-page-right">
+          <p class="diary-page-kicker">Páginas anteriores</p>
+          <div id="diarioEntriesList" class="diary-entries-scroll"><p class="empty-state">Carregando...</p></div>
         </div>
       </div>
     </div>
@@ -964,9 +1043,10 @@
           <div class="config-row-label">Cor principal</div>
           <div class="config-row-desc">Aplica na hora e fica salva pra próxima vez que você abrir.</div>
         </div>
-        <div style="display:flex; gap:10px; align-items:center; flex-shrink:0;">
-          <input type="color" id="corPrincipalInput" value="#7fa37a" style="width:44px; height:32px; padding:0; border:1px solid var(--line-strong); border-radius:8px; background:none; cursor:pointer;">
+        <div style="display:flex; gap:10px; align-items:center; flex-shrink:0; position:relative;">
+          <button type="button" id="corPrincipalSwatchBtn" class="cor-swatch-btn" style="background:#7fa37a;" aria-label="Escolher cor principal"></button>
           <button class="btn btn-ghost btn-sm" id="corPrincipalResetBtn">Restaurar verde</button>
+          <div class="cor-swatch-popover" id="corPrincipalPopover"></div>
         </div>
       </div>
     </div>
