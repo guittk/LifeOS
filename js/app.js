@@ -274,14 +274,24 @@
   const globalLoadingEl = document.getElementById('globalLoading');
   const globalLoadingTextEl = document.getElementById('globalLoadingText');
   let loadingDepth = 0;
+  let loadingSuppressed = 0;
   function showLoading(msg){
+    if(loadingSuppressed > 0) return;
     loadingDepth++;
     globalLoadingTextEl.textContent = msg || 'Carregando...';
     globalLoadingEl.classList.add('active');
   }
   function hideLoading(){
+    if(loadingSuppressed > 0) return;
     loadingDepth = Math.max(0, loadingDepth - 1);
     if(loadingDepth === 0) globalLoadingEl.classList.remove('active');
+  }
+  // Executa fn() sem deixar o overlay global de loading aparecer — usado em ações
+  // rápidas e puramente locais (ex: expandir/colapsar tudo) que não devem travar a tela.
+  async function withoutLoading(fn){
+    loadingSuppressed++;
+    try{ return await fn(); }
+    finally{ loadingSuppressed--; }
   }
 
   /* Notificação estilizada da própria aplicação — substitui alert() do navegador. */
@@ -1690,7 +1700,8 @@
     // grande demais que deixa vão sobrando quando tem poucas imagens.
     el.style.minHeight = Math.min(920, Math.max(320, 110 + entries.length * 95)) + 'px';
     el.classList.toggle('layers-mode', visionLayersOpen());
-    el.innerHTML = entries.map(([id, v]) => `
+    const visibleEntries = entries.filter(([, v]) => !v.hidden);
+    el.innerHTML = visibleEntries.map(([id, v]) => `
       <div class="vision-item${id === visionManualSelectedId ? ' selected' : ''}" data-vision-id="${id}" style="left:${v.left}%; top:${v.top}%; width:${v.widthPct}%; --v-rot:${v.rotate}deg; z-index:${v.z || 1};">
         <img src="${escapeHtml(v.src)}" alt="" loading="lazy" draggable="false">
       </div>`).join('');
@@ -1702,15 +1713,24 @@
           e.preventDefault();
           visionManualSelectedId = id;
           paintVisionBoard();
+          renderVisionSelectedControls();
           return;
         }
         e.preventDefault();
         const boardRect = el.getBoundingClientRect();
         itemEl.classList.add('vision-dragging');
         itemEl.setPointerCapture(e.pointerId);
+        // mantém o deslocamento entre onde o cursor pegou a foto e a posição dela,
+        // em vez de recentralizar a foto embaixo do cursor de repente.
+        const startCursorLeftPct = ((e.clientX - boardRect.left) / boardRect.width) * 100;
+        const startCursorTopPct = ((e.clientY - boardRect.top) / boardRect.height) * 100;
+        const offsetLeft = startCursorLeftPct - (visionData[id].left || 0);
+        const offsetTop = startCursorTopPct - (visionData[id].top || 0);
         const onMove = (ev) => {
-          const left = Math.min(98, Math.max(2, ((ev.clientX - boardRect.left) / boardRect.width) * 100));
-          const top = Math.min(97, Math.max(3, ((ev.clientY - boardRect.top) / boardRect.height) * 100));
+          const cursorLeftPct = ((ev.clientX - boardRect.left) / boardRect.width) * 100;
+          const cursorTopPct = ((ev.clientY - boardRect.top) / boardRect.height) * 100;
+          const left = Math.min(98, Math.max(2, cursorLeftPct - offsetLeft));
+          const top = Math.min(97, Math.max(3, cursorTopPct - offsetTop));
           itemEl.style.left = left + '%';
           itemEl.style.top = top + '%';
           visionData[id] = { ...visionData[id], left, top };
@@ -1734,6 +1754,7 @@
     visionManualSelectedId = null;
     visionShowShuffleBar(false);
     paintVisionBoard();
+    renderVisionSelectedControls();
     if(document.getElementById('visionLayersPanel').classList.contains('open')) renderVisionLayers();
   }
 
@@ -1759,16 +1780,30 @@
     // topo da lista = maior z-index (mais na frente), como nas Camadas do Canva
     const byZDesc = [...entries].sort((a, b) => (b[1].z || 0) - (a[1].z || 0));
     list.innerHTML = byZDesc.map(([id, v]) => `
-      <li class="vision-layer-row" data-vision-id="${id}">
+      <li class="vision-layer-row${id === visionManualSelectedId ? ' selected' : ''}${v.hidden ? ' vision-layer-hidden' : ''}" data-vision-id="${id}">
         <span class="vision-layer-drag" draggable="true">⠿</span>
         <img class="vision-layer-thumb" src="${escapeHtml(v.src)}" alt="" draggable="false">
-        <div class="vision-layer-size-controls">
-          <button type="button" class="vision-layer-size-btn" data-vision-size-dec="${id}" title="Diminuir">−</button>
-          <span class="vision-layer-size-val">${Math.round(v.widthPct || VISION_DEFAULT_WIDTH)}%</span>
-          <button type="button" class="vision-layer-size-btn" data-vision-size-inc="${id}" title="Aumentar">+</button>
-          <button type="button" class="vision-layer-size-reset" data-vision-size-reset="${id}" title="Restaurar tamanho padrão">↺</button>
-        </div>
+        <button type="button" class="vision-layer-eye" data-vision-eye="${id}" title="${v.hidden ? 'Mostrar foto' : 'Esconder foto'}">${v.hidden ? '🚫' : '👁'}</button>
       </li>`).join('');
+    // Clicar em qualquer parte da linha (menos a alça de arrastar e o olho) seleciona a foto
+    list.querySelectorAll('.vision-layer-row').forEach(row => {
+      row.addEventListener('click', (e) => {
+        if(e.target.closest('.vision-layer-drag') || e.target.closest('.vision-layer-eye')) return;
+        const id = row.getAttribute('data-vision-id');
+        visionManualSelectedId = visionManualSelectedId === id ? null : id;
+        paintVisionBoard();
+        renderVisionLayers();
+      });
+    });
+    list.querySelectorAll('[data-vision-eye]').forEach(btn => btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute('data-vision-eye');
+      const hidden = !visionData[id].hidden;
+      visionData[id] = { ...visionData[id], hidden };
+      paintVisionBoard();
+      renderVisionLayers();
+      dbPatchSilent(userPath('/VisionBoard/' + id), { hidden }).catch(err => console.error('Erro ao salvar visibilidade da imagem', err));
+    }));
 
     // Só a "alça" (⠿) é arrastável — assim a régua de tamanho e a miniatura
     // respondem ao próprio clique/arraste delas, sem disparar reordenar a linha.
@@ -1807,35 +1842,60 @@
       if(afterEl == null) list.appendChild(dragEl); else list.insertBefore(dragEl, afterEl);
     });
 
-    const sizeSaveTimers = {};
-    function applyVisionSize(id, widthPct, row){
-      widthPct = Math.max(VISION_MIN_WIDTH, Math.min(VISION_MAX_WIDTH, widthPct));
-      row.querySelector('.vision-layer-size-val').textContent = Math.round(widthPct) + '%';
-      visionData[id] = { ...visionData[id], widthPct };
-      paintVisionBoard();
-      clearTimeout(sizeSaveTimers[id]);
-      sizeSaveTimers[id] = setTimeout(() => {
-        dbPatchSilent(userPath('/VisionBoard/' + id), { widthPct }).catch(err => console.error('Erro ao salvar tamanho da imagem', err));
-      }, 400);
-    }
-    list.querySelectorAll('[data-vision-size-dec]').forEach(btn => btn.addEventListener('click', () => {
-      const id = btn.getAttribute('data-vision-size-dec');
-      const row = btn.closest('.vision-layer-row');
-      const current = (visionData[id] && visionData[id].widthPct) || VISION_DEFAULT_WIDTH;
-      applyVisionSize(id, current - VISION_SIZE_STEP, row);
-    }));
-    list.querySelectorAll('[data-vision-size-inc]').forEach(btn => btn.addEventListener('click', () => {
-      const id = btn.getAttribute('data-vision-size-inc');
-      const row = btn.closest('.vision-layer-row');
-      const current = (visionData[id] && visionData[id].widthPct) || VISION_DEFAULT_WIDTH;
-      applyVisionSize(id, current + VISION_SIZE_STEP, row);
-    }));
-    list.querySelectorAll('[data-vision-size-reset]').forEach(btn => btn.addEventListener('click', () => {
-      const id = btn.getAttribute('data-vision-size-reset');
-      const row = btn.closest('.vision-layer-row');
-      applyVisionSize(id, VISION_DEFAULT_WIDTH, row);
-    }));
+    renderVisionSelectedControls();
   }
+
+  /* Controles da foto selecionada (escala + rotação) — aparecem no painel de
+     Camadas assim que uma foto é selecionada clicando nela no board ou na lista. */
+  const VISION_ROTATE_MIN = -60;
+  const VISION_ROTATE_MAX = 60;
+  const VISION_ROTATE_STEP = 5;
+  let visionSelectedSaveTimer = null;
+  function renderVisionSelectedControls(){
+    const panel = document.getElementById('visionSelectedControls');
+    if(!panel) return;
+    const id = visionManualSelectedId;
+    if(!id || !visionData[id]){ panel.classList.remove('active'); return; }
+    panel.classList.add('active');
+    const widthPct = Math.round(visionData[id].widthPct || VISION_DEFAULT_WIDTH);
+    const rotate = Math.round(visionData[id].rotate || 0);
+    document.getElementById('visionSelectedScaleVal').textContent = widthPct + '%';
+    document.getElementById('visionSelectedRotateVal').textContent = rotate + '°';
+  }
+  function applyVisionSelectedChange(patch){
+    const id = visionManualSelectedId;
+    if(!id || !visionData[id]) return;
+    visionData[id] = { ...visionData[id], ...patch };
+    paintVisionBoard();
+    renderVisionSelectedControls();
+    clearTimeout(visionSelectedSaveTimer);
+    visionSelectedSaveTimer = setTimeout(() => {
+      dbPatchSilent(userPath('/VisionBoard/' + id), patch).catch(err => console.error('Erro ao salvar ajuste da imagem', err));
+    }, 400);
+  }
+  document.getElementById('visionSelectedScaleDec').addEventListener('click', () => {
+    const id = visionManualSelectedId; if(!id) return;
+    const current = visionData[id].widthPct || VISION_DEFAULT_WIDTH;
+    applyVisionSelectedChange({ widthPct: Math.max(VISION_MIN_WIDTH, Math.min(VISION_MAX_WIDTH, current - VISION_SIZE_STEP)) });
+  });
+  document.getElementById('visionSelectedScaleInc').addEventListener('click', () => {
+    const id = visionManualSelectedId; if(!id) return;
+    const current = visionData[id].widthPct || VISION_DEFAULT_WIDTH;
+    applyVisionSelectedChange({ widthPct: Math.max(VISION_MIN_WIDTH, Math.min(VISION_MAX_WIDTH, current + VISION_SIZE_STEP)) });
+  });
+  document.getElementById('visionSelectedRotateDec').addEventListener('click', () => {
+    const id = visionManualSelectedId; if(!id) return;
+    const current = visionData[id].rotate || 0;
+    applyVisionSelectedChange({ rotate: Math.max(VISION_ROTATE_MIN, Math.min(VISION_ROTATE_MAX, current - VISION_ROTATE_STEP)) });
+  });
+  document.getElementById('visionSelectedRotateInc').addEventListener('click', () => {
+    const id = visionManualSelectedId; if(!id) return;
+    const current = visionData[id].rotate || 0;
+    applyVisionSelectedChange({ rotate: Math.max(VISION_ROTATE_MIN, Math.min(VISION_ROTATE_MAX, current + VISION_ROTATE_STEP)) });
+  });
+  document.getElementById('visionSelectedResetBtn').addEventListener('click', () => {
+    applyVisionSelectedChange({ widthPct: VISION_DEFAULT_WIDTH, rotate: 0 });
+  });
   document.getElementById('visionLayersBtn').addEventListener('click', async () => {
     const panel = document.getElementById('visionLayersPanel');
     const opening = !panel.classList.contains('open');
@@ -1865,6 +1925,7 @@
     visionManualSelectedId = null;
     visionShowShuffleBar(false);
     paintVisionBoard();
+    renderVisionSelectedControls();
     if(document.getElementById('visionLayersPanel').classList.contains('open')) renderVisionLayers();
   });
 
@@ -2721,9 +2782,11 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
     await renderStorage();
   }
   async function setAllGavetasCollapsed(collapsed){
-    const data = await dbGet(userPath('/Gavetas')) || {};
-    await Promise.all(Object.keys(data).map(id => dbPatchSilent(userPath('/Gavetas/' + id), { collapsed })));
-    await renderStorage();
+    await withoutLoading(async () => {
+      const data = await dbGet(userPath('/Gavetas')) || {};
+      await Promise.all(Object.keys(data).map(id => dbPatchSilent(userPath('/Gavetas/' + id), { collapsed })));
+      await renderStorage();
+    });
   }
   document.getElementById('expandAllGavetasBtn').addEventListener('click', () => setAllGavetasCollapsed(false));
   document.getElementById('collapseAllGavetasBtn').addEventListener('click', () => setAllGavetasCollapsed(true));
@@ -4048,10 +4111,12 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
     });
   }
   async function setAllTaskGroupsCollapsed(collapsed){
-    const data = await dbGet(userPath('/TaskGroups')) || {};
-    await Promise.all(Object.keys(data).map(id => dbPatchSilent(userPath('/TaskGroups/' + id), { collapsed })));
-    ungroupedTasksCollapsed = collapsed;
-    await renderTaskGroups();
+    await withoutLoading(async () => {
+      const data = await dbGet(userPath('/TaskGroups')) || {};
+      await Promise.all(Object.keys(data).map(id => dbPatchSilent(userPath('/TaskGroups/' + id), { collapsed })));
+      ungroupedTasksCollapsed = collapsed;
+      await renderTaskGroups();
+    });
   }
   document.getElementById('expandAllTaskGroupsBtn').addEventListener('click', () => setAllTaskGroupsCollapsed(false));
   document.getElementById('collapseAllTaskGroupsBtn').addEventListener('click', () => setAllTaskGroupsCollapsed(true));

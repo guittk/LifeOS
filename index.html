@@ -835,9 +835,24 @@
           <p class="panel-title" style="margin:0;">Camadas</p>
           <button type="button" id="visionLayersCloseBtn" class="vision-layers-close">×</button>
         </div>
-        <p class="vision-layers-hint">Arraste pra reordenar — o topo da lista fica na frente. Clique numa foto no board pra selecionar e arraste pra reposicionar. Ajuste o tamanho de cada imagem nos botões.</p>
+        <button type="button" class="btn btn-ghost btn-sm" id="visionRestoreAllBtn" style="margin:0 14px 12px; color:var(--coral);">↺ Restaurar tudo</button>
+        <p class="vision-layers-hint">Arraste pra reordenar — o topo da lista fica na frente. Clique numa foto pra selecionar: arraste pra reposicionar, ou use os controles abaixo pra escalar e girar.</p>
+        <div class="vision-selected-controls" id="visionSelectedControls">
+          <div class="vision-selected-row">
+            <span class="vision-selected-label">Tamanho</span>
+            <button type="button" class="vision-layer-size-btn" id="visionSelectedScaleDec" title="Diminuir">−</button>
+            <span class="vision-selected-val" id="visionSelectedScaleVal">24%</span>
+            <button type="button" class="vision-layer-size-btn" id="visionSelectedScaleInc" title="Aumentar">+</button>
+          </div>
+          <div class="vision-selected-row">
+            <span class="vision-selected-label">Rotação</span>
+            <button type="button" class="vision-layer-size-btn" id="visionSelectedRotateDec" title="Girar p/ esquerda">↺</button>
+            <span class="vision-selected-val" id="visionSelectedRotateVal">0°</span>
+            <button type="button" class="vision-layer-size-btn" id="visionSelectedRotateInc" title="Girar p/ direita">↻</button>
+          </div>
+          <button type="button" class="vision-selected-reset" id="visionSelectedResetBtn">Restaurar esta foto</button>
+        </div>
         <ul class="vision-layers-list" id="visionLayersList"></ul>
-        <button type="button" class="btn btn-ghost btn-sm" id="visionRestoreAllBtn" style="margin:10px 14px 14px; color:var(--coral);">↺ Restaurar tudo</button>
       </aside>
     </div>
   </section>
