@@ -829,12 +829,8 @@
     await renderCasaRegras();
   });
 
-  async function renderCasaErros(){
-    const el = document.getElementById('casaErrosList');
-    const data = await dbGet(userPath('/casa/erros')) || {};
-    const entries = Object.entries(data).sort((a,b) => (b[1].criadoEm||'').localeCompare(a[1].criadoEm||''));
-    if(!entries.length){ el.innerHTML = '<p class="empty-state">Nenhum erro registrado. 🎉</p>'; return; }
-    el.innerHTML = entries.map(([id, er]) => `
+  function casaErroCardHtml(id, er){
+    return `
       <div class="casa-card" data-id="${id}">
         ${er.imagem ? `<img class="casa-erro-thumb" src="${escapeHtml(er.imagem)}" alt="">` : ''}
         <div class="casa-card-main">
@@ -842,16 +838,66 @@
           <div class="casa-card-meta">
             ${er.pessoa ? `<span>${escapeHtml(er.pessoa)}</span>` : ''}
             <span>${er.criadoEm ? fmtShortDate(er.criadoEm.slice(0,10)) : ''}</span>
+            ${er.corrigido && er.corrigidoEm ? `<span>corrigido em ${fmtShortDate(er.corrigidoEm.slice(0,10))}</span>` : ''}
           </div>
         </div>
-        <div class="casa-card-actions"><button data-del-erro="${id}">excluir</button></div>
-      </div>`).join('');
-    el.querySelectorAll('[data-del-erro]').forEach(btn => btn.addEventListener('click', async () => {
-      if(!await showConfirm('Excluir este registro?')) return;
-      await dbDelete(userPath('/casa/erros/' + btn.getAttribute('data-del-erro')));
-      await renderCasaErros();
-    }));
+        <div class="casa-card-actions">
+          ${er.corrigido
+            ? `<button data-reabrir-erro="${id}">reabrir</button>`
+            : `<button data-corrigir-erro="${id}">✓ corrigido</button>`}
+          <button data-del-erro="${id}">excluir</button>
+        </div>
+      </div>`;
   }
+  async function renderCasaErros(){
+    const el = document.getElementById('casaErrosList');
+    const resolvidosToggle = document.getElementById('casaErrosResolvidosToggle');
+    const resolvidosEl = document.getElementById('casaErrosResolvidosList');
+    const data = await dbGet(userPath('/casa/erros')) || {};
+    const entries = Object.entries(data).sort((a,b) => (b[1].criadoEm||'').localeCompare(a[1].criadoEm||''));
+    const abertos = entries.filter(([, er]) => !er.corrigido);
+    const corrigidos = entries.filter(([, er]) => er.corrigido);
+
+    el.innerHTML = abertos.length
+      ? abertos.map(([id, er]) => casaErroCardHtml(id, er)).join('')
+      : '<p class="empty-state">Nenhum erro em aberto. 🎉</p>';
+
+    if(corrigidos.length){
+      resolvidosToggle.style.display = 'block';
+      resolvidosToggle.setAttribute('data-count', corrigidos.length);
+      const showing = resolvidosEl.style.display !== 'none';
+      resolvidosToggle.innerHTML = (showing ? 'Esconder' : 'Ver') + ` erros já corrigidos (${corrigidos.length})`;
+      resolvidosEl.innerHTML = corrigidos.map(([id, er]) => casaErroCardHtml(id, er)).join('');
+    } else {
+      resolvidosToggle.style.display = 'none';
+      resolvidosEl.style.display = 'none';
+      resolvidosEl.innerHTML = '';
+    }
+
+    [el, resolvidosEl].forEach(container => {
+      container.querySelectorAll('[data-del-erro]').forEach(btn => btn.addEventListener('click', async () => {
+        if(!await showConfirm('Excluir este registro?')) return;
+        await dbDelete(userPath('/casa/erros/' + btn.getAttribute('data-del-erro')));
+        await renderCasaErros();
+      }));
+      container.querySelectorAll('[data-corrigir-erro]').forEach(btn => btn.addEventListener('click', async () => {
+        await dbPatch(userPath('/casa/erros/' + btn.getAttribute('data-corrigir-erro')), { corrigido: true, corrigidoEm: new Date().toISOString() });
+        await renderCasaErros();
+      }));
+      container.querySelectorAll('[data-reabrir-erro]').forEach(btn => btn.addEventListener('click', async () => {
+        await dbPatch(userPath('/casa/erros/' + btn.getAttribute('data-reabrir-erro')), { corrigido: false, corrigidoEm: null });
+        await renderCasaErros();
+      }));
+    });
+  }
+  document.getElementById('casaErrosResolvidosToggle').addEventListener('click', (e) => {
+    const btn = e.currentTarget;
+    const listEl = document.getElementById('casaErrosResolvidosList');
+    const showing = listEl.style.display !== 'none';
+    listEl.style.display = showing ? 'none' : 'block';
+    const count = btn.getAttribute('data-count') || '0';
+    btn.innerHTML = (showing ? 'Ver' : 'Esconder') + ` erros já corrigidos (${count})`;
+  });
   document.getElementById('casaAddErroBtn').addEventListener('click', () => {
     document.getElementById('casaErroDescricaoInput').value = '';
     populateCasaResponsavelSelects();
@@ -1277,14 +1323,42 @@
     const mondayCount = Object.values(monday || {}).filter(t => t.status === 'done').length;
     return { fluencia, academia, tarefas, diario: diarioCount, monday: mondayCount };
   }
+  function objetivoPctFromData(objId, data, cache, visiting){
+    if(cache.has(objId)) return cache.get(objId);
+    const o = data[objId];
+    if(!o || visiting.has(objId)){ return 0; } // sem objetivo ou ciclo entre referências
+    visiting.add(objId);
+    const pontos = Object.values(o.pontos || {});
+    const pct = pontos.length
+      ? Math.round(pontos.reduce((sum, p) => {
+          if(p.autoTipo === 'objetivo' && p.autoObjId){
+            return sum + objetivoPctFromData(p.autoObjId, data, cache, visiting);
+          }
+          return sum + pontoProgresso(p);
+        }, 0) / pontos.length)
+      : 0;
+    visiting.delete(objId);
+    cache.set(objId, pct);
+    return pct;
+  }
   function aplicarAutoProgresso(data, counts){
+    // 1ª passada: pontos ligados a ações da própria plataforma (contagens diretas)
     Object.values(data).forEach(o => {
       Object.values(o.pontos || {}).forEach(p => {
-        if(p.autoTipo && counts[p.autoTipo] !== undefined){
+        if(p.autoTipo && p.autoTipo !== 'objetivo' && counts[p.autoTipo] !== undefined){
           const atual = counts[p.autoTipo];
           const base = p.autoBase || 0;
           const meta = p.autoMeta || 1;
           p.progresso = Math.max(0, Math.min(100, Math.round((atual - base) / meta * 100)));
+        }
+      });
+    });
+    // 2ª passada: pontos que referenciam o progresso de outro objetivo (com proteção contra ciclos)
+    const cache = new Map();
+    Object.values(data).forEach(o => {
+      Object.values(o.pontos || {}).forEach(p => {
+        if(p.autoTipo === 'objetivo' && p.autoObjId){
+          p.progresso = objetivoPctFromData(p.autoObjId, data, cache, new Set());
         }
       });
     });
@@ -1358,7 +1432,7 @@
               <div class="obj-ponto-meta">
                 <div class="obj-ponto-progress-track"><div class="obj-ponto-progress-fill" style="width:${progresso}%;"></div></div>
                 <span class="obj-ponto-progress-pct">${progresso}%</span>
-                ${p.autoTipo ? `<span class="obj-ponto-auto-tag">⚡ auto: ${OBJ_AUTO_TIPOS[p.autoTipo] || p.autoTipo}</span>` : ''}
+                ${p.autoTipo ? `<span class="obj-ponto-auto-tag">⚡ auto: ${p.autoTipo === 'objetivo' ? 'objetivo "' + escapeHtml((data[p.autoObjId] && data[p.autoObjId].nome) || '?') + '"' : (OBJ_AUTO_TIPOS[p.autoTipo] || p.autoTipo)}</span>` : ''}
                 ${bloqueado ? `<span class="obj-ponto-blocked-tag">🔒 depende de: ${escapeHtml(dep.nome)}</span>` : ''}
                 ${p.prazo ? `<span class="obj-ponto-prazo ${overdue ? 'is-overdue' : ''}">prazo: ${fmtShortDate(p.prazo)}</span>` : ''}
               </div>
@@ -1482,6 +1556,7 @@
     document.getElementById('pontoProgressoValue').textContent = '0%';
     document.getElementById('pontoAutoTipoInput').value = '';
     document.getElementById('pontoAutoMetaInput').value = '';
+    document.getElementById('pontoAutoObjIdInput').value = '';
     pontoAtualizarVisibilidadeAuto();
     dbGet(userPath('/objetivos/' + objId + '/pontos')).then(pontosMap => {
       pontosMap = pontosMap || {};
@@ -1500,6 +1575,11 @@
           document.getElementById('pontoAutoTipoInput').value = p.autoTipo;
           document.getElementById('pontoAutoMetaInput').value = p.autoMeta || '';
           pontoAtualizarVisibilidadeAuto();
+          if(p.autoTipo === 'objetivo'){
+            populatePontoAutoObjSelect().then(() => {
+              document.getElementById('pontoAutoObjIdInput').value = p.autoObjId || '';
+            });
+          }
         }
         if(p.prazo){
           document.getElementById('pontoPrazoInput').value = p.prazo;
@@ -1511,9 +1591,20 @@
     });
     document.getElementById('pontoModal').classList.add('active');
   }
+  async function populatePontoAutoObjSelect(){
+    const sel = document.getElementById('pontoAutoObjIdInput');
+    const current = sel.value;
+    const data = await dbGet(userPath('/objetivos')) || {};
+    const outros = Object.entries(data).filter(([oid]) => oid !== pontoEditingObjId);
+    sel.innerHTML = '<option value="">Selecione...</option>' + outros.map(([oid, o]) => `<option value="${oid}">${escapeHtml(o.nome)}</option>`).join('');
+    sel.value = current;
+  }
   function pontoAtualizarVisibilidadeAuto(){
     const tipo = document.getElementById('pontoAutoTipoInput').value;
-    document.getElementById('pontoAutoMetaRow').style.display = tipo ? 'flex' : 'none';
+    const isObjetivo = tipo === 'objetivo';
+    document.getElementById('pontoAutoMetaRow').style.display = (tipo && !isObjetivo) ? 'flex' : 'none';
+    document.getElementById('pontoAutoObjRow').style.display = isObjetivo ? 'block' : 'none';
+    if(isObjetivo) populatePontoAutoObjSelect();
     document.getElementById('pontoProgressoLabel').style.display = tipo ? 'none' : '';
     document.getElementById('pontoProgressoInput').style.display = tipo ? 'none' : '';
   }
@@ -1539,9 +1630,13 @@
     const progresso = Number(document.getElementById('pontoProgressoInput').value) || 0;
     const dependeDe = document.getElementById('pontoDependeDeInput').value;
     const autoTipo = document.getElementById('pontoAutoTipoInput').value;
-    const autoMeta = autoTipo ? Math.max(1, Number(document.getElementById('pontoAutoMetaInput').value) || 1) : null;
     let extra = { nome, descricao, prazo, dependeDe };
-    if(autoTipo){
+    if(autoTipo === 'objetivo'){
+      const autoObjId = document.getElementById('pontoAutoObjIdInput').value;
+      if(!autoObjId){ showAppMessage('Selecione o objetivo de referência.', 'error'); return; }
+      extra = { ...extra, autoTipo, autoObjId, autoMeta: null, autoBase: null, progresso: 0 };
+    } else if(autoTipo){
+      const autoMeta = Math.max(1, Number(document.getElementById('pontoAutoMetaInput').value) || 1);
       let autoBase = null;
       if(pontoEditingId){
         const existente = await dbGet(userPath('/objetivos/' + pontoEditingObjId + '/pontos/' + pontoEditingId));
@@ -1551,9 +1646,9 @@
         const counts = await fetchAutoActionCounts();
         autoBase = counts[autoTipo] || 0;
       }
-      extra = { ...extra, autoTipo, autoMeta, autoBase, progresso: 0 };
+      extra = { ...extra, autoTipo, autoMeta, autoBase, autoObjId: null, progresso: 0 };
     } else {
-      extra = { ...extra, autoTipo: null, autoMeta: null, autoBase: null, progresso };
+      extra = { ...extra, autoTipo: null, autoMeta: null, autoBase: null, autoObjId: null, progresso };
     }
     if(pontoEditingId){
       await dbPatch(userPath('/objetivos/' + pontoEditingObjId + '/pontos/' + pontoEditingId), extra);
@@ -1701,10 +1796,63 @@
     el.style.minHeight = Math.min(920, Math.max(320, 110 + entries.length * 95)) + 'px';
     el.classList.toggle('layers-mode', visionLayersOpen());
     const visibleEntries = entries.filter(([, v]) => !v.hidden);
+    const handlesHtml = visionLayersOpen() ? `
+        <span class="vision-handle vision-handle-rotate" data-vision-handle="rotate"></span>
+        <span class="vision-handle vision-handle-corner vision-handle-nw" data-vision-handle="corner"></span>
+        <span class="vision-handle vision-handle-corner vision-handle-ne" data-vision-handle="corner"></span>
+        <span class="vision-handle vision-handle-corner vision-handle-sw" data-vision-handle="corner"></span>
+        <span class="vision-handle vision-handle-corner vision-handle-se" data-vision-handle="corner"></span>` : '';
     el.innerHTML = visibleEntries.map(([id, v]) => `
       <div class="vision-item${id === visionManualSelectedId ? ' selected' : ''}" data-vision-id="${id}" style="left:${v.left}%; top:${v.top}%; width:${v.widthPct}%; --v-rot:${v.rotate}deg; z-index:${v.z || 1};">
         <img src="${escapeHtml(v.src)}" alt="" loading="lazy" draggable="false">
+        ${id === visionManualSelectedId ? handlesHtml : ''}
       </div>`).join('');
+    // Alças de escalar (cantos) e girar (topo), no estilo Canva — só aparecem na foto selecionada.
+    el.querySelectorAll('.vision-item.selected .vision-handle').forEach(handle => {
+      handle.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const itemEl = handle.closest('.vision-item');
+        const id = itemEl.getAttribute('data-vision-id');
+        const boardRect = el.getBoundingClientRect();
+        const centerX = boardRect.left + (visionData[id].left / 100) * boardRect.width;
+        const centerY = boardRect.top + (visionData[id].top / 100) * boardRect.height;
+        handle.setPointerCapture(e.pointerId);
+        itemEl.classList.add('vision-dragging');
+        const kind = handle.getAttribute('data-vision-handle');
+        let onMove;
+        if(kind === 'rotate'){
+          const startAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * 180 / Math.PI;
+          const startRotate = visionData[id].rotate || 0;
+          onMove = (ev) => {
+            const angle = Math.atan2(ev.clientY - centerY, ev.clientX - centerX) * 180 / Math.PI;
+            const rotate = Math.max(VISION_ROTATE_MIN, Math.min(VISION_ROTATE_MAX, startRotate + (angle - startAngle)));
+            itemEl.style.setProperty('--v-rot', rotate + 'deg');
+            visionData[id] = { ...visionData[id], rotate };
+            renderVisionSelectedControls();
+          };
+        } else {
+          const startDist = Math.max(1, Math.hypot(e.clientX - centerX, e.clientY - centerY));
+          const startWidthPct = visionData[id].widthPct || VISION_DEFAULT_WIDTH;
+          onMove = (ev) => {
+            const dist = Math.hypot(ev.clientX - centerX, ev.clientY - centerY);
+            const widthPct = Math.max(VISION_MIN_WIDTH, Math.min(VISION_MAX_WIDTH, startWidthPct * (dist / startDist)));
+            itemEl.style.width = widthPct + '%';
+            visionData[id] = { ...visionData[id], widthPct };
+            renderVisionSelectedControls();
+          };
+        }
+        const onUp = () => {
+          itemEl.classList.remove('vision-dragging');
+          handle.removeEventListener('pointermove', onMove);
+          handle.removeEventListener('pointerup', onUp);
+          const { widthPct, rotate } = visionData[id];
+          dbPatchSilent(userPath('/VisionBoard/' + id), { widthPct, rotate }).catch(err => console.error('Erro ao salvar ajuste da imagem', err));
+        };
+        handle.addEventListener('pointermove', onMove);
+        handle.addEventListener('pointerup', onUp);
+      });
+    });
     el.querySelectorAll('.vision-item').forEach(itemEl => {
       itemEl.addEventListener('pointerdown', (e) => {
         if(!visionLayersOpen()) return;
@@ -1847,8 +1995,8 @@
 
   /* Controles da foto selecionada (escala + rotação) — aparecem no painel de
      Camadas assim que uma foto é selecionada clicando nela no board ou na lista. */
-  const VISION_ROTATE_MIN = -60;
-  const VISION_ROTATE_MAX = 60;
+  const VISION_ROTATE_MIN = -180;
+  const VISION_ROTATE_MAX = 180;
   const VISION_ROTATE_STEP = 5;
   let visionSelectedSaveTimer = null;
   function renderVisionSelectedControls(){
@@ -2219,12 +2367,39 @@
   document.getElementById('newCaptureModal').addEventListener('click', (e) => {
     if(e.target.id === 'newCaptureModal') closeCaptureModal();
   });
+  // Palavras/expressões que costumam indicar um relato pessoal (diário) em vez de
+  // uma nota de tarefa/ideia — heurística simples, sem IA, só pra sugerir o desvio.
+  const DIARIO_CAPTURE_HINTS = [
+    'hoje eu', 'hoje foi', 'hoje eh', 'meu dia', 'minha dia', 'me senti', 'estou me sentindo',
+    'to me sentindo', 'estou feliz', 'estou triste', 'estou cansad', 'to feliz', 'to triste',
+    'to cansad', 'sinto que', 'sinto-me', 'senti que', 'foi um dia', 'querido diário',
+    'querido diario', 'diário hoje', 'diario hoje'
+  ];
+  function pareceEntradaDeDiario(text){
+    const lower = text.toLowerCase();
+    return DIARIO_CAPTURE_HINTS.some(h => lower.includes(h));
+  }
+  function enviarTextoParaDiario(text){
+    goToView('diario');
+    const textarea = document.getElementById('diarioTextInput');
+    if(textarea){
+      textarea.value = textarea.value ? (textarea.value + '\n' + text) : text;
+      textarea.focus();
+    }
+  }
   document.getElementById('newCaptureModalOkBtn').addEventListener('click', async () => {
     const input = document.getElementById('newCaptureModalInput');
     const text = input.value.trim();
     if(!text) return;
     document.getElementById('newCaptureModal').classList.remove('active');
     input.value = '';
+    if(pareceEntradaDeDiario(text)){
+      const irParaDiario = await showConfirm('Isso parece um relato do seu dia — quer enviar direto pro Diário em vez do Arquivo?');
+      if(irParaDiario){
+        enviarTextoParaDiario(text);
+        return;
+      }
+    }
     await addInboxItem(text, 'inbox');
   });
   document.getElementById('newCaptureModalInput').addEventListener('keydown', (e) => {
@@ -2946,17 +3121,35 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
     showAppMessage('Refeição extra registrada.', 'success');
   }
 
-  /* ---------- HOJE — painel "Diário hoje" ---------- */
-  async function renderHojeDiarioStatus(){
-    const el = document.getElementById('hojeDiarioStatus');
-    const data = await dbGet(userPath('/DiarioEntradas')) || {};
-    const today = todayStr();
-    const entriesHoje = Object.values(data).filter(e => e.createdAt && dateKey(new Date(e.createdAt)) === today);
-    if(entriesHoje.length){
-      el.innerHTML = `<p class="empty-state" style="color:var(--sage);">✓ Você já escreveu ${entriesHoje.length} entrada${entriesHoje.length===1?'':'s'} no Diário hoje.</p>`;
-    } else {
-      el.innerHTML = '<p class="empty-state">Você ainda não escreveu no Diário hoje.</p>';
+  /* ---------- HOJE — painel "Objetivos" ---------- */
+  async function renderHojeObjetivos(){
+    const el = document.getElementById('hojeObjetivosList');
+    const data = await dbGet(userPath('/objetivos')) || {};
+    const counts = await fetchAutoActionCounts();
+    aplicarAutoProgresso(data, counts);
+    const entries = Object.entries(data).sort((a,b) => {
+      const pa = OBJ_PRIORIDADE_ORDER[a[1].prioridade] ?? 1;
+      const pb = OBJ_PRIORIDADE_ORDER[b[1].prioridade] ?? 1;
+      return pa - pb || (a[1].criadoEm||'').localeCompare(b[1].criadoEm||'');
+    });
+    if(!entries.length){
+      el.innerHTML = '<p class="empty-state">Nenhum objetivo cadastrado ainda.</p>';
+      return;
     }
+    el.innerHTML = entries.slice(0, 4).map(([id, o]) => {
+      const pontos = Object.values(o.pontos || {});
+      const pct = pontos.length ? Math.round(pontos.reduce((sum, p) => sum + pontoProgresso(p), 0) / pontos.length) : 0;
+      const cat = objCategoria(o.categoria);
+      return `
+      <div class="hoje-obj-row">
+        <div class="hoje-obj-top">
+          <span class="hoje-obj-emoji">${cat.emoji}</span>
+          <span class="hoje-obj-name">${escapeHtml(o.nome)}</span>
+          <span class="hoje-obj-pct">${pct}%</span>
+        </div>
+        <div class="obj-bar-track"><div class="obj-bar-fill" style="width:${pct}%; background:${cat.color};"></div></div>
+      </div>`;
+    }).join('');
   }
 
   /* ---------- ACADEMIA (cronograma semanal) ----------
@@ -4757,7 +4950,7 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
       guardRender(renderHojeHidratacao, 'água & creatina', 'hojeHidratacaoList'),
       guardRender(renderHojePlanoAlimentar, 'o plano alimentar de hoje', 'hojePlanoAlimentarList'),
       guardRender(renderHojeInsulina, 'a insulina de hoje', 'hojeInsulinaList'),
-      guardRender(renderHojeDiarioStatus, 'o status do diário hoje', 'hojeDiarioStatus'),
+      guardRender(renderHojeObjetivos, 'os objetivos de hoje', 'hojeObjetivosList'),
       guardRender(renderRotinaHoje, 'a rotina de hoje', 'rotinaHojeUpcoming'),
       guardRender(renderHojeTimeline, 'a linha do tempo de hoje', 'hojeTimeline24hTrack'),
       guardRender(renderFluenciaToday, 'o Fluência de hoje', []),

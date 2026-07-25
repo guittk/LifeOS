@@ -417,12 +417,19 @@
       <option value="tarefas">Tarefas concluídas</option>
       <option value="diario">Entradas no Diário</option>
       <option value="monday">Tarefas concluídas no Monday</option>
+      <option value="objetivo">Progresso de outro objetivo</option>
     </select>
     <div class="modal-field-row" id="pontoAutoMetaRow" style="display:none;">
       <div>
         <label class="modal-field-label">Meta — quantas ações a partir de agora = 100%</label>
         <input type="number" min="1" step="1" id="pontoAutoMetaInput" class="modal-text-input" placeholder="ex: 20">
       </div>
+    </div>
+    <div id="pontoAutoObjRow" style="display:none;">
+      <label class="modal-field-label">Qual objetivo</label>
+      <select id="pontoAutoObjIdInput" class="modal-text-input" style="margin-bottom:14px;">
+        <option value="">Selecione...</option>
+      </select>
     </div>
     <label class="modal-field-label" id="pontoProgressoLabel">Progresso: <span id="pontoProgressoValue">0%</span></label>
     <input type="range" id="pontoProgressoInput" min="0" max="100" step="5" value="0" style="width:100%; margin-bottom:20px;">
@@ -535,8 +542,8 @@
         </div>
 
         <div class="panel">
-          <p class="panel-title">Diário hoje <span class="tag tag-sage" data-view-link="diario">escrever →</span></p>
-          <div id="hojeDiarioStatus"><p class="empty-state">Carregando...</p></div>
+          <p class="panel-title">Objetivos <span class="tag tag-sage" data-view-link="objetivos">ver todos →</span></p>
+          <div id="hojeObjetivosList"><p class="empty-state">Carregando...</p></div>
         </div>
 
         <div class="panel">
@@ -759,6 +766,8 @@
         <button class="btn btn-primary btn-sm" id="casaAddErroBtn">+ Registrar erro</button>
       </div>
       <div id="casaErrosList"><p class="empty-state">Carregando...</p></div>
+      <button type="button" class="casa-erros-resolvidos-toggle" id="casaErrosResolvidosToggle" style="display:none;">Ver erros já corrigidos</button>
+      <div id="casaErrosResolvidosList" style="display:none;"></div>
     </div>
   </section>
 
