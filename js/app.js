@@ -939,339 +939,27 @@
     await renderCasaErros();
   });
 
-  /* ---------- FINANÇAS (planilha com células e fórmulas, tipo Excel) ---------- */
-  const FIN_DEFAULT_COLS = 7;
-  const FIN_DEFAULT_ROWS = 60;
-  const FIN_COLORS = ['', '#3a4a3a', '#3a4250', '#4a3a55', '#553a3a', '#554a2a', '#2a4a4a', '#40403a'];
-  let finCells = {}; // { "A1": { f: "texto ou =formula", bg: "#hex"|null, b: bool, cur: bool } }
-  let finRows = FIN_DEFAULT_ROWS;
-  let finCols = FIN_DEFAULT_COLS;
-  let finSelectedKey = null;
-  let finSaveTimer = null;
 
-  function finColLetter(n){
-    let s = '', x = n + 1;
-    while(x > 0){ const r = (x - 1) % 26; s = String.fromCharCode(65 + r) + s; x = Math.floor((x - 1) / 26); }
-    return s;
-  }
-  function finCellKey(col, row){ return finColLetter(col) + (row + 1); }
-  function finParseKey(key){
-    const m = /^([A-Z]+)([0-9]+)$/.exec(key || '');
-    if(!m) return null;
-    let col = 0;
-    for(const c of m[1]) col = col * 26 + (c.charCodeAt(0) - 64);
-    return { col: col - 1, row: parseInt(m[2], 10) - 1 };
-  }
-  function finExpandRange(a, b){
-    const pa = finParseKey(a), pb = finParseKey(b);
-    if(!pa || !pb) return [];
-    const keys = [];
-    for(let c = Math.min(pa.col, pb.col); c <= Math.max(pa.col, pb.col); c++){
-      for(let r = Math.min(pa.row, pb.row); r <= Math.max(pa.row, pb.row); r++){
-        keys.push(finCellKey(c, r));
+  /* ---------- FINANÇAS ---------- */
+  const FINANCAS_URL = 'https://financas.guilherme-oliveira.com';
+  function renderFinancas(){
+    const wrap = document.getElementById('financasFrameWrap');
+    const note = document.getElementById('financasEmbedNote');
+    const openBtn = document.getElementById('financasOpenTabBtn');
+    const email = session && session.email ? session.email : '';
+    const src = FINANCAS_URL + (email ? ('?email=' + encodeURIComponent(email)) : '');
+    openBtn.href = src;
+    note.textContent = 'Tentando carregar aqui dentro — se não aparecer, use "Abrir em nova aba".';
+    wrap.innerHTML = `<iframe id="financasIframe" src="${escapeHtml(src)}" title="Finanças"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-modals"
+      referrerpolicy="no-referrer-when-downgrade"></iframe>`;
+    clearTimeout(renderFinancas._fallbackTimer);
+    renderFinancas._fallbackTimer = setTimeout(() => {
+      if(document.getElementById('financasIframe')){
+        note.textContent = 'Se a tela acima estiver em branco, é porque as Finanças não permitem ser exibidas dentro de outro site — abra em nova aba.';
       }
-    }
-    return keys;
+    }, 4000);
   }
-  function finEvalCell(key, cache, visiting){
-    if(cache.hasOwnProperty(key)) return cache[key];
-    if(visiting.has(key)){ cache[key] = '#CIRC'; return '#CIRC'; }
-    const cell = finCells[key];
-    const raw = cell && cell.f != null ? String(cell.f) : '';
-    if(!raw){ cache[key] = ''; return ''; }
-    if(raw[0] !== '='){
-      const n = Number(raw.replace(',', '.'));
-      const val = raw.trim() !== '' && !isNaN(n) ? n : raw;
-      cache[key] = val;
-      return val;
-    }
-    visiting.add(key);
-    let expr = raw.slice(1).toUpperCase();
-    // funções SUM(range) e AVG(range) primeiro, pra não confundir com refs simples
-    expr = expr.replace(/(SUM|AVG)\(\s*([A-Z]+[0-9]+)\s*:\s*([A-Z]+[0-9]+)\s*\)/g, (m0, fn, a, b) => {
-      const keys = finExpandRange(a, b);
-      const vals = keys.map(k => { const v = finEvalCell(k, cache, visiting); return typeof v === 'number' ? v : 0; });
-      const sum = vals.reduce((s, v) => s + v, 0);
-      return String(fn === 'AVG' ? (vals.length ? sum / vals.length : 0) : sum);
-    });
-    // referências de célula avulsas
-    expr = expr.replace(/[A-Z]+[0-9]+/g, (ref) => {
-      const v = finEvalCell(ref, cache, visiting);
-      return String(typeof v === 'number' ? v : 0);
-    });
-    visiting.delete(key);
-    let result;
-    if(/^[0-9+\-*/().\seE]*$/.test(expr) && expr.trim() !== ''){
-      try{ result = Function('"use strict"; return (' + expr + ')')(); }catch(e){ result = '#ERRO'; }
-      if(typeof result !== 'number' || !isFinite(result)) result = '#ERRO';
-    } else {
-      result = '#ERRO';
-    }
-    cache[key] = result;
-    return result;
-  }
-  function finFormatValue(key, val){
-    const cell = finCells[key];
-    if(typeof val === 'number'){
-      if(cell && cell.cur){
-        return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-      }
-      return val.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
-    }
-    return val == null ? '' : String(val);
-  }
-  function finSeedTemplate(){
-    // Estrutura pensada pro fluxo real do usuário: contas que vencem no dia 10,
-    // salário/vale que entra no dia 20, fatura do cartão (com suas 4 subcategorias)
-    // e Mercado Pago — pra ver se sobra ou falta depois do dia 20. No fim, uma
-    // tabela simples com as categorias fixas do dia a dia.
-    const meses = ['Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-    const nMeses = meses.length;
-    const cells = {};
-    let row = 0;
-    const setCell = (col, r, val) => { cells[finCellKey(col, r)] = val; };
-    const bannerRow = (label, bg) => {
-      setCell(0, row, { f: label, b: true, bg });
-      for(let c = 1; c <= nMeses; c++) setCell(c, row, { bg });
-      row++;
-    };
-    const subHeaderRow = (label) => { setCell(0, row, { f: label, b: true }); row++; };
-    const valueRow = (label, valores) => {
-      setCell(0, row, { f: label });
-      for(let c = 1; c <= nMeses; c++) setCell(c, row, { f: String((valores && valores[c - 1]) || 0), cur: true });
-      const r = row; row++; return r;
-    };
-    const sumRow = (label, fromRow, toRow, bg) => {
-      setCell(0, row, { f: label, b: true, bg });
-      for(let c = 1; c <= nMeses; c++){
-        setCell(c, row, { f: `=SUM(${finCellKey(c, fromRow)}:${finCellKey(c, toRow)})`, cur: true, b: true, bg });
-      }
-      const r = row; row++; return r;
-    };
-    const blankRow = () => { row++; };
-
-    // cabeçalho de meses
-    setCell(0, row, { f: 'Categoria', b: true });
-    meses.forEach((m, i) => setCell(i + 1, row, { f: m, b: true }));
-    row++;
-    blankRow();
-
-    // DIA 10 — contas fixas
-    bannerRow('DIA 10 DO MÊS — CONTAS FIXAS', '#3a4250');
-    const dia10Start = row;
-    valueRow('Aluguel', []);
-    valueRow('Condomínio', []);
-    valueRow('Luz', []);
-    valueRow('Água', []);
-    valueRow('Internet', []);
-    const dia10End = row - 1;
-    const dia10Total = sumRow('Total Dia 10', dia10Start, dia10End, '#3a4250');
-    blankRow();
-
-    // DIA 20 — salário e vale
-    bannerRow('DIA 20 DO MÊS — ENTRADAS', '#3a4a3a');
-    const dia20Start = row;
-    valueRow('Salário', []);
-    valueRow('Vale', []);
-    const dia20End = row - 1;
-    const dia20Total = sumRow('Total Dia 20', dia20Start, dia20End, '#3a4a3a');
-    blankRow();
-
-    // CARTÃO DE CRÉDITO — SANTANDER (com as 4 subcategorias)
-    bannerRow('CARTÃO DE CRÉDITO — SANTANDER', '#553a3a');
-    subHeaderRow('Estimativas');
-    const estStart = row;
-    valueRow('Remédios', []);
-    valueRow('Supermercado', []);
-    valueRow('Gasolina', []);
-    valueRow('Imprevistos', []);
-    const estEnd = row - 1;
-    const estTotal = sumRow('Subtotal Estimativas', estStart, estEnd, '#4a3a3a');
-    blankRow();
-    subHeaderRow('Renovação Automática');
-    const renovStart = row;
-    valueRow('Assinatura 1', []);
-    valueRow('Assinatura 2', []);
-    const renovEnd = row - 1;
-    const renovTotal = sumRow('Subtotal Renovação Automática', renovStart, renovEnd, '#4a3a3a');
-    blankRow();
-    subHeaderRow('Parcelas');
-    const parcStart = row;
-    valueRow('Parcela 1', []);
-    valueRow('Parcela 2', []);
-    const parcEnd = row - 1;
-    const parcTotal = sumRow('Subtotal Parcelas', parcStart, parcEnd, '#4a3a3a');
-    blankRow();
-    subHeaderRow('Compras');
-    const compStart = row;
-    valueRow('Compra 1', []);
-    valueRow('Compra 2', []);
-    const compEnd = row - 1;
-    const compTotal = sumRow('Subtotal Compras', compStart, compEnd, '#4a3a3a');
-    setCell(0, row, { f: 'Total Fatura Santander', b: true, bg: '#553a3a' });
-    for(let c = 1; c <= nMeses; c++){
-      setCell(c, row, { f: `=${finCellKey(c, estTotal)}+${finCellKey(c, renovTotal)}+${finCellKey(c, parcTotal)}+${finCellKey(c, compTotal)}`, cur: true, b: true, bg: '#553a3a' });
-    }
-    const santanderTotal = row; row++;
-    blankRow();
-
-    // MERCADO PAGO
-    bannerRow('MERCADO PAGO', '#554a2a');
-    const mpStart = row;
-    valueRow('Fatura Mercado Pago', []);
-    valueRow('Taxa Mercado Pago', []);
-    const mpEnd = row - 1;
-    const mpTotal = sumRow('Total Mercado Pago', mpStart, mpEnd, '#554a2a');
-    blankRow();
-
-    // RESUMO — sobra ou falta depois do dia 20
-    bannerRow('RESUMO — SOBRA/FALTA APÓS O DIA 20', '#2a4a4a');
-    setCell(0, row, { f: 'Total Disponível (Dia 20)' });
-    for(let c = 1; c <= nMeses; c++) setCell(c, row, { f: `=${finCellKey(c, dia20Total)}`, cur: true });
-    row++;
-    setCell(0, row, { f: 'Total Cartões (Santander + Mercado Pago)' });
-    for(let c = 1; c <= nMeses; c++) setCell(c, row, { f: `=${finCellKey(c, santanderTotal)}+${finCellKey(c, mpTotal)}`, cur: true });
-    const cartoesRow = row; row++;
-    setCell(0, row, { f: 'Sobra / Falta do Mês', b: true, bg: '#2a4a4a' });
-    for(let c = 1; c <= nMeses; c++){
-      setCell(c, row, { f: `=${finCellKey(c, dia20Total)}-${finCellKey(c, cartoesRow)}`, cur: true, b: true, bg: '#2a4a4a' });
-    }
-    row++;
-    blankRow();
-
-    // TABELA DE VALORES — lista simples das categorias fixas do dia a dia
-    bannerRow('TABELA DE VALORES', '#40403a');
-    valueRow('Salário', []);
-    valueRow('Vale', []);
-    valueRow('Remédios', []);
-    valueRow('Supermercado', []);
-    valueRow('Gasolina', []);
-    valueRow('Condomínio', []);
-    valueRow('Aluguel', []);
-    valueRow('Luz', []);
-    valueRow('Internet', []);
-    valueRow('Água', []);
-
-    return cells;
-  }
-  function finScheduleSave(){
-    const statusEl = document.getElementById('finSaveStatus');
-    if(statusEl) statusEl.textContent = 'Salvando...';
-    clearTimeout(finSaveTimer);
-    finSaveTimer = setTimeout(async () => {
-      try{
-        await dbPutSilent(userPath('/Financas'), { cells: finCells, rows: finRows, cols: finCols });
-        if(statusEl) statusEl.textContent = 'Tudo salvo';
-      }catch(e){
-        if(statusEl) statusEl.textContent = 'Erro ao salvar';
-      }
-    }, 500);
-  }
-  function finRenderColorRow(){
-    const row = document.getElementById('finColorRow');
-    if(row.children.length) return;
-    row.innerHTML = FIN_COLORS.map(hex => hex
-      ? `<button type="button" class="fin-color-dot" data-fin-color="${hex}" style="background:${hex};" title="cor de fundo"></button>`
-      : `<button type="button" class="fin-color-dot fin-color-none" data-fin-color="" title="sem cor"></button>`
-    ).join('');
-    row.querySelectorAll('[data-fin-color]').forEach(btn => btn.addEventListener('click', () => {
-      if(!finSelectedKey) return;
-      finCells[finSelectedKey] = finCells[finSelectedKey] || {};
-      const hex = btn.getAttribute('data-fin-color');
-      if(hex) finCells[finSelectedKey].bg = hex; else delete finCells[finSelectedKey].bg;
-      finScheduleSave();
-      renderFinancas(true);
-    }));
-  }
-  function renderFinancas(skipFetch){
-    return (async () => {
-      if(!skipFetch){
-        const data = await dbGet(userPath('/Financas'));
-        if(data && data.cells){
-          finCells = data.cells;
-          finRows = data.rows || FIN_DEFAULT_ROWS;
-          finCols = data.cols || FIN_DEFAULT_COLS;
-        } else {
-          finCells = finSeedTemplate();
-          finRows = FIN_DEFAULT_ROWS;
-          finCols = FIN_DEFAULT_COLS;
-          await dbPutSilent(userPath('/Financas'), { cells: finCells, rows: finRows, cols: finCols });
-        }
-      }
-      finRenderColorRow();
-      const table = document.getElementById('finSheetTable');
-      const cache = {};
-      let thead = '<tr><th class="fin-corner"></th>';
-      for(let c = 0; c < finCols; c++) thead += `<th>${finColLetter(c)}</th>`;
-      thead += '</tr>';
-      let tbody = '';
-      for(let r = 0; r < finRows; r++){
-        tbody += `<tr><td class="fin-row-head-cell">${r + 1}</td>`;
-        for(let c = 0; c < finCols; c++){
-          const key = finCellKey(c, r);
-          const cell = finCells[key];
-          const val = finEvalCell(key, cache, new Set());
-          const display = finFormatValue(key, val);
-          const raw = cell && cell.f != null ? cell.f : '';
-          const classes = ['fin-cell'];
-          if(cell && cell.b) classes.push('fin-bold');
-          if(val === '#ERRO' || val === '#CIRC') classes.push('fin-error');
-          if(key === finSelectedKey) classes.push('selected');
-          const style = cell && cell.bg ? ` style="background:${cell.bg};"` : '';
-          tbody += `<td class="${classes.join(' ')}" data-fin-key="${key}"${style}><input class="fin-cell-input" data-fin-key="${key}" data-raw="${escapeHtml(raw)}" value="${escapeHtml(display)}"></td>`;
-        }
-        tbody += '</tr>';
-      }
-      table.innerHTML = thead + tbody;
-      table.querySelectorAll('.fin-cell-input').forEach(input => {
-        input.addEventListener('focus', () => {
-          finSelectedKey = input.getAttribute('data-fin-key');
-          input.value = input.getAttribute('data-raw') || '';
-          table.querySelectorAll('.fin-cell.selected').forEach(td => td.classList.remove('selected'));
-          input.closest('.fin-cell').classList.add('selected');
-        });
-        input.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); input.blur(); } });
-        input.addEventListener('blur', () => {
-          const key = input.getAttribute('data-fin-key');
-          const value = input.value;
-          finCells[key] = finCells[key] || {};
-          if(value === ''){ delete finCells[key].f; } else { finCells[key].f = value; }
-          finScheduleSave();
-          renderFinancas(true);
-        });
-      });
-    })();
-  }
-  document.getElementById('finAddRowBtn').addEventListener('click', () => { finRows++; finScheduleSave(); renderFinancas(true); });
-  document.getElementById('finAddColBtn').addEventListener('click', () => { finCols++; finScheduleSave(); renderFinancas(true); });
-  document.getElementById('finCurrencyBtn').addEventListener('click', () => {
-    if(!finSelectedKey) return;
-    finCells[finSelectedKey] = finCells[finSelectedKey] || {};
-    finCells[finSelectedKey].cur = !finCells[finSelectedKey].cur;
-    finScheduleSave();
-    renderFinancas(true);
-  });
-  document.getElementById('finBoldBtn').addEventListener('click', () => {
-    if(!finSelectedKey) return;
-    finCells[finSelectedKey] = finCells[finSelectedKey] || {};
-    finCells[finSelectedKey].b = !finCells[finSelectedKey].b;
-    finScheduleSave();
-    renderFinancas(true);
-  });
-  document.getElementById('finClearBtn').addEventListener('click', () => {
-    if(!finSelectedKey) return;
-    delete finCells[finSelectedKey];
-    finScheduleSave();
-    renderFinancas(true);
-  });
-  document.getElementById('finResetTemplateBtn').addEventListener('click', async () => {
-    if(!await showConfirm('Isso substitui TODAS as células da planilha pelo modelo padrão. Continuar?')) return;
-    finCells = finSeedTemplate();
-    finRows = FIN_DEFAULT_ROWS;
-    finCols = FIN_DEFAULT_COLS;
-    finScheduleSave();
-    renderFinancas(true);
-  });
 
   /* ---------- OBJETIVOS (objetivo grande + pontos menores que dependem dele) ---------- */
   let objEditingId = null; // null = criando um novo objetivo
@@ -1733,7 +1421,6 @@
   const VISION_DEFAULT_WIDTH = 24;
   const VISION_MIN_WIDTH = 10;
   const VISION_MAX_WIDTH = 45;
-  const VISION_SIZE_STEP = 3;
   let visionData = {};
   let visionPendingShuffle = null; // { id: {left,top,widthPct,rotate,z} } — só em memória até salvar
 
@@ -1993,22 +1680,17 @@
     renderVisionSelectedControls();
   }
 
-  /* Controles da foto selecionada (escala + rotação) — aparecem no painel de
-     Camadas assim que uma foto é selecionada clicando nela no board ou na lista. */
+  /* Botão "Restaurar esta foto" — aparece no painel de Camadas assim que uma foto
+     é selecionada (clicando nela no board ou na lista). Escala e rotação em si
+     são ajustadas pelas alças diretamente na foto selecionada no board. */
   const VISION_ROTATE_MIN = -180;
   const VISION_ROTATE_MAX = 180;
-  const VISION_ROTATE_STEP = 5;
   let visionSelectedSaveTimer = null;
   function renderVisionSelectedControls(){
     const panel = document.getElementById('visionSelectedControls');
     if(!panel) return;
     const id = visionManualSelectedId;
-    if(!id || !visionData[id]){ panel.classList.remove('active'); return; }
-    panel.classList.add('active');
-    const widthPct = Math.round(visionData[id].widthPct || VISION_DEFAULT_WIDTH);
-    const rotate = Math.round(visionData[id].rotate || 0);
-    document.getElementById('visionSelectedScaleVal').textContent = widthPct + '%';
-    document.getElementById('visionSelectedRotateVal').textContent = rotate + '°';
+    panel.classList.toggle('active', !!(id && visionData[id]));
   }
   function applyVisionSelectedChange(patch){
     const id = visionManualSelectedId;
@@ -2021,26 +1703,6 @@
       dbPatchSilent(userPath('/VisionBoard/' + id), patch).catch(err => console.error('Erro ao salvar ajuste da imagem', err));
     }, 400);
   }
-  document.getElementById('visionSelectedScaleDec').addEventListener('click', () => {
-    const id = visionManualSelectedId; if(!id) return;
-    const current = visionData[id].widthPct || VISION_DEFAULT_WIDTH;
-    applyVisionSelectedChange({ widthPct: Math.max(VISION_MIN_WIDTH, Math.min(VISION_MAX_WIDTH, current - VISION_SIZE_STEP)) });
-  });
-  document.getElementById('visionSelectedScaleInc').addEventListener('click', () => {
-    const id = visionManualSelectedId; if(!id) return;
-    const current = visionData[id].widthPct || VISION_DEFAULT_WIDTH;
-    applyVisionSelectedChange({ widthPct: Math.max(VISION_MIN_WIDTH, Math.min(VISION_MAX_WIDTH, current + VISION_SIZE_STEP)) });
-  });
-  document.getElementById('visionSelectedRotateDec').addEventListener('click', () => {
-    const id = visionManualSelectedId; if(!id) return;
-    const current = visionData[id].rotate || 0;
-    applyVisionSelectedChange({ rotate: Math.max(VISION_ROTATE_MIN, Math.min(VISION_ROTATE_MAX, current - VISION_ROTATE_STEP)) });
-  });
-  document.getElementById('visionSelectedRotateInc').addEventListener('click', () => {
-    const id = visionManualSelectedId; if(!id) return;
-    const current = visionData[id].rotate || 0;
-    applyVisionSelectedChange({ rotate: Math.max(VISION_ROTATE_MIN, Math.min(VISION_ROTATE_MAX, current + VISION_ROTATE_STEP)) });
-  });
   document.getElementById('visionSelectedResetBtn').addEventListener('click', () => {
     applyVisionSelectedChange({ widthPct: VISION_DEFAULT_WIDTH, rotate: 0 });
   });
@@ -4968,7 +4630,7 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
       guardRender(renderRotina, 'a Rotina', 'rotinaDaysGrid'),
       guardRender(renderFluencia, 'o Fluência', []),
       guardRender(renderBateria, 'a Bateria', []),
-      guardRender(() => renderFinancas(false), 'as Finanças', ['finSheetTable']),
+      guardRender(renderFinancas, 'as Finanças', []),
       guardRender(renderCasaAtividades, 'as atividades da Casa', 'casaAtividadesList'),
       guardRender(renderCasaRegras, 'as regras da Casa', 'casaRegrasList'),
       guardRender(renderCasaErros, 'os erros da Casa', 'casaErrosList'),

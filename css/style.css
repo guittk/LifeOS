@@ -698,34 +698,6 @@
   .casa-erros-resolvidos-toggle:hover{ color:var(--text); }
   #casaErrosResolvidosList{ margin-top:10px; opacity:0.75; }
   #casaErrosResolvidosList .casa-card-title{ text-decoration:line-through; }
-  /* ---------- Finanças (planilha) ---------- */
-  .fin-toolbar{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
-  .fin-color-row{ display:flex; align-items:center; gap:6px; margin-left:6px; }
-  .fin-color-dot{ width:20px; height:20px; border-radius:6px; border:1px solid var(--line-strong); cursor:pointer; padding:0; }
-  .fin-color-dot:hover{ border-color:var(--text-mut); transform:scale(1.08); }
-  .fin-color-dot.fin-color-none{ background:var(--surface); position:relative; }
-  .fin-color-dot.fin-color-none::after{ content:''; position:absolute; inset:3px; border-top:1px solid var(--coral); transform:rotate(45deg); }
-  .fin-sheet-wrap{ overflow:auto; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); max-height:calc(100vh - 220px); padding-bottom:16px; }
-  table.fin-sheet{ border-collapse:collapse; font-size:12.5px; font-family:var(--sans); }
-  table.fin-sheet th, table.fin-sheet td{ border:1px solid var(--line); padding:0; }
-  table.fin-sheet th{
-    background:var(--surface-hi); color:var(--text-dim); font-family:var(--mono); font-weight:500;
-    font-size:11px; text-align:center; padding:6px 4px; position:sticky; top:0; z-index:2; user-select:none;
-  }
-  table.fin-sheet th.fin-row-head{ position:sticky; left:0; z-index:3; min-width:34px; }
-  table.fin-sheet th.fin-corner{ position:sticky; left:0; top:0; z-index:4; }
-  table.fin-sheet td.fin-row-head-cell{
-    background:var(--surface-hi); color:var(--text-dim); font-family:var(--mono); font-size:11px; text-align:center;
-    position:sticky; left:0; z-index:1; user-select:none; padding:6px 4px;
-  }
-  table.fin-sheet input.fin-cell-input{
-    width:104px; height:30px; box-sizing:border-box; background:transparent; border:none; outline:none;
-    color:var(--text); font-family:var(--sans); font-size:12.5px; padding:0 8px;
-  }
-  table.fin-sheet input.fin-cell-input:focus{ background:var(--sage-soft); box-shadow:inset 0 0 0 1.5px var(--sage-line); }
-  table.fin-sheet td.fin-cell.selected{ box-shadow:inset 0 0 0 1.5px var(--sage-line); }
-  table.fin-sheet td.fin-cell.fin-bold input{ font-weight:700; }
-  table.fin-sheet td.fin-cell.fin-error input{ color:var(--coral); }
 
   .cor-swatch-btn{
     width:32px; height:32px; border-radius:50%; border:2px solid var(--line-strong); cursor:pointer; padding:0;
@@ -874,21 +846,13 @@
   .vision-layer-thumb{ width:34px; height:34px; object-fit:cover; border-radius:5px; flex-shrink:0; -webkit-user-drag:none; user-select:none; cursor:pointer; }
   .vision-layer-row.selected{ border-color:var(--sage-line); background:var(--sage-soft); }
   .vision-layer-row.selected .vision-layer-thumb{ outline:2px solid var(--sage); outline-offset:1px; }
-  .vision-layer-size-btn{
-    width:24px; height:24px; flex-shrink:0; border-radius:6px; border:1px solid var(--line-strong); background:var(--surface);
-    color:var(--text); font-size:13px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;
-  }
-  .vision-layer-size-btn:hover{ border-color:var(--sage-line); color:var(--sage); }
   .vision-selected-controls{
-    display:none; flex-direction:column; gap:8px; margin:0 14px 14px; padding:10px 12px;
+    display:none; margin:0 14px 14px; padding:10px 12px;
     background:var(--surface-hi); border:1px solid var(--sage-line); border-radius:10px;
   }
-  .vision-selected-controls.active{ display:flex; }
-  .vision-selected-row{ display:flex; align-items:center; gap:8px; }
-  .vision-selected-label{ font-size:11px; color:var(--text-dim); width:56px; flex-shrink:0; }
-  .vision-selected-val{ font-family:var(--mono); font-size:11px; color:var(--text); width:36px; text-align:center; flex-shrink:0; }
+  .vision-selected-controls.active{ display:block; }
   .vision-selected-reset{
-    align-self:flex-start; background:none; border:none; color:var(--coral); font-size:11px; cursor:pointer;
+    background:none; border:none; color:var(--coral); font-size:11.5px; cursor:pointer;
     font-family:var(--sans); padding:2px 0; text-decoration:underline; text-underline-offset:2px;
   }
   @media (max-width: 900px){

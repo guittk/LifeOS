@@ -771,29 +771,18 @@
     </div>
   </section>
 
-  <!-- FINANÇAS (planilha com fórmulas) -->
+  <!-- FINANÇAS -->
   <section class="view" id="view-financas">
-    <div class="view-head">
+    <div class="view-head" style="margin-bottom:12px;">
       <div>
         <p class="eyebrow">Organizar</p>
         <h1 class="view-title">Finanças</h1>
-        <p class="view-desc">Sua planilha — clique numa célula pra editar, use <code>=</code> pra fórmulas (ex: <code>=B2+B3</code>, <code>=SUM(B4:B11)</code>).</p>
+        <p class="view-desc" id="financasEmbedNote">Carregando...</p>
       </div>
-      <span id="finSaveStatus" style="font-family:var(--mono); font-size:11px; color:var(--text-dim); align-self:center;">Tudo salvo</span>
+      <a class="btn btn-primary btn-sm" id="financasOpenTabBtn" href="#" target="_blank" rel="noopener">Abrir em nova aba ↗</a>
     </div>
-
-    <div class="fin-toolbar">
-      <button class="btn btn-ghost btn-sm" id="finAddRowBtn">+ Linha</button>
-      <button class="btn btn-ghost btn-sm" id="finAddColBtn">+ Coluna</button>
-      <button class="btn btn-ghost btn-sm" id="finCurrencyBtn">R$ moeda</button>
-      <button class="btn btn-ghost btn-sm" id="finBoldBtn"><b>N</b> negrito</button>
-      <button class="btn btn-ghost btn-sm" id="finClearBtn">Limpar célula</button>
-      <div class="fin-color-row" id="finColorRow"></div>
-      <button class="btn btn-ghost btn-sm" id="finResetTemplateBtn" style="margin-left:auto; color:var(--coral);">Recarregar modelo</button>
-    </div>
-
-    <div class="fin-sheet-wrap">
-      <table class="fin-sheet" id="finSheetTable"></table>
+    <div class="fluencia-frame-wrap" id="financasFrameWrap">
+      <p class="empty-state">Carregando...</p>
     </div>
   </section>
 
@@ -845,20 +834,8 @@
           <button type="button" id="visionLayersCloseBtn" class="vision-layers-close">×</button>
         </div>
         <button type="button" class="btn btn-ghost btn-sm" id="visionRestoreAllBtn" style="margin:0 14px 12px; color:var(--coral);">↺ Restaurar tudo</button>
-        <p class="vision-layers-hint">Arraste pra reordenar — o topo da lista fica na frente. Clique numa foto pra selecionar: arraste pra reposicionar, ou use os controles abaixo pra escalar e girar.</p>
+        <p class="vision-layers-hint">Arraste pra reordenar — o topo da lista fica na frente. Clique numa foto pra selecionar: arraste pra reposicionar, ou puxe as alças dela no board pra escalar e girar.</p>
         <div class="vision-selected-controls" id="visionSelectedControls">
-          <div class="vision-selected-row">
-            <span class="vision-selected-label">Tamanho</span>
-            <button type="button" class="vision-layer-size-btn" id="visionSelectedScaleDec" title="Diminuir">−</button>
-            <span class="vision-selected-val" id="visionSelectedScaleVal">24%</span>
-            <button type="button" class="vision-layer-size-btn" id="visionSelectedScaleInc" title="Aumentar">+</button>
-          </div>
-          <div class="vision-selected-row">
-            <span class="vision-selected-label">Rotação</span>
-            <button type="button" class="vision-layer-size-btn" id="visionSelectedRotateDec" title="Girar p/ esquerda">↺</button>
-            <span class="vision-selected-val" id="visionSelectedRotateVal">0°</span>
-            <button type="button" class="vision-layer-size-btn" id="visionSelectedRotateInc" title="Girar p/ direita">↻</button>
-          </div>
           <button type="button" class="vision-selected-reset" id="visionSelectedResetBtn">Restaurar esta foto</button>
         </div>
         <ul class="vision-layers-list" id="visionLayersList"></ul>
