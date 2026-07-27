@@ -824,7 +824,6 @@
   .vision-layers-head{ display:flex; align-items:center; justify-content:space-between; padding:14px 14px 8px; flex-shrink:0; }
   .vision-layers-close{ background:none; border:none; color:var(--text-dim); font-size:18px; cursor:pointer; line-height:1; padding:2px 6px; }
   .vision-layers-close:hover{ color:var(--text); }
-  .vision-layers-hint{ font-size:11px; color:var(--text-dim); line-height:1.5; padding:0 14px 10px; margin:0; }
   .vision-layers-list{ list-style:none; margin:0; padding:0 10px 14px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:6px; }
   .vision-layer-row{
     display:flex; align-items:center; gap:8px; background:var(--surface-hi); border:1px solid var(--line);
@@ -846,15 +845,8 @@
   .vision-layer-thumb{ width:34px; height:34px; object-fit:cover; border-radius:5px; flex-shrink:0; -webkit-user-drag:none; user-select:none; cursor:pointer; }
   .vision-layer-row.selected{ border-color:var(--sage-line); background:var(--sage-soft); }
   .vision-layer-row.selected .vision-layer-thumb{ outline:2px solid var(--sage); outline-offset:1px; }
-  .vision-selected-controls{
-    display:none; margin:0 14px 14px; padding:10px 12px;
-    background:var(--surface-hi); border:1px solid var(--sage-line); border-radius:10px;
-  }
+  .vision-selected-controls{ display:none; margin:0 14px 14px; }
   .vision-selected-controls.active{ display:block; }
-  .vision-selected-reset{
-    background:none; border:none; color:var(--coral); font-size:11.5px; cursor:pointer;
-    font-family:var(--sans); padding:2px 0; text-decoration:underline; text-underline-offset:2px;
-  }
   @media (max-width: 900px){
     .vision-board-wrap{ flex-direction:column; }
     .vision-layers-panel{ width:100%; height:0; }
