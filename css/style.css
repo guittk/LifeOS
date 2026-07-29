@@ -326,26 +326,29 @@
   .inbox-text{ flex:1; font-size:13.5px; }
   .inbox-source{ font-family:var(--mono); font-size:10.5px; color:var(--text-dim); }
 
-  /* ---------- Revisão IA (PR-style) ---------- */
-  .pr-card{
-    background: var(--surface); border:1px solid var(--line); border-left:3px solid var(--gold);
-    border-radius: var(--radius); margin-bottom:14px; overflow:hidden;
+  /* ---------- Revisão IA (comparação lado a lado, documento único) ---------- */
+  .revisao-diff-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+  @media (max-width:880px){ .revisao-diff-grid{ grid-template-columns:1fr; } }
+  .revisao-diff-col{ display:flex; flex-direction:column; min-width:0; }
+  .revisao-diff-label{
+    font-size:11px; text-transform:uppercase; letter-spacing:0.8px; color:var(--text-mut);
+    margin:0 0 8px; display:flex; align-items:center; gap:8px;
   }
-  .pr-head{ padding:14px 18px 10px; border-bottom:1px solid var(--line); }
-  .pr-raw{ font-size:13.5px; color:var(--text-mut); font-style:italic; }
-  .pr-raw::before{ content:"“"; } .pr-raw::after{ content:"”"; }
-  .pr-diff{ padding:14px 18px; display:flex; flex-direction:column; gap:7px; }
-  .diff-row{ display:flex; gap:10px; font-family:var(--mono); font-size:12.5px; align-items:baseline; }
-  .diff-key{ color:var(--text-dim); width:96px; flex-shrink:0; }
-  .diff-val{ color:var(--sage); }
-  .diff-val.new::before{ content:"+ "; color:var(--sage); }
-  .pr-foot{ display:flex; gap:8px; padding:12px 18px 16px; border-top:1px solid var(--line); }
-  .pr-edit-label{ font-size:11px; text-transform:uppercase; letter-spacing:0.8px; color:var(--text-dim); margin-top:4px; }
-  .pr-edit-textarea{
-    width:100%; min-height:70px; background:var(--surface-hi); border:1px solid var(--line-strong);
-    border-radius:9px; padding:9px 11px; color:var(--text); font-size:13px; font-family:var(--sans);
-    line-height:1.5; outline:none; resize:vertical;
+  .revisao-diff-editable-tag{
+    font-family:var(--mono); font-size:9.5px; letter-spacing:0.5px; text-transform:none; color:var(--sage);
+    background:var(--sage-soft); padding:2px 7px; border-radius:20px;
   }
+  .revisao-diff-pane{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-sm);
+    padding:14px 16px; height:60vh; overflow-y:auto; font-family:var(--mono); font-size:12.5px;
+    line-height:1.7; color:var(--text); white-space:pre-wrap; word-break:break-word;
+  }
+  .revisao-diff-pane-editable{ outline:none; }
+  .revisao-diff-pane-editable:focus{ border-color:var(--sage-line); box-shadow:0 0 0 2px var(--sage-soft); }
+  .diff-line{ min-height:1.7em; }
+  .diff-line-removed{ background:rgba(180,106,92,0.16); color:var(--coral); text-decoration:line-through; }
+  .diff-line-added{ background:var(--sage-soft); color:var(--sage); }
+  .revisao-doc-actions{ display:flex; justify-content:flex-end; gap:10px; }
 
   /* ---------- Evoluir / Dashboard ---------- */
   .stat-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:22px; }
@@ -906,6 +909,20 @@
   .import-row{ display:flex; gap:8px; margin: -12px 0 22px; }
   .pr-suggested-by{ font-size:11px; color:var(--text-dim); margin-top:2px; font-style:italic; }
   .pr-head-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  /* usados pela reorganização de Gavetas via IA (Analisar Gavetas com IA) */
+  .pr-card{
+    background: var(--surface); border:1px solid var(--line); border-left:3px solid var(--gold);
+    border-radius: var(--radius); overflow:hidden;
+  }
+  .pr-head{ padding:14px 18px 10px; border-bottom:1px solid var(--line); }
+  .pr-raw{ font-size:13.5px; color:var(--text-mut); font-style:italic; }
+  .pr-raw::before{ content:"“"; } .pr-raw::after{ content:"”"; }
+  .pr-diff{ padding:14px 18px; display:flex; flex-direction:column; gap:7px; }
+  .diff-row{ display:flex; gap:10px; font-family:var(--mono); font-size:12.5px; align-items:baseline; }
+  .diff-key{ color:var(--text-dim); width:96px; flex-shrink:0; }
+  .diff-val{ color:var(--sage); }
+  .diff-val.new::before{ content:"+ "; color:var(--sage); }
+  .pr-foot{ display:flex; gap:8px; padding:12px 18px 16px; border-top:1px solid var(--line); }
 
   /* ---------- Busca global ---------- */
   .search-trigger{

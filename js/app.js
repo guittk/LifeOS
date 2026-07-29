@@ -2150,6 +2150,114 @@
     return null;
   }
 
+  // Filosofia de organização (resumida do prompt do usuário): a estrutura nasce
+  // dos dados (nunca um template fixo), poucas áreas bem organizadas, no máximo
+  // ~3 níveis (Gaveta = área → item → detalhe dentro do texto do item), agrupar
+  // por significado (não por palavra-chave), preservar contexto e links junto do
+  // assunto, eliminar duplicação, e sempre otimizar pra "qual é a forma mais fácil
+  // de encontrar isso daqui a 6 meses". Em vez de propor mudanças item a item, a
+  // IA reescreve TUDO (Gavetas + Capturas novas) como um único documento, e a
+  // pessoa compara lado a lado com a versão atual antes de aprovar.
+  const ORGANIZER_SYSTEM_PROMPT = `Você é o organizador do Arquivo (Gavetas) de um sistema pessoal de produtividade chamado Life OS. Seu objetivo não é só arrumar texto — é reduzir a carga mental da pessoa, organizando pra que ela encontre qualquer informação no futuro sem precisar lembrar onde guardou. A pergunta que sempre guia a decisão: "qual é a forma mais simples e natural de encontrar essa informação daqui a seis meses?"
+
+Princípios que você segue sempre:
+1. A estrutura nasce dos dados: nunca use um template fixo de áreas. Olhe o conjunto inteiro (o que já existe + o que é novo) e descubra as áreas naturais daquele conteúdo. Só crie uma área nova quando isso realmente simplificar a busca futura; se uma área não faz mais sentido, reorganize-a.
+2. Poucas áreas, bem organizadas: prefira poucas áreas grandes e coerentes a muitas pequenas. Nunca force uma informação numa área que não combina só pra evitar criar uma nova.
+3. Pouca profundidade: no máximo 3 níveis — Área → item → detalhe dentro do próprio texto do item (ex: um item pode começar com "Projeto X:" pra dar contexto, mas isso não é um nível novo de hierarquia).
+4. Organize pelo significado, não pela palavra: entenda o contexto antes de decidir a área. "Lucas comentou sobre abrir empresa" é sobre o Lucas E sobre a empresa — escolha o lugar que fará mais sentido dali a 6 meses.
+5. Detecte padrões: se um assunto está crescendo, transforme-o numa área própria; se uma área ficou grande e heterogênea demais, separe-a.
+6. Elimine duplicações: uma informação repetida ou uma nova captura que já existe em outro item deve virar uma coisa só — uma junto da outra, sem repetir. Nunca perca detalhes importantes ao unir.
+7. Preserve contexto: nunca generalize um item a ponto de perder informação. Se o texto conecta duas ideias (ex: "estudar Firebase pro projeto Life OS"), mantenha essa relação — nunca invente relações que não estão explícitas.
+8. Links ficam junto do assunto: nunca separe um link do contexto que o acompanha; se um link parecer incompleto, mantenha-o como está (não invente).
+9. NUNCA descarte uma informação que já existia só porque não achou lugar óbvio pra ela — encontre a área mais adequada (ou crie uma) em vez de apagar. Preservar tudo que já existe é mais importante que deixar a estrutura "bonita".
+
+Formato de saída — isto é OBRIGATÓRIO, porque o texto é interpretado por um programa:
+- Cada área começa numa linha própria com "# " seguido do nome da área.
+- Cada informação/item dentro da área começa numa linha própria com "• " (marcador bullet).
+- Se um item precisar de mais de uma linha, as linhas seguintes de continuação NÃO começam com "#" nem "•".
+- Deixe uma linha em branco entre uma área e outra.
+- Responda APENAS com o documento nesse formato — sem markdown extra (sem \`\`\`), sem comentários, sem título, sem numerar as áreas, sem texto antes ou depois do documento.`;
+
+  // Serializa o estado atual das Gavetas no mesmo formato de texto que a IA usa
+  // (ex: "# Nome da área" seguido de linhas "• item"), pra comparar com a versão
+  // que a IA devolver e pra dar contexto completo do que já existe.
+  function serializeGavetasToDoc(gavetas){
+    const entries = Object.entries(gavetas || {}).sort((a,b) => (a[1].order||0) - (b[1].order||0));
+    return entries.map(([, g]) => {
+      const items = Object.entries(g.items || {}).sort((a,b) => (a[1].order||0) - (b[1].order||0));
+      const itemLines = items.map(([, it]) => {
+        const lines = String(it.text || '').split('\n');
+        return lines.map((l, idx) => idx === 0 ? '• ' + l.replace(/^[•\-\*]\s*/, '') : l).join('\n');
+      }).join('\n');
+      return `# ${g.name}` + (itemLines ? '\n' + itemLines : '');
+    }).join('\n\n');
+  }
+
+  // Interpreta de volta um documento no formato "# área / • item" pra uma lista
+  // de { name, items: [texto,...] }, na ordem em que aparecem no documento.
+  function parseDocToGavetas(text){
+    const lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
+    const gavetas = [];
+    let current = null;
+    let currentItemLines = null;
+    function flushItem(){
+      if(current && currentItemLines){
+        const joined = currentItemLines.join('\n').trim();
+        if(joined) current.items.push(joined);
+      }
+      currentItemLines = null;
+    }
+    lines.forEach(line => {
+      const headingMatch = /^#\s*(.+?)\s*$/.exec(line);
+      const itemMatch = /^[•\-\*]\s?(.*)$/.exec(line);
+      if(headingMatch){
+        flushItem();
+        current = { name: headingMatch[1], items: [] };
+        gavetas.push(current);
+      } else if(itemMatch && current){
+        flushItem();
+        currentItemLines = [itemMatch[1]];
+      } else if(current && currentItemLines && line.trim() !== ''){
+        currentItemLines.push(line);
+      } else if(currentItemLines && line.trim() === ''){
+        flushItem();
+      }
+    });
+    flushItem();
+    return gavetas.filter(g => g.name);
+  }
+
+  // Diff simples por linha (LCS clássico) — devolve duas listas independentes
+  // (uma pra cada lado) marcando cada linha como equal/removed (esquerda) ou
+  // equal/added (direita), pra pintar a comparação lado a lado.
+  function computeLineDiff(oldLines, newLines){
+    const n = oldLines.length, m = newLines.length;
+    const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+    for(let i = n - 1; i >= 0; i--){
+      for(let j = m - 1; j >= 0; j--){
+        dp[i][j] = oldLines[i] === newLines[j] ? dp[i+1][j+1] + 1 : Math.max(dp[i+1][j], dp[i][j+1]);
+      }
+    }
+    const oldOut = [], newOut = [];
+    let i = 0, j = 0;
+    while(i < n && j < m){
+      if(oldLines[i] === newLines[j]){
+        oldOut.push({ type:'equal', text: oldLines[i] });
+        newOut.push({ type:'equal', text: newLines[j] });
+        i++; j++;
+      } else if(dp[i+1][j] >= dp[i][j+1]){
+        oldOut.push({ type:'removed', text: oldLines[i] });
+        i++;
+      } else {
+        newOut.push({ type:'added', text: newLines[j] });
+        j++;
+      }
+    }
+    while(i < n){ oldOut.push({ type:'removed', text: oldLines[i] }); i++; }
+    while(j < m){ newOut.push({ type:'added', text: newLines[j] }); j++; }
+    return { oldOut, newOut };
+  }
+
   document.getElementById('runAiOrganizeBtn').addEventListener('click', async () => {
     const btn = document.getElementById('runAiOrganizeBtn');
     if(!openaiApiKey){ await loadOpenAiKey(); }
@@ -2161,47 +2269,33 @@
       const pending = Object.entries(inbox).filter(([id,it]) => it.status === 'pending');
       if(!pending.length){ alert('Não há itens novos em Capturas para organizar.'); return; }
       const gavetas = await dbGet(userPath('/Gavetas')) || {};
-      const gavetaSummary = Object.entries(gavetas).map(([gid,g]) => ({
-        id: gid, nome: g.name, itens: Object.entries(g.items||{}).map(([iid,it]) => ({ id:iid, texto: it.text }))
-      }));
-      const inboxSummary = pending.map(([id,it]) => ({ id, texto: it.text, tituloDetectado: detectInboxTitle(it.text) }));
+      const oldDoc = serializeGavetasToDoc(gavetas);
+      const capturasText = pending.map(([, it]) => '• ' + String(it.text || '').replace(/\n/g, ' ')).join('\n');
 
-      const systemPrompt = `Você organiza a Inbox de um sistema pessoal de produtividade chamado Life OS.
-Gavetas existentes (JSON): ${JSON.stringify(gavetaSummary)}
-Itens novos da Inbox para organizar (JSON): ${JSON.stringify(inboxSummary)}
-Cada item novo pode trazer um campo "tituloDetectado", extraído automaticamente da primeira linha do texto (formatos como "[Título]", "*Título*", "TÍTULO EM CAIXA ALTA" ou "Título:"). Esse título tende a indicar o nome ideal da gaveta para aquele item — trate-o como um forte sinal, não como texto do conteúdo em si (ou seja, normalmente não deve aparecer dentro do "texto" final salvo na gaveta).
-IMPORTANTE: um item de Captura pode conter mais de um assunto misturado (ex: uma nota que junta uma ideia de projeto com um lembrete de compra e um dado financeiro). Nesses casos, DIVIDA o conteúdo em pedaços (fragmentos) e gere uma entrada separada no array de resposta para cada pedaço — cada fragmento pode ir para uma gaveta diferente (existente ou nova). Não force um item inteiro para dentro de uma única gaveta só porque ele tem um "tituloDetectado" — o título indica só a gaveta do pedaço principal; o resto do conteúdo, se for de assunto diferente, deve virar fragmento(s) separado(s) em outra(s) gaveta(s). Todos os fragmentos de um mesmo item devem usar o mesmo "inboxId"; juntos, eles devem cobrir o conteúdo relevante do item original, sem duplicar a mesma informação em mais de um fragmento. Se o item for sobre um assunto só, gere apenas um fragmento normalmente.
-Para cada fragmento, decida: (a) para qual gaveta ele deve ir. Se houver "tituloDetectado" e o fragmento for o pedaço principal do item: primeiro verifique se alguma gaveta existente tem nome igual ou claramente equivalente (mesmo com pequenas variações de escrita, plural/singular, maiúsculas etc.) — se sim, use essa gaveta (use o "id" exato); se não houver nenhuma parecida, crie uma nova gaveta com esse título exato (defina "gavetaId": null e "gavetaNome" igual ao tituloDetectado). Para os demais fragmentos (ou quando não houver "tituloDetectado"), infira a gaveta mais adequada pelo conteúdo, existente ou nova. (b) o texto final desse fragmento, resumido e claro, para salvar dentro da gaveta — sem repetir o título já usado como nome da gaveta. (c) o "trecho": a parte literal do texto original que deu origem a esse fragmento (recorte do texto de entrada, não o texto resumido) — cada trecho deve conter só a parte referente àquele fragmento, nunca o item inteiro quando ele foi dividido. Se o item não foi dividido (só um fragmento), "trecho" pode ser o texto original inteiro.
-Responda APENAS com um array JSON, sem markdown, sem texto extra, no formato:
-[{"inboxId":"...", "gavetaId":"...", "gavetaNome":"...", "trecho":"...", "texto":"...", "motivo":"breve motivo da decisão"}]
-(um item pode gerar mais de um objeto nesse array, todos com o mesmo "inboxId", um por fragmento/gaveta de destino — juntos, os "trecho" de todos os fragmentos de um mesmo inboxId não devem se sobrepor)`;
+      const userPrompt = `Documento atual (todas as áreas e itens já existentes):
+${oldDoc || '(nenhuma área criada ainda)'}
+
+Novas capturas para incorporar e organizar dentro do documento (ainda soltas, sem organização):
+${capturasText}
+
+Gere o documento ATUALIZADO completo — todas as áreas existentes (reorganizadas se fizer sentido) mais as novas capturas já incorporadas nos lugares certos. Devolva o documento inteiro, não só as mudanças.`;
 
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method:'POST',
         headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + openaiApiKey },
-        body: JSON.stringify({ model:'gpt-4o-mini', temperature:0.4, messages:[{ role:'system', content: systemPrompt }] })
+        body: JSON.stringify({
+          model:'gpt-4o-mini', temperature:0.4,
+          messages:[{ role:'system', content: ORGANIZER_SYSTEM_PROMPT }, { role:'user', content: userPrompt }]
+        })
       });
       const data = await res.json();
       if(!res.ok) throw new Error((data.error && data.error.message) || 'Erro na chamada à OpenAI');
-      const raw = data.choices[0].message.content;
-      const proposals = extractJson(raw);
+      const newDoc = data.choices[0].message.content.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
 
-      // Se um item foi dividido em vários fragmentos, cada revisão guarda só o
-      // "trecho" daquele fragmento (não a captura inteira) — assim aprovar/rejeitar/
-      // editar uma afeta só aquela parte, nunca as outras partes da mesma captura.
-      const fragCountByInbox = {};
-      proposals.forEach(p => { fragCountByInbox[p.inboxId] = (fragCountByInbox[p.inboxId] || 0) + 1; });
-      for(const p of proposals){
-        const revId = newId();
-        const textoOriginalCompleto = (inbox[p.inboxId] && inbox[p.inboxId].text) || '';
-        const isSplit = fragCountByInbox[p.inboxId] > 1;
-        await dbPut(userPath('/Revisao/' + revId), {
-          inboxId: p.inboxId, raw: (isSplit ? (p.trecho || p.texto || '') : (textoOriginalCompleto || p.trecho || '')),
-          gavetaId: p.gavetaId || null, gavetaNome: p.gavetaNome || '', texto: p.texto || '',
-          motivo: p.motivo || '', status:'pending', createdAt: new Date().toISOString()
-        });
-        await dbPatch(userPath('/Inbox/' + p.inboxId), { status:'awaiting_review' });
-      }
+      const inboxIds = pending.map(([id]) => id);
+      await dbPut(userPath('/RevisaoDocumento'), { oldText: oldDoc, newText: newDoc, inboxIds, createdAt: new Date().toISOString() });
+      await Promise.all(inboxIds.map(id => dbPatch(userPath('/Inbox/' + id), { status:'awaiting_review' })));
+
       await renderInbox();
       await renderRevisao();
       document.querySelector('.subtab[data-target="storage-revisao"]').click();
@@ -2213,76 +2307,6 @@ Responda APENAS com um array JSON, sem markdown, sem texto extra, no formato:
     }
   });
 
-  const editingRevisoes = new Set();
-  async function renderRevisao(){
-    const el = document.getElementById('revisaoList');
-    const bulkActions = document.getElementById('revisaoBulkActions');
-    const data = await dbGet(userPath('/Revisao')) || {};
-    const entries = Object.entries(data);
-    document.getElementById('revisaoCountTab').textContent = entries.filter(([id,r]) => r.status==='pending').length ? '(' + entries.filter(([id,r]) => r.status==='pending').length + ')' : '';
-    if(bulkActions) bulkActions.style.display = entries.length ? '' : 'none';
-    if(!entries.length){ el.innerHTML = '<p class="empty-state">Nenhuma proposta pendente. Clique em "+ Nova captura" na aba Capturas e depois em "Organizar Capturas com IA".</p>'; return; }
-    el.innerHTML = entries.sort((a,b) => (b[1].createdAt||'').localeCompare(a[1].createdAt||'')).map(([id, r]) => {
-      const isEditing = editingRevisoes.has(id);
-      return `
-      <div class="pr-card">
-        <div class="pr-head">
-          <div class="pr-head-top">
-            <p class="pr-raw">${escapeHtml(r.raw)}</p>
-            <span class="tag tag-gold">${escapeHtml(r.gavetaNome || 'gaveta')}</span>
-          </div>
-          <p class="pr-suggested-by">sugerido por: ${escapeHtml(r.motivo || 'análise da IA')}</p>
-        </div>
-        ${isEditing ? `
-        <div class="pr-diff">
-          <label class="pr-edit-label">Texto enviado</label>
-          <textarea class="pr-edit-textarea" data-edit-raw="${id}">${escapeHtml(r.raw)}</textarea>
-          <label class="pr-edit-label">O que precisa ser alterado</label>
-          <textarea class="pr-edit-textarea" data-edit-feedback="${id}" placeholder="Explique o que a IA deve ajustar nessa proposta..."></textarea>
-        </div>
-        <div class="pr-foot">
-          <button class="btn btn-ghost btn-sm" data-cancel-edit-pr="${id}">Cancelar</button>
-          <button class="btn btn-approve btn-sm" data-reanalyze-pr="${id}">↻ Reanalisar com IA</button>
-        </div>
-        ` : `
-        <div class="pr-diff">
-          <div class="diff-row"><span class="diff-key">gaveta</span><span class="diff-val new">${escapeHtml(r.gavetaNome || '(existente)')}</span></div>
-          <div class="diff-row"><span class="diff-key">conteúdo</span><span class="diff-val new">${escapeHtml(r.texto)}</span></div>
-        </div>
-        <div class="pr-foot">
-          <button class="btn btn-approve btn-sm" data-approve="${id}">✓ Aprovar</button>
-          <button class="btn btn-ghost btn-sm" data-edit-pr="${id}">Editar</button>
-          <button class="btn btn-reject btn-sm" data-reject="${id}">Rejeitar</button>
-        </div>
-        `}
-      </div>
-    `; }).join('');
-    el.querySelectorAll('[data-approve]').forEach(btn => btn.addEventListener('click', () => approveRevisao(btn.getAttribute('data-approve'))));
-    el.querySelectorAll('[data-reject]').forEach(btn => btn.addEventListener('click', () => rejectRevisao(btn.getAttribute('data-reject'))));
-    el.querySelectorAll('[data-edit-pr]').forEach(btn => btn.addEventListener('click', async () => {
-      editingRevisoes.add(btn.getAttribute('data-edit-pr'));
-      await renderRevisao();
-    }));
-    el.querySelectorAll('[data-cancel-edit-pr]').forEach(btn => btn.addEventListener('click', async () => {
-      editingRevisoes.delete(btn.getAttribute('data-cancel-edit-pr'));
-      await renderRevisao();
-    }));
-    el.querySelectorAll('[data-reanalyze-pr]').forEach(btn => btn.addEventListener('click', () => reanalyzeRevisao(btn.getAttribute('data-reanalyze-pr'))));
-  }
-  document.getElementById('approveAllRevisaoBtn').addEventListener('click', async () => {
-    const data = await dbGet(userPath('/Revisao')) || {};
-    const ids = Object.keys(data);
-    if(!ids.length) return;
-    if(!await showConfirm(`Aprovar todas as ${ids.length} propostas pendentes?`)) return;
-    for(const id of ids){ await approveRevisao(id); }
-  });
-  document.getElementById('rejectAllRevisaoBtn').addEventListener('click', async () => {
-    const data = await dbGet(userPath('/Revisao')) || {};
-    const ids = Object.keys(data);
-    if(!ids.length) return;
-    if(!await showConfirm(`Rejeitar todas as ${ids.length} propostas pendentes? Os itens continuam na Inbox aguardando revisão.`)) return;
-    for(const id of ids){ await rejectRevisao(id); }
-  });
 
   function ensureBulletLine(line){
     if(line == null) return line;
@@ -2307,78 +2331,65 @@ Responda APENAS com um array JSON, sem markdown, sem texto extra, no formato:
     if(!text) return text;
     return text.split('\n').map(l => (l.trim() ? ensureBulletLine(l) : l)).join('\n');
   }
-  async function approveRevisao(id){
-    const r = await dbGet(userPath('/Revisao/' + id));
-    if(!r) return;
-    let gavetaId = r.gavetaId;
-    if(!gavetaId){
-      gavetaId = newId();
-      const existing = await dbGet(userPath('/Gavetas')) || {};
-      await dbPut(userPath('/Gavetas/' + gavetaId), { name: r.gavetaNome || 'Sem nome', order: Object.keys(existing).length, collapsed:false, items:{} });
+  function revisaoDiffLineHtml(d){
+    const cls = d.type === 'removed' ? ' diff-line-removed' : d.type === 'added' ? ' diff-line-added' : '';
+    return `<div class="diff-line${cls}">${escapeHtml(d.text)}</div>`;
+  }
+  async function renderRevisao(){
+    const emptyEl = document.getElementById('revisaoEmptyState');
+    const wrapEl = document.getElementById('revisaoDocWrap');
+    const oldPane = document.getElementById('revisaoOldPane');
+    const newPane = document.getElementById('revisaoNewPane');
+    const doc = await dbGet(userPath('/RevisaoDocumento'));
+    const countTab = document.getElementById('revisaoCountTab');
+    if(countTab) countTab.textContent = doc ? '(1)' : '';
+    if(!doc){
+      if(emptyEl) emptyEl.style.display = '';
+      if(wrapEl) wrapEl.style.display = 'none';
+      return;
     }
-    const itemId = newId();
-    await dbPut(userPath('/Gavetas/' + gavetaId + '/items/' + itemId), { text: forceBulletText(r.texto), addedAt: new Date().toISOString() });
-    await dbDelete(userPath('/Inbox/' + r.inboxId));
-    await dbDelete(userPath('/Revisao/' + id));
+    if(emptyEl) emptyEl.style.display = 'none';
+    if(wrapEl) wrapEl.style.display = '';
+    const oldLines = (doc.oldText || '').split('\n');
+    const newLines = (doc.newText || '').split('\n');
+    const { oldOut, newOut } = computeLineDiff(oldLines, newLines);
+    oldPane.innerHTML = oldOut.map(revisaoDiffLineHtml).join('');
+    newPane.innerHTML = newOut.map(revisaoDiffLineHtml).join('');
+  }
+  document.getElementById('approveRevisaoDocBtn').addEventListener('click', async () => {
+    const doc = await dbGet(userPath('/RevisaoDocumento'));
+    if(!doc) return;
+    if(!await showConfirm('Aprovar a versão atualizada? Isso substitui as Gavetas atuais pelo conteúdo reorganizado.')) return;
+    const newPane = document.getElementById('revisaoNewPane');
+    const finalText = newPane.innerText;
+    const parsedGavetas = parseDocToGavetas(finalText);
+    const existing = await dbGet(userPath('/Gavetas')) || {};
+    // Substitui as Gavetas atuais pelo que foi aprovado (a comparação lado a lado
+    // já deixou claro o que estava mudando antes desse passo).
+    await Promise.all(Object.keys(existing).map(gid => dbDelete(userPath('/Gavetas/' + gid))));
+    for(let i = 0; i < parsedGavetas.length; i++){
+      const g = parsedGavetas[i];
+      const gid = newId();
+      const items = {};
+      g.items.forEach((text, idx) => {
+        items[newId()] = { text: forceBulletText(text), order: idx, addedAt: new Date().toISOString() };
+      });
+      await dbPut(userPath('/Gavetas/' + gid), { name: g.name, order: i, collapsed:false, items });
+    }
+    const inboxIds = doc.inboxIds || [];
+    await Promise.all(inboxIds.map(id => dbDelete(userPath('/Inbox/' + id))));
+    await dbDelete(userPath('/RevisaoDocumento'));
     await renderInbox(); await renderRevisao(); await renderStorage();
-  }
-  async function rejectRevisao(id){
-    // Rejeitar apenas apaga o Pull Request — o item continua na Inbox (aguardando revisão)
-    // para ser recapturado ou removido manualmente por lá.
-    await dbDelete(userPath('/Revisao/' + id));
-    editingRevisoes.delete(id);
-    await renderRevisao();
-  }
-  async function reanalyzeRevisao(id){
-    const el = document.getElementById('revisaoList');
-    const rawTa = el.querySelector(`[data-edit-raw="${id}"]`);
-    const feedbackTa = el.querySelector(`[data-edit-feedback="${id}"]`);
-    const editedRaw = rawTa.value.trim();
-    const feedback = feedbackTa.value.trim();
-    if(!editedRaw){ alert('O texto não pode ficar vazio.'); return; }
-    const btn = el.querySelector(`[data-reanalyze-pr="${id}"]`);
-    btn.disabled = true; btn.textContent = '↻ Reanalisando...';
-    showLoading('Reanalisando com IA...');
-    try{
-      if(!openaiApiKey){ await loadOpenAiKey(); }
-      if(!openaiApiKey){ alert('Não foi possível carregar a chave da OpenAI do Firebase.'); return; }
-      const r = await dbGet(userPath('/Revisao/' + id));
-      const gavetas = await dbGet(userPath('/Gavetas')) || {};
-      const gavetaSummary = Object.entries(gavetas).map(([gid,g]) => ({
-        id: gid, nome: g.name, itens: Object.entries(g.items||{}).map(([iid,it]) => ({ id:iid, texto: it.text }))
-      }));
-      const systemPrompt = `Você organiza a Inbox de um sistema pessoal de produtividade chamado Life OS.
-Gavetas existentes (JSON): ${JSON.stringify(gavetaSummary)}
-Proposta anterior (JSON): ${JSON.stringify({ gavetaId: r.gavetaId, gavetaNome: r.gavetaNome, texto: r.texto })}
-Texto original (possivelmente editado pelo usuário): "${editedRaw}"
-Feedback do usuário sobre o que precisa mudar na proposta anterior: "${feedback || '(nenhum feedback específico, apenas refaça a análise)'}"
-Gere uma NOVA proposta considerando o feedback. Decida: (a) para qual gaveta deve ir — existente (use "id" exato) ou nova (defina "gavetaId": null e "gavetaNome": "Nome"); (b) o texto final, resumido e claro.
-Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato:
-{"gavetaId":"...", "gavetaNome":"...", "texto":"...", "motivo":"breve motivo da nova decisão"}`;
-
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + openaiApiKey },
-        body: JSON.stringify({ model:'gpt-4o-mini', temperature:0.4, messages:[{ role:'system', content: systemPrompt }] })
-      });
-      const data = await res.json();
-      if(!res.ok) throw new Error((data.error && data.error.message) || 'Erro na chamada à OpenAI');
-      const proposal = extractJson(data.choices[0].message.content);
-
-      await dbPatch(userPath('/Revisao/' + id), {
-        raw: editedRaw, gavetaId: proposal.gavetaId || null, gavetaNome: proposal.gavetaNome || '',
-        texto: proposal.texto || '', motivo: proposal.motivo || '', status:'pending'
-      });
-      if(r.inboxId){ await dbPatch(userPath('/Inbox/' + r.inboxId), { text: editedRaw }); }
-      editingRevisoes.delete(id);
-      await renderRevisao(); await renderInbox();
-    }catch(err){
-      alert('Erro ao reanalisar com IA: ' + err.message);
-    }finally{
-      hideLoading();
-      if(btn){ btn.disabled = false; btn.textContent = '↻ Reanalisar com IA'; }
-    }
-  }
+  });
+  document.getElementById('rejectRevisaoDocBtn').addEventListener('click', async () => {
+    const doc = await dbGet(userPath('/RevisaoDocumento'));
+    if(!doc) return;
+    if(!await showConfirm('Rejeitar e manter tudo como está? As capturas voltam pra fila de Capturas.')) return;
+    const inboxIds = doc.inboxIds || [];
+    await Promise.all(inboxIds.map(id => dbPatch(userPath('/Inbox/' + id), { status:'pending' })));
+    await dbDelete(userPath('/RevisaoDocumento'));
+    await renderInbox(); await renderRevisao();
+  });
 
   /* ---------- STORAGE (Gavetas) ---------- */
   document.getElementById('newGavetaOpenBtn').addEventListener('click', async () => {
@@ -4700,7 +4711,7 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
       guardRender(renderHojeTimeline, 'a linha do tempo de hoje', 'hojeTimeline24hTrack'),
       guardRender(renderFluenciaToday, 'o Fluência de hoje', []),
       guardRender(renderInbox, 'a Inbox', 'inboxList'),
-      guardRender(renderRevisao, 'a Revisão', 'revisaoList'),
+      guardRender(renderRevisao, 'a Revisão', 'revisaoEmptyState'),
       guardRender(renderStorage, 'as Gavetas', 'gavetaList'),
       guardRender(renderStorageRevisao, 'a Revisão de Gavetas', 'storageRevisaoList'),
       guardRender(renderAgenda, 'a Agenda', 'agendaList'),
