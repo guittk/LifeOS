@@ -239,6 +239,8 @@
       </div>
       <button type="button" class="nodate-toggle" id="newTaskNoDateToggle">Sem data</button>
     </div>
+    <label class="modal-field-label">Horário (opcional — define a ordem na fila de hoje)</label>
+    <input type="time" id="newTaskHorarioInput" class="modal-text-input">
     <label class="modal-field-label">Grupo</label>
     <select id="newTaskGroupSelect" class="modal-text-input">
       <option value="">Sem grupo</option>
@@ -547,7 +549,7 @@
         </div>
 
         <div class="panel">
-          <p class="panel-title">Avisos &amp; eventos</p>
+          <p class="panel-title">Eventos</p>
           <div id="hojeAvisosEventosList"><p class="empty-state">Carregando...</p></div>
         </div>
       </div>
@@ -642,7 +644,13 @@
 
     <!-- Revisão IA -->
     <div class="subview" id="storage-revisao">
-      <p class="view-desc" style="margin:-6px 0 16px;">A IA processa os itens de Capturas junto com suas Gavetas já existentes e propõe mudanças. Nada é alterado nas Gavetas até você aprovar.</p>
+      <div class="subview-toolbar">
+        <p class="view-desc" style="margin:0;">A IA processa os itens de Capturas junto com suas Gavetas já existentes e propõe mudanças. Nada é alterado nas Gavetas até você aprovar.</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;" id="revisaoBulkActions">
+          <button class="btn btn-reject btn-sm" id="rejectAllRevisaoBtn">Rejeitar todos</button>
+          <button class="btn btn-approve btn-sm" id="approveAllRevisaoBtn">✓ Aprovar todos</button>
+        </div>
+      </div>
       <div id="revisaoList">
         <p class="empty-state">Nenhuma proposta pendente. Clique em "+ Nova captura" na aba Capturas e depois em "Organizar Capturas com IA".</p>
       </div>
@@ -812,9 +820,7 @@
         <p class="view-desc">Adicione imagens que representam onde você quer chegar — o board se monta sozinho, em colagem, com tamanhos e ângulos variados.</p>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn btn-ghost btn-sm" id="visionShuffleBtn">🔀 Embaralhar</button>
-        <button class="btn btn-ghost btn-sm" id="visionLayersBtn">🗂 Camadas</button>
-        <button class="btn btn-primary btn-sm" id="visionAddOpenBtn">🖼 Gerenciar imagens</button>
+        <button class="btn btn-ghost btn-sm" id="visionLayersBtn">✏️ Editar</button>
       </div>
     </div>
 
@@ -830,13 +836,18 @@
       </div>
       <aside class="vision-layers-panel" id="visionLayersPanel">
         <div class="vision-layers-head">
-          <p class="panel-title" style="margin:0;">Camadas</p>
+          <p class="panel-title" style="margin:0;">Editar</p>
           <button type="button" id="visionLayersCloseBtn" class="vision-layers-close">×</button>
         </div>
-        <button type="button" class="btn btn-ghost btn-sm" id="visionRestoreAllBtn" style="margin:0 14px 12px; color:var(--coral);">↺ Restaurar tudo</button>
+        <div class="vision-edit-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="visionShuffleBtn" style="width:100%; justify-content:center;">🔀 Embaralhar</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="visionAddOpenBtn" style="width:100%; justify-content:center;">🖼 Gerenciar imagens</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="visionRestoreAllBtn" style="width:100%; justify-content:center; color:var(--coral);">↺ Restaurar tudo</button>
+        </div>
         <div class="vision-selected-controls" id="visionSelectedControls">
           <button type="button" class="btn btn-ghost btn-sm" id="visionSelectedResetBtn" style="width:100%; justify-content:center; color:var(--coral);">↺ Restaurar esta foto</button>
         </div>
+        <p class="vision-layers-sublabel">Camadas</p>
         <ul class="vision-layers-list" id="visionLayersList"></ul>
       </aside>
     </div>

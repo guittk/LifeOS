@@ -100,13 +100,14 @@
   let activities = [];
 
   function getNextIndex(){
-    for(let i = 0; i < activities.length; i++){ if(!activities[i].done) return i; }
+    for(let i = 0; i < activities.length; i++){ if(!activities[i].done && !activities[i].skipped) return i; }
     return -1;
   }
 
   function updateDayProgress(){
-    const done = activities.filter(a => a.done).length;
-    const total = activities.length;
+    const relevant = activities.filter(a => !a.skipped);
+    const done = relevant.filter(a => a.done).length;
+    const total = relevant.length;
     const pct = total ? Math.round((done / total) * 100) : 0;
     dayProgressLabel.textContent = done + ' de ' + total + ' concluídas (' + pct + '%)';
     dayProgressFill.style.width = pct + '%';
@@ -135,7 +136,7 @@
     }
     const a = activities[nextIdx];
     hojeHeroMotivation.textContent = 'Sua próxima ação de hoje.';
-    hojeActivityName.textContent = a.name;
+    hojeActivityName.textContent = a.kind === 'treino' ? 'Hora de ir pra academia.' : a.name;
     hojeActivityTime.textContent = a.time || '—';
     hojeActivityObj.textContent = a.obj || '—';
     comecarAtividadeBtn.disabled = false;
@@ -155,12 +156,18 @@
     flowListEl.innerHTML = activities.map((a, idx) => {
       const meta = FLOW_KIND_META[a.kind] || FLOW_KIND_META.tarefa;
       return `
-      <div class="flow-item ${a.done ? 'done' : ''} ${idx === nextIdx ? 'now' : ''}" data-activity="${idx}">
+      <div class="flow-item ${a.done ? 'done' : ''} ${a.skipped ? 'skipped' : ''} ${idx === nextIdx ? 'now' : ''}" data-activity="${idx}">
         <div class="flow-rail"><div class="seq-node" data-check="${idx}" title="${a.done ? 'Concluída' : 'Marcar como concluída'}"></div>${idx < activities.length - 1 ? '<div class="flow-connector"></div>' : ''}</div>
         <div class="flow-body">
-          <div class="flow-top">${idx === nextIdx ? '<span class="flow-now-tag">Agora</span>' : ''}</div>
+          <div class="flow-top">
+            ${idx === nextIdx ? '<span class="flow-now-tag">Agora</span>' : ''}
+            ${a.skipped ? '<span class="flow-skipped-tag">pulada hoje</span>' : ''}
+          </div>
           <div class="flow-text">${escapeHtml(a.name)}</div>
-          <div class="flow-meta"><span class="tag ${meta.cls}">${meta.label}</span>${a.time ? '<span class="queue-time">' + escapeHtml(a.time) + '</span>' : ''}</div>
+          <div class="flow-meta">
+            <span class="tag ${meta.cls}">${meta.label}</span>${a.time ? '<span class="queue-time">' + escapeHtml(a.time) + '</span>' : ''}
+            ${!a.done ? `<button class="flow-skip-btn" data-skip="${idx}">${a.skipped ? 'desfazer' : 'pular hoje'}</button>` : ''}
+          </div>
         </div>
       </div>
     `; }).join('');
@@ -169,8 +176,15 @@
     flowListEl.querySelectorAll('[data-check]').forEach(node => {
       node.addEventListener('click', () => {
         const idx = parseInt(node.getAttribute('data-check'), 10);
-        if(activities[idx].done) return;
+        if(activities[idx].done || activities[idx].skipped) return;
         markActivityDone(idx);
+      });
+    });
+    flowListEl.querySelectorAll('[data-skip]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.getAttribute('data-skip'), 10);
+        toggleActivitySkip(idx);
       });
     });
   }
@@ -182,6 +196,16 @@
     if(!a) return;
     a.done = true;
     if(a.onComplete){ try { await a.onComplete(); } catch(e){ console.error('Erro ao salvar conclusão', e); } }
+    updateFlowUI();
+    updateDayProgress();
+    updateHeroCard();
+  }
+
+  async function toggleActivitySkip(idx){
+    const a = activities[idx];
+    if(!a) return;
+    a.skipped = !a.skipped;
+    if(a.onSkip){ try { await a.onSkip(a.skipped); } catch(e){ console.error('Erro ao salvar pular', e); } }
     updateFlowUI();
     updateDayProgress();
     updateHeroCard();
@@ -2147,10 +2171,10 @@ Gavetas existentes (JSON): ${JSON.stringify(gavetaSummary)}
 Itens novos da Inbox para organizar (JSON): ${JSON.stringify(inboxSummary)}
 Cada item novo pode trazer um campo "tituloDetectado", extraído automaticamente da primeira linha do texto (formatos como "[Título]", "*Título*", "TÍTULO EM CAIXA ALTA" ou "Título:"). Esse título tende a indicar o nome ideal da gaveta para aquele item — trate-o como um forte sinal, não como texto do conteúdo em si (ou seja, normalmente não deve aparecer dentro do "texto" final salvo na gaveta).
 IMPORTANTE: um item de Captura pode conter mais de um assunto misturado (ex: uma nota que junta uma ideia de projeto com um lembrete de compra e um dado financeiro). Nesses casos, DIVIDA o conteúdo em pedaços (fragmentos) e gere uma entrada separada no array de resposta para cada pedaço — cada fragmento pode ir para uma gaveta diferente (existente ou nova). Não force um item inteiro para dentro de uma única gaveta só porque ele tem um "tituloDetectado" — o título indica só a gaveta do pedaço principal; o resto do conteúdo, se for de assunto diferente, deve virar fragmento(s) separado(s) em outra(s) gaveta(s). Todos os fragmentos de um mesmo item devem usar o mesmo "inboxId"; juntos, eles devem cobrir o conteúdo relevante do item original, sem duplicar a mesma informação em mais de um fragmento. Se o item for sobre um assunto só, gere apenas um fragmento normalmente.
-Para cada fragmento, decida: (a) para qual gaveta ele deve ir. Se houver "tituloDetectado" e o fragmento for o pedaço principal do item: primeiro verifique se alguma gaveta existente tem nome igual ou claramente equivalente (mesmo com pequenas variações de escrita, plural/singular, maiúsculas etc.) — se sim, use essa gaveta (use o "id" exato); se não houver nenhuma parecida, crie uma nova gaveta com esse título exato (defina "gavetaId": null e "gavetaNome" igual ao tituloDetectado). Para os demais fragmentos (ou quando não houver "tituloDetectado"), infira a gaveta mais adequada pelo conteúdo, existente ou nova. (b) o texto final desse fragmento, resumido e claro, para salvar dentro da gaveta — sem repetir o título já usado como nome da gaveta.
+Para cada fragmento, decida: (a) para qual gaveta ele deve ir. Se houver "tituloDetectado" e o fragmento for o pedaço principal do item: primeiro verifique se alguma gaveta existente tem nome igual ou claramente equivalente (mesmo com pequenas variações de escrita, plural/singular, maiúsculas etc.) — se sim, use essa gaveta (use o "id" exato); se não houver nenhuma parecida, crie uma nova gaveta com esse título exato (defina "gavetaId": null e "gavetaNome" igual ao tituloDetectado). Para os demais fragmentos (ou quando não houver "tituloDetectado"), infira a gaveta mais adequada pelo conteúdo, existente ou nova. (b) o texto final desse fragmento, resumido e claro, para salvar dentro da gaveta — sem repetir o título já usado como nome da gaveta. (c) o "trecho": a parte literal do texto original que deu origem a esse fragmento (recorte do texto de entrada, não o texto resumido) — cada trecho deve conter só a parte referente àquele fragmento, nunca o item inteiro quando ele foi dividido. Se o item não foi dividido (só um fragmento), "trecho" pode ser o texto original inteiro.
 Responda APENAS com um array JSON, sem markdown, sem texto extra, no formato:
-[{"inboxId":"...", "gavetaId":"...", "gavetaNome":"...", "texto":"...", "motivo":"breve motivo da decisão"}]
-(um item pode gerar mais de um objeto nesse array, todos com o mesmo "inboxId", um por fragmento/gaveta de destino)`;
+[{"inboxId":"...", "gavetaId":"...", "gavetaNome":"...", "trecho":"...", "texto":"...", "motivo":"breve motivo da decisão"}]
+(um item pode gerar mais de um objeto nesse array, todos com o mesmo "inboxId", um por fragmento/gaveta de destino — juntos, os "trecho" de todos os fragmentos de um mesmo inboxId não devem se sobrepor)`;
 
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method:'POST',
@@ -2162,10 +2186,17 @@ Responda APENAS com um array JSON, sem markdown, sem texto extra, no formato:
       const raw = data.choices[0].message.content;
       const proposals = extractJson(raw);
 
+      // Se um item foi dividido em vários fragmentos, cada revisão guarda só o
+      // "trecho" daquele fragmento (não a captura inteira) — assim aprovar/rejeitar/
+      // editar uma afeta só aquela parte, nunca as outras partes da mesma captura.
+      const fragCountByInbox = {};
+      proposals.forEach(p => { fragCountByInbox[p.inboxId] = (fragCountByInbox[p.inboxId] || 0) + 1; });
       for(const p of proposals){
         const revId = newId();
+        const textoOriginalCompleto = (inbox[p.inboxId] && inbox[p.inboxId].text) || '';
+        const isSplit = fragCountByInbox[p.inboxId] > 1;
         await dbPut(userPath('/Revisao/' + revId), {
-          inboxId: p.inboxId, raw: (inbox[p.inboxId] && inbox[p.inboxId].text) || '',
+          inboxId: p.inboxId, raw: (isSplit ? (p.trecho || p.texto || '') : (textoOriginalCompleto || p.trecho || '')),
           gavetaId: p.gavetaId || null, gavetaNome: p.gavetaNome || '', texto: p.texto || '',
           motivo: p.motivo || '', status:'pending', createdAt: new Date().toISOString()
         });
@@ -2185,9 +2216,11 @@ Responda APENAS com um array JSON, sem markdown, sem texto extra, no formato:
   const editingRevisoes = new Set();
   async function renderRevisao(){
     const el = document.getElementById('revisaoList');
+    const bulkActions = document.getElementById('revisaoBulkActions');
     const data = await dbGet(userPath('/Revisao')) || {};
     const entries = Object.entries(data);
     document.getElementById('revisaoCountTab').textContent = entries.filter(([id,r]) => r.status==='pending').length ? '(' + entries.filter(([id,r]) => r.status==='pending').length + ')' : '';
+    if(bulkActions) bulkActions.style.display = entries.length ? '' : 'none';
     if(!entries.length){ el.innerHTML = '<p class="empty-state">Nenhuma proposta pendente. Clique em "+ Nova captura" na aba Capturas e depois em "Organizar Capturas com IA".</p>'; return; }
     el.innerHTML = entries.sort((a,b) => (b[1].createdAt||'').localeCompare(a[1].createdAt||'')).map(([id, r]) => {
       const isEditing = editingRevisoes.has(id);
@@ -2236,6 +2269,20 @@ Responda APENAS com um array JSON, sem markdown, sem texto extra, no formato:
     }));
     el.querySelectorAll('[data-reanalyze-pr]').forEach(btn => btn.addEventListener('click', () => reanalyzeRevisao(btn.getAttribute('data-reanalyze-pr'))));
   }
+  document.getElementById('approveAllRevisaoBtn').addEventListener('click', async () => {
+    const data = await dbGet(userPath('/Revisao')) || {};
+    const ids = Object.keys(data);
+    if(!ids.length) return;
+    if(!await showConfirm(`Aprovar todas as ${ids.length} propostas pendentes?`)) return;
+    for(const id of ids){ await approveRevisao(id); }
+  });
+  document.getElementById('rejectAllRevisaoBtn').addEventListener('click', async () => {
+    const data = await dbGet(userPath('/Revisao')) || {};
+    const ids = Object.keys(data);
+    if(!ids.length) return;
+    if(!await showConfirm(`Rejeitar todas as ${ids.length} propostas pendentes? Os itens continuam na Inbox aguardando revisão.`)) return;
+    for(const id of ids){ await rejectRevisao(id); }
+  });
 
   function ensureBulletLine(line){
     if(line == null) return line;
@@ -2862,6 +2909,10 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
             <span class="academia-toggle-track"></span>
           </label>
         </div>
+        <div class="academia-horario-row">
+          <label>Horário do treino</label>
+          <input type="time" class="academia-horario-input" data-day-horario="${dow}" value="${escapeHtml(dia.horario || '')}">
+        </div>
         ${dayCopySelectHtml(dow)}
         <div class="academia-ex-list" data-ex-list="${dow}">
           ${exercicios.length ? exercicios.map(([eid,e], idx) => `
@@ -2882,6 +2933,13 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
       input.addEventListener('change', () => {
         const dow = input.getAttribute('data-day-toggle');
         ensureAcademiaDay(dow).ativo = input.checked;
+        setAcademiaDirty(true);
+      });
+    });
+    grid.querySelectorAll('[data-day-horario]').forEach(input => {
+      input.addEventListener('input', () => {
+        const dow = input.getAttribute('data-day-horario');
+        ensureAcademiaDay(dow).horario = input.value;
         setAcademiaDirty(true);
       });
     });
@@ -3783,6 +3841,7 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
     newTaskDateInput.value = '';
     newTaskDateInput.disabled = false;
     newTaskNoDateToggle.classList.remove('active');
+    document.getElementById('newTaskHorarioInput').value = '';
     document.getElementById('newTaskModal').classList.add('active');
     setTimeout(() => document.getElementById('newTaskNameInput').focus(), 30);
   }
@@ -3801,8 +3860,9 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
     const noDate = newTaskNoDateToggle.classList.contains('active');
     const date = noDate ? '' : newTaskDateInput.value;
     const group = document.getElementById('newTaskGroupSelect').value;
+    const horario = document.getElementById('newTaskHorarioInput').value || '';
     const id = newId();
-    await dbPut(userPath('/Tasks/' + id), { name, date, group, done:false, createdAt: new Date().toISOString() });
+    await dbPut(userPath('/Tasks/' + id), { name, date, group, horario, done:false, createdAt: new Date().toISOString() });
     closeTaskModal();
     await renderTasks(); await renderTaskGroups(); await renderHojeQueue();
   });
@@ -4227,23 +4287,44 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
   async function renderHojeQueue(){
     const today = todayStr();
     const dow = new Date().getDay(); // 0=domingo
-    const tasksData = await dbGet(userPath('/Tasks')) || {};
-    const academiaDias = await dbGet(userPath('/AcademiaDias')) || {};
+    const [tasksData, academiaDias, skipsData] = await Promise.all([
+      dbGet(userPath('/Tasks')) || {},
+      dbGet(userPath('/AcademiaDias')) || {},
+      dbGet(userPath('/HojeSkips/' + today)) || {}
+    ]);
+    const skips = skipsData || {};
 
     const todaysTasks = Object.entries(tasksData).filter(([id,t]) => t.date === today);
     const diaHoje = academiaDias[dow] || {};
     const exerciciosHoje = diaHoje.ativo ? Object.entries(diaHoje.exercicios || {}).sort((a,b) => (a[1].order||0) - (b[1].order||0)) : [];
+    const treinoHorario = diaHoje.horario || '';
 
     activities = [
-      ...todaysTasks.map(([id,t]) => ({
-        kind:'tarefa', obj: 'Tarefa', name: t.name, time: 'hoje', done: !!t.done,
-        onComplete: async () => { await dbPatch(userPath('/Tasks/' + id), { done:true }); }
-      })),
-      ...exerciciosHoje.map(([eid,e]) => ({
-        kind:'treino', obj: 'Academia', name: e.nome, time: 'treino', done: !!(e.doneDates && e.doneDates[today]),
-        onComplete: async () => { await dbPatch(userPath('/AcademiaDias/' + dow + '/exercicios/' + eid + '/doneDates'), { [today]: true }); }
-      }))
+      ...todaysTasks.map(([id,t]) => {
+        const key = 'tarefa_' + id;
+        return {
+          kind:'tarefa', obj: 'Tarefa', name: t.name, time: t.horario || '', done: !!t.done, skipped: !!skips[key],
+          onComplete: async () => { await dbPatch(userPath('/Tasks/' + id), { done:true }); },
+          onSkip: async (skipped) => { await dbPatch(userPath('/HojeSkips/' + today), { [key]: skipped ? true : null }); }
+        };
+      }),
+      ...exerciciosHoje.map(([eid,e]) => {
+        const key = 'treino_' + eid;
+        return {
+          kind:'treino', obj: 'Academia', name: e.nome, time: treinoHorario, done: !!(e.doneDates && e.doneDates[today]), skipped: !!skips[key],
+          onComplete: async () => { await dbPatch(userPath('/AcademiaDias/' + dow + '/exercicios/' + eid + '/doneDates'), { [today]: true }); },
+          onSkip: async (skipped) => { await dbPatch(userPath('/HojeSkips/' + today), { [key]: skipped ? true : null }); }
+        };
+      })
     ];
+    // Ordena pelo horário (quando definido) pra refletir a ordem real do dia;
+    // itens sem horário ficam depois, mantendo a ordem relativa entre eles.
+    activities.sort((a, b) => {
+      if(a.time && b.time) return a.time.localeCompare(b.time);
+      if(a.time && !b.time) return -1;
+      if(!a.time && b.time) return 1;
+      return 0;
+    });
     updateHeroCard(); updateDayProgress(); updateFlowUI();
   }
 

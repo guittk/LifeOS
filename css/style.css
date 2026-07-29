@@ -121,7 +121,7 @@
 
   /* ---------- Main ---------- */
   .main{ flex:1; min-width:0; padding: 34px 44px 60px; margin-left:250px; }
-  .view{ display:none; animation: fadein 0.32s ease; }
+  .view{ display:none; animation: fadein 0.32s ease; padding: 0px 0px 34px; }
   .view.active{ display:block; }
   #view-hoje .grid-2{ margin-top:18px; align-items:start; }
   @keyframes fadein{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
@@ -276,7 +276,16 @@
   .flow-now-tag{ font-family:var(--mono); font-size:9.5px; letter-spacing:1px; text-transform:uppercase; color:var(--sage); background:var(--sage-soft); padding:2px 7px; border-radius:20px; }
   .flow-text{ font-size:13.5px; }
   .flow-item.done .flow-text{ text-decoration:line-through; color:var(--text-dim); }
+  .flow-item.skipped{ opacity:0.55; }
+  .flow-item.skipped .flow-text{ text-decoration:line-through; color:var(--text-dim); }
+  .flow-item.skipped .seq-node{ pointer-events:none; }
   .flow-meta{ display:flex; gap:8px; margin-top:5px; align-items:center; }
+  .flow-skipped-tag{ font-family:var(--mono); font-size:9.5px; letter-spacing:1px; text-transform:uppercase; color:var(--coral); background:var(--coral-soft); padding:2px 7px; border-radius:20px; }
+  .flow-skip-btn{
+    margin-left:auto; background:none; border:none; color:var(--text-dim); font-size:11px; cursor:pointer;
+    font-family:var(--sans); padding:2px 0; text-decoration:underline; text-underline-offset:2px;
+  }
+  .flow-skip-btn:hover{ color:var(--coral); }
 
   .mini-stats-row{ display:flex; gap:10px; }
   .mini-stat{
@@ -822,6 +831,11 @@
   }
   .vision-layers-panel.open{ width:270px; margin-left:14px; opacity:1; }
   .vision-layers-head{ display:flex; align-items:center; justify-content:space-between; padding:14px 14px 8px; flex-shrink:0; }
+  .vision-edit-actions{ display:flex; flex-direction:column; gap:8px; margin:0 14px 12px; }
+  .vision-layers-sublabel{
+    font-size:10.5px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim);
+    margin:0 14px 8px; padding-top:10px; border-top:1px solid var(--line);
+  }
   .vision-layers-close{ background:none; border:none; color:var(--text-dim); font-size:18px; cursor:pointer; line-height:1; padding:2px 6px; }
   .vision-layers-close:hover{ color:var(--text); }
   .vision-layers-list{ list-style:none; margin:0; padding:0 10px 14px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:6px; }
@@ -1028,6 +1042,12 @@
   .academia-day-card.today{ border-color:var(--sage-line); }
   .academia-day-card.inactive{ opacity:0.55; }
   .academia-day-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+  .academia-horario-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .academia-horario-row label{ font-family:var(--mono); font-size:10px; letter-spacing:0.6px; text-transform:uppercase; color:var(--text-mut); }
+  .academia-horario-input{
+    background:var(--surface); border:1px solid var(--line-strong); border-radius:7px; padding:5px 8px;
+    color:var(--text); font-size:12.5px; font-family:var(--sans); outline:none;
+  }
   .academia-day-name{ font-family:var(--serif); font-size:15px; font-weight:600; }
   .academia-day-today-tag{ font-family:var(--mono); font-size:9px; letter-spacing:1px; text-transform:uppercase; color:var(--sage); background:var(--sage-soft); padding:2px 6px; border-radius:20px; }
   .academia-toggle{ position:relative; width:34px; height:19px; flex-shrink:0; }
