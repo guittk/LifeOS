@@ -319,15 +319,18 @@
   .capture-bar input::placeholder, .capture-bar textarea::placeholder{ color: var(--text-dim); }
   .inbox-list{ display:flex; flex-direction:column; gap:8px; }
   .inbox-item{
-    display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--line);
+    display:flex; align-items:flex-start; gap:12px; background:var(--surface); border:1px solid var(--line);
     border-radius:11px; padding:13px 16px;
   }
   .inbox-icon{ width:30px; height:30px; border-radius:8px; background:var(--surface-hi); display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
-  .inbox-text{ flex:1; font-size:13.5px; }
+  .inbox-text{ flex:1; font-size:13.5px; line-height:1.55; white-space:pre-wrap; word-break:break-word; padding-top:5px; }
   .inbox-source{ font-family:var(--mono); font-size:10.5px; color:var(--text-dim); }
+  .inbox-item .item-meta{ padding-top:5px; flex-shrink:0; }
+  .inbox-item > .btn{ flex-shrink:0; }
 
   /* ---------- Revisão IA (comparação lado a lado, documento único) ---------- */
-  .revisao-diff-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+  .revisao-diff-grid{ display:grid; grid-template-columns:1fr 1fr 0.8fr; gap:16px; margin-bottom:16px; }
+  @media (max-width:1180px){ .revisao-diff-grid{ grid-template-columns:1fr 1fr; } }
   @media (max-width:880px){ .revisao-diff-grid{ grid-template-columns:1fr; } }
   .revisao-diff-col{ display:flex; flex-direction:column; min-width:0; }
   .revisao-diff-label{
@@ -346,9 +349,32 @@
   .revisao-diff-pane-editable{ outline:none; }
   .revisao-diff-pane-editable:focus{ border-color:var(--sage-line); box-shadow:0 0 0 2px var(--sage-soft); }
   .diff-line{ min-height:1.7em; }
-  .diff-line-removed{ background:rgba(180,106,92,0.16); color:var(--coral); text-decoration:line-through; }
-  .diff-line-added{ background:var(--sage-soft); color:var(--sage); }
+  .diff-line-removed{ background:rgba(248,81,73,0.15); color:#f85149; text-decoration:line-through; }
+  .diff-line-added{ background:rgba(63,185,80,0.15); color:#3fb950; }
+  .diff-line-empty{
+    background:repeating-linear-gradient(135deg, rgba(255,255,255,0.035) 0 6px, transparent 6px 12px);
+  }
+  .diff-line-target-flash{ outline:2px solid var(--gold); outline-offset:-2px; border-radius:3px; }
   .revisao-doc-actions{ display:flex; justify-content:flex-end; gap:10px; }
+
+  /* Coluna "Capturas originais" — lista clicável, cada linha diz se já foi
+     localizada na versão atualizada (bolinha verde) ou não (bolinha âmbar). */
+  .revisao-capturas-pane{ padding:8px; display:flex; flex-direction:column; gap:2px; }
+  .capture-check-divider{
+    font-size:10px; text-transform:uppercase; letter-spacing:0.6px; color:var(--text-dim);
+    padding:8px 8px 4px; margin-top:4px;
+  }
+  .capture-check-divider:first-child{ margin-top:0; }
+  .capture-check-row{
+    display:flex; align-items:flex-start; gap:8px; padding:6px 8px; border-radius:7px;
+    cursor:pointer; font-size:12.5px; line-height:1.5;
+  }
+  .capture-check-row:hover{ background:var(--surface-hi); }
+  .capture-check-dot{ flex-shrink:0; width:8px; height:8px; border-radius:50%; margin-top:6px; }
+  .capture-check-row.found .capture-check-dot{ background:#3fb950; }
+  .capture-check-row.missing .capture-check-dot{ background:var(--gold); }
+  .capture-check-text{ flex:1; word-break:break-word; }
+  .capture-check-row.missing .capture-check-text{ color:var(--text-mut); }
 
   /* ---------- Evoluir / Dashboard ---------- */
   .stat-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:22px; }
@@ -1009,10 +1035,15 @@
     align-items:center; justify-content:center; padding:24px;
   }
   .confirm-modal.active{ display:flex; }
+  /* showConfirm() pode ser chamado de dentro de outro modal já aberto (ex: "Salvar
+     alterações" nas Gavetas como texto) — sem isso, o #confirmModal empilhava atrás
+     dele, já que os dois dividem o mesmo z-index e ele vem antes no HTML. */
+  #confirmModal{ z-index:260; }
   .confirm-modal-panel{
     width:100%; max-width:420px; background:var(--surface-hi); border:1px solid var(--line-strong);
     border-radius:16px; padding:22px; box-shadow:0 20px 60px rgba(0,0,0,0.45);
   }
+  .confirm-modal-panel-wide{ max-width:900px; }
   .confirm-modal-text{ font-size:14px; color:var(--text); line-height:1.5; margin:0 0 20px; }
   .confirm-modal-actions{ display:flex; justify-content:flex-end; gap:10px; }
   .modal-text-input{ width:100%; background:var(--surface); border:1px solid var(--line-strong); border-radius:9px; padding:10px 12px; color:var(--text); font-size:13px; font-family:var(--sans); outline:none; margin-bottom:20px; box-sizing:border-box; }
@@ -1260,6 +1291,7 @@
   .gaveta-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); margin-bottom:12px; overflow:hidden; }
   .gaveta-head{ display:flex; align-items:center; gap:10px; padding:13px 16px; cursor:pointer; }
   .gaveta-head:hover{ background:rgba(255,255,255,0.02); }
+  .gaveta-select-checkbox{ flex-shrink:0; width:16px; height:16px; accent-color:var(--sage); cursor:pointer; }
   .gaveta-chevron{ display:inline-block; font-size:10px; color:var(--text-dim); transition:transform .18s ease; transform:rotate(0deg); flex-shrink:0; }
   .gaveta-card.collapsed .gaveta-chevron{ transform:rotate(-90deg); }
   .gaveta-state-tag{ font-family:var(--mono); font-size:9.5px; letter-spacing:0.5px; text-transform:uppercase; color:var(--text-dim); border:1px solid var(--line); border-radius:20px; padding:2px 7px; flex-shrink:0; }

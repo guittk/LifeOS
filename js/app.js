@@ -2170,6 +2170,9 @@ Princípios que você segue sempre:
 7. Preserve contexto: nunca generalize um item a ponto de perder informação. Se o texto conecta duas ideias (ex: "estudar Firebase pro projeto Life OS"), mantenha essa relação — nunca invente relações que não estão explícitas.
 8. Links ficam junto do assunto: nunca separe um link do contexto que o acompanha; se um link parecer incompleto, mantenha-o como está (não invente).
 9. NUNCA descarte uma informação que já existia só porque não achou lugar óbvio pra ela — encontre a área mais adequada (ou crie uma) em vez de apagar. Preservar tudo que já existe é mais importante que deixar a estrutura "bonita".
+10. Preserve o texto de itens que já existiam EXATAMENTE como estava — mesmas palavras, mesma pontuação, mesma capitalização — mesmo que o item mude de área ou de posição dentro do documento. Só reescreva o texto de um item quando isso for necessário de verdade (unir duplicatas, corrigir um erro óbvio, ou incorporar uma nova captura nele). Nunca reformule um item só por estilo ou preferência de fraseado: quem revisa o resultado compara o documento antigo com o novo linha a linha, e uma reformulação desnecessária aparece como uma mudança onde não houve nenhuma.
+11. Uma ÚNICA captura pode trazer VÁRIOS temas diferentes de uma vez — a pessoa às vezes despeja tudo que está pensando de uma vez só, e separa os temas por uma linha em branco dentro do mesmo texto (às vezes cada bloco começa com um título curto, tipo o nome de uma pessoa, projeto ou ideia, seguido de linhas com • ou *). Cada um desses blocos separados por linha em branco é uma peça de informação INDEPENDENTE: identifique cada tema e distribua cada um pra área correta (que pode ser uma área diferente pra cada bloco). NUNCA trate a captura inteira como se fosse um só assunto, e NUNCA aproveite só o primeiro bloco e ignore o resto — isso é perda de informação, exatamente o que o princípio 9 proíbe.
+12. NUNCA crie uma área com o mesmo nome (ou nome muito parecido/sinônimo) de uma área que já existe no "Documento atual". Antes de decidir o nome de qualquer área do documento final, confira se ela já existe — se existir (mesmo com capitalização diferente ou uma leve variação de palavra), incorpore o conteúdo novo DENTRO dela, juntando com itens parecidos conforme o princípio 6, em vez de criar uma segunda área. O documento final nunca deve ter duas áreas com "# " de nome igual ou quase igual.
 
 Formato de saída — isto é OBRIGATÓRIO, porque o texto é interpretado por um programa:
 - Cada área começa numa linha própria com "# " seguido do nome da área.
@@ -2227,35 +2230,93 @@ Formato de saída — isto é OBRIGATÓRIO, porque o texto é interpretado por u
     return gavetas.filter(g => g.name);
   }
 
-  // Diff simples por linha (LCS clássico) — devolve duas listas independentes
-  // (uma pra cada lado) marcando cada linha como equal/removed (esquerda) ou
-  // equal/added (direita), pra pintar a comparação lado a lado.
+  // Rede de segurança: mesmo com o princípio 12 pedindo pra IA nunca duplicar uma
+  // área, ela pode falhar (foi o que aconteceu). Antes de mostrar o documento pra
+  // revisão, junta automaticamente áreas com o mesmo nome (ignorando maiúsculas/
+  // minúsculas e espaços nas pontas) em vez de deixar duas áreas iguais passarem.
+  function mergeDuplicateAreas(text){
+    const gavetas = parseDocToGavetas(text);
+    const merged = [];
+    const byKey = new Map();
+    gavetas.forEach(g => {
+      const key = g.name.trim().toLowerCase();
+      const existing = byKey.get(key);
+      if(existing){
+        existing.items.push(...g.items);
+      } else {
+        const entry = { name: g.name, items: [...g.items] };
+        byKey.set(key, entry);
+        merged.push(entry);
+      }
+    });
+    return merged.map(g => {
+      const itemLines = g.items.map(itemText => itemText.split('\n').map((l, idx) => idx === 0 ? '• ' + l.replace(/^[•\-\*]\s*/, '') : l).join('\n')).join('\n');
+      return `# ${g.name}` + (itemLines ? '\n' + itemLines : '');
+    }).join('\n\n');
+  }
+
+  // Rede de segurança contra perda de conteúdo: confere se cada linha de cada
+  // captura original tem um correspondente na versão que a IA devolveu (mesma
+  // lógica usada pra pintar a coluna "Capturas originais" na tela — ver
+  // captureMatchKey/findCaptureLineMatch). Qualquer linha sem correspondente é
+  // anexada numa área de reserva no fim do documento, em vez de simplesmente
+  // desaparecer — o princípio 9/11 pede isso da IA, mas depender só da IA
+  // acertar não é garantia nenhuma; isso aqui garante de verdade.
+  function reconcileMissingCaptures(newDoc, capturasText){
+    const newLineKeys = newDoc.split('\n').map(captureMatchKey);
+    const missing = [];
+    capturasText.split(/\n\n---\n\n/).forEach(block => {
+      block.split('\n').map(l => l.trim()).filter(Boolean).forEach(line => {
+        const idx = findCaptureLineMatch(captureMatchKey(line), newLineKeys);
+        if(idx === -1) missing.push(line.replace(/^[•\-\*]\s*/, ''));
+      });
+    });
+    if(!missing.length) return newDoc;
+    const fallbackArea = '# Não organizado pela IA (revisar)\n' + missing.map(l => '• ' + l).join('\n');
+    return mergeDuplicateAreas(newDoc + '\n\n' + fallbackArea);
+  }
+
+  // Chave de comparação de uma linha pro diff: ignora espaços a mais no início/fim
+  // e no meio. A IA reescreve o documento inteiro a cada rodada, então um item que
+  // não mudou de verdade às vezes volta com um espaço a mais ou a menos — sem essa
+  // normalização, isso já bastava pra linha inteira parecer "diferente" no diff.
+  function diffLineKey(line){
+    return String(line || '').trim().replace(/\s+/g, ' ');
+  }
+
+  // Diff por linha (LCS clássico) — devolve UMA lista de operações em ordem
+  // (equal/removed/added), igual a uma comparação de versões em merge: uma
+  // linha removida abre uma lacuna do lado novo, uma linha adicionada abre
+  // uma lacuna do lado antigo, e uma linha igual aparece nos dois lados na
+  // mesma posição. É essa lista única que mantém as duas colunas alinhadas
+  // linha a linha ao renderizar (ver renderRevisao).
   function computeLineDiff(oldLines, newLines){
+    const oldKeys = oldLines.map(diffLineKey);
+    const newKeys = newLines.map(diffLineKey);
     const n = oldLines.length, m = newLines.length;
     const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
     for(let i = n - 1; i >= 0; i--){
       for(let j = m - 1; j >= 0; j--){
-        dp[i][j] = oldLines[i] === newLines[j] ? dp[i+1][j+1] + 1 : Math.max(dp[i+1][j], dp[i][j+1]);
+        dp[i][j] = oldKeys[i] === newKeys[j] ? dp[i+1][j+1] + 1 : Math.max(dp[i+1][j], dp[i][j+1]);
       }
     }
-    const oldOut = [], newOut = [];
+    const ops = [];
     let i = 0, j = 0;
     while(i < n && j < m){
-      if(oldLines[i] === newLines[j]){
-        oldOut.push({ type:'equal', text: oldLines[i] });
-        newOut.push({ type:'equal', text: newLines[j] });
+      if(oldKeys[i] === newKeys[j]){
+        ops.push({ type:'equal', oldText: oldLines[i], newText: newLines[j] });
         i++; j++;
       } else if(dp[i+1][j] >= dp[i][j+1]){
-        oldOut.push({ type:'removed', text: oldLines[i] });
+        ops.push({ type:'removed', oldText: oldLines[i] });
         i++;
       } else {
-        newOut.push({ type:'added', text: newLines[j] });
+        ops.push({ type:'added', newText: newLines[j] });
         j++;
       }
     }
-    while(i < n){ oldOut.push({ type:'removed', text: oldLines[i] }); i++; }
-    while(j < m){ newOut.push({ type:'added', text: newLines[j] }); j++; }
-    return { oldOut, newOut };
+    while(i < n){ ops.push({ type:'removed', oldText: oldLines[i] }); i++; }
+    while(j < m){ ops.push({ type:'added', newText: newLines[j] }); j++; }
+    return ops;
   }
 
   document.getElementById('runAiOrganizeBtn').addEventListener('click', async () => {
@@ -2270,12 +2331,16 @@ Formato de saída — isto é OBRIGATÓRIO, porque o texto é interpretado por u
       if(!pending.length){ alert('Não há itens novos em Capturas para organizar.'); return; }
       const gavetas = await dbGet(userPath('/Gavetas')) || {};
       const oldDoc = serializeGavetasToDoc(gavetas);
-      const capturasText = pending.map(([, it]) => '• ' + String(it.text || '').replace(/\n/g, ' ')).join('\n');
+      // Preserva as quebras de linha originais de cada captura (antes isso virava
+      // espaço, transformando uma captura com vários temas numa única linha
+      // ilegível) e delimita cada captura com "---", já que agora uma captura
+      // pode ocupar várias linhas.
+      const capturasText = pending.map(([, it]) => String(it.text || '').replace(/\r\n?/g, '\n').trim()).join('\n\n---\n\n');
 
       const userPrompt = `Documento atual (todas as áreas e itens já existentes):
 ${oldDoc || '(nenhuma área criada ainda)'}
 
-Novas capturas para incorporar e organizar dentro do documento (ainda soltas, sem organização):
+Novas capturas para incorporar e organizar dentro do documento (ainda soltas, sem organização). Cada captura é separada por uma linha "---". ATENÇÃO: uma mesma captura pode conter vários temas completamente diferentes, separados por linha em branco dentro dela (veja o princípio 11 do sistema) — trate cada bloco separadamente, nunca só o primeiro:
 ${capturasText}
 
 Gere o documento ATUALIZADO completo — todas as áreas existentes (reorganizadas se fizer sentido) mais as novas capturas já incorporadas nos lugares certos. Devolva o documento inteiro, não só as mudanças.`;
@@ -2290,7 +2355,15 @@ Gere o documento ATUALIZADO completo — todas as áreas existentes (reorganizad
       });
       const data = await res.json();
       if(!res.ok) throw new Error((data.error && data.error.message) || 'Erro na chamada à OpenAI');
-      const newDoc = data.choices[0].message.content.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
+      // normaliza quebras de linha (a API às vezes devolve \r\n) — sem isso, um \r
+      // invisível no fim de cada linha faz TODA linha parecer diferente no diff,
+      // mesmo quando o texto visível é idêntico ao da versão antiga.
+      const rawNewDoc = data.choices[0].message.content.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').replace(/\r\n?/g, '\n').trim();
+      // rede de segurança: se a IA mesmo assim devolver duas áreas com o mesmo
+      // nome, junta antes de mostrar a revisão (ver mergeDuplicateAreas); e se
+      // algum trecho das capturas ficou de fora, anexa numa área de reserva em
+      // vez de deixar sumir (ver reconcileMissingCaptures).
+      const newDoc = reconcileMissingCaptures(mergeDuplicateAreas(rawNewDoc), capturasText);
 
       const inboxIds = pending.map(([id]) => id);
       await dbPut(userPath('/RevisaoDocumento'), { oldText: oldDoc, newText: newDoc, inboxIds, createdAt: new Date().toISOString() });
@@ -2331,9 +2404,118 @@ Gere o documento ATUALIZADO completo — todas as áreas existentes (reorganizad
     if(!text) return text;
     return text.split('\n').map(l => (l.trim() ? ensureBulletLine(l) : l)).join('\n');
   }
-  function revisaoDiffLineHtml(d){
-    const cls = d.type === 'removed' ? ' diff-line-removed' : d.type === 'added' ? ' diff-line-added' : '';
-    return `<div class="diff-line${cls}">${escapeHtml(d.text)}</div>`;
+  const DIFF_LINE_EMPTY = '<div class="diff-line diff-line-empty">&nbsp;</div>';
+  function revisaoDiffLineHtml(text, cls, idx){
+    const attr = idx != null ? ` data-line-idx="${idx}"` : '';
+    return `<div class="diff-line${cls}"${attr}>${text ? escapeHtml(text) : '&nbsp;'}</div>`;
+  }
+
+  // Normaliza uma linha pra comparar "captura original" com "versão atualizada":
+  // tira marcador de lista/título, deixa minúsculo e sem pontuação nas pontas.
+  // Usado só pra localizar onde uma captura foi parar, não pro diff em si (que
+  // precisa ser mais rígido — ver diffLineKey).
+  function captureMatchKey(line){
+    return String(line || '')
+      .replace(/^#\s*/, '')
+      .replace(/^[•\-\*]\s*/, '')
+      .trim()
+      .toLowerCase()
+      .replace(/[.,;:!?]+$/, '')
+      .replace(/\s+/g, ' ');
+  }
+  // Acha em que linha da versão atualizada uma linha de captura foi parar:
+  // primeiro tenta conter uma na outra (caso comum — a IA só ajusta em volta),
+  // senão cai pra sobreposição de palavras (caso a IA tenha reescrito o trecho).
+  function findCaptureLineMatch(captureKey, newLineKeys){
+    if(!captureKey) return -1;
+    const direct = newLineKeys.findIndex(k => k && (k.includes(captureKey) || captureKey.includes(k)));
+    if(direct !== -1) return direct;
+    const words = captureKey.split(' ').filter(w => w.length > 2);
+    if(!words.length) return -1;
+    let bestIdx = -1, bestScore = 0;
+    newLineKeys.forEach((k, i) => {
+      if(!k) return;
+      const kWords = k.split(' ');
+      const shared = words.filter(w => kWords.includes(w)).length;
+      const score = shared / words.length;
+      if(score > bestScore){ bestScore = score; bestIdx = i; }
+    });
+    return bestScore >= 0.5 ? bestIdx : -1;
+  }
+  // Enquanto true, o espelhamento de scroll entre as colunas antiga/nova (ver
+  // setupRevisaoScrollSync) fica pausado — usado durante o "pular pra" do clique
+  // numa captura, pra ele não brigar com a rolagem suave e travar no meio do caminho.
+  let revisaoSuppressMirror = false;
+  // Só uma linha por vez fica destacada no clique de uma captura — controla isso
+  // aqui em vez de um setTimeout solto por clique, senão clicar rápido em duas
+  // capturas diferentes deixava os dois destaques acesos ao mesmo tempo.
+  let revisaoHighlightEl = null;
+  let revisaoHighlightTimer = null;
+  function flashRevisaoTarget(target){
+    if(revisaoHighlightTimer) clearTimeout(revisaoHighlightTimer);
+    if(revisaoHighlightEl && revisaoHighlightEl !== target) revisaoHighlightEl.classList.remove('diff-line-target-flash');
+    target.classList.add('diff-line-target-flash');
+    revisaoHighlightEl = target;
+    revisaoHighlightTimer = setTimeout(() => {
+      target.classList.remove('diff-line-target-flash');
+      if(revisaoHighlightEl === target) revisaoHighlightEl = null;
+      revisaoHighlightTimer = null;
+    }, 1600);
+  }
+  // Rola as duas colunas (antiga e nova) direto pro alvo, num pulo só — como as
+  // linhas ficam alinhadas 1 a 1 entre as colunas (ver computeLineDiff), o mesmo
+  // deslocamento serve pras duas. Suspende o espelhamento de scroll durante a
+  // animação pra ele não interromper no meio (era isso que causava os "vários
+  // cliques" pra chegar no lugar certo).
+  function scrollRevisaoTo(target){
+    const oldPane = document.getElementById('revisaoOldPane');
+    const newPane = document.getElementById('revisaoNewPane');
+    if(!oldPane || !newPane) return;
+    revisaoSuppressMirror = true;
+    const paneRect = newPane.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const delta = (targetRect.top + targetRect.height / 2) - (paneRect.top + paneRect.height / 2);
+    const desiredTop = Math.max(0, newPane.scrollTop + delta);
+    newPane.scrollTo({ top: desiredTop, behavior:'smooth' });
+    oldPane.scrollTo({ top: desiredTop, behavior:'smooth' });
+    clearTimeout(scrollRevisaoTo._releaseTimer);
+    scrollRevisaoTo._releaseTimer = setTimeout(() => { revisaoSuppressMirror = false; }, 700);
+  }
+  // Terceira coluna da Revisão: lista cada linha das capturas originais e diz se
+  // já achou (bolinha verde) ou não (bolinha âmbar) um trecho correspondente na
+  // versão atualizada — pra você confirmar que nada se perdeu no caminho, ou
+  // clicar e pular direto pra onde aquilo foi organizado.
+  async function renderRevisaoCapturas(doc, newLines){
+    const pane = document.getElementById('revisaoCapturasPane');
+    if(!pane) return;
+    const inboxIds = doc.inboxIds || [];
+    if(!inboxIds.length){ pane.innerHTML = '<p class="empty-state" style="margin:0;">Nenhuma captura nessa reorganização.</p>'; return; }
+    const inbox = await dbGet(userPath('/Inbox')) || {};
+    const newLineKeys = newLines.map(captureMatchKey);
+    const rowsHtml = [];
+    inboxIds.forEach((id, capIdx) => {
+      const item = inbox[id];
+      if(!item || item.text == null) return;
+      const lines = String(item.text).replace(/\r\n?/g, '\n').split('\n').map(l => l.trim()).filter(Boolean);
+      rowsHtml.push(`<p class="capture-check-divider">Captura ${capIdx + 1}</p>`);
+      lines.forEach(line => {
+        const targetIdx = findCaptureLineMatch(captureMatchKey(line), newLineKeys);
+        const found = targetIdx !== -1;
+        rowsHtml.push(`<div class="capture-check-row ${found ? 'found' : 'missing'}"${found ? ` data-capture-target="${targetIdx}"` : ''} title="${found ? 'Clique pra ver onde foi parar na versão atualizada' : 'Não achei com certeza na versão atualizada — confira manualmente'}">
+        <span class="capture-check-dot"></span><span class="capture-check-text">${escapeHtml(line)}</span>
+      </div>`);
+      });
+    });
+    pane.innerHTML = rowsHtml.join('') || '<p class="empty-state" style="margin:0;">Nenhuma captura nessa reorganização.</p>';
+    pane.querySelectorAll('[data-capture-target]').forEach(row => {
+      row.addEventListener('click', () => {
+        const idx = row.getAttribute('data-capture-target');
+        const target = document.querySelector('#revisaoNewPane [data-line-idx="' + idx + '"]');
+        if(!target) return;
+        scrollRevisaoTo(target);
+        flashRevisaoTarget(target);
+      });
+    });
   }
   async function renderRevisao(){
     const emptyEl = document.getElementById('revisaoEmptyState');
@@ -2350,12 +2532,55 @@ Gere o documento ATUALIZADO completo — todas as áreas existentes (reorganizad
     }
     if(emptyEl) emptyEl.style.display = 'none';
     if(wrapEl) wrapEl.style.display = '';
-    const oldLines = (doc.oldText || '').split('\n');
-    const newLines = (doc.newText || '').split('\n');
-    const { oldOut, newOut } = computeLineDiff(oldLines, newLines);
-    oldPane.innerHTML = oldOut.map(revisaoDiffLineHtml).join('');
-    newPane.innerHTML = newOut.map(revisaoDiffLineHtml).join('');
+    // normaliza \r\n → \n e tira uma eventual quebra de linha sobrando no final —
+    // sem isso, uma linha final "fantasma" de um dos lados aparece como
+    // removida/adicionada mesmo o documento sendo idêntico até ali.
+    const normalizeDoc = t => String(t || '').replace(/\r\n?/g, '\n').replace(/\n+$/, '');
+    const oldLines = normalizeDoc(doc.oldText).split('\n');
+    const newLines = normalizeDoc(doc.newText).split('\n');
+    const ops = computeLineDiff(oldLines, newLines);
+    // Cada op vira uma linha nas DUAS colunas, na mesma posição — quando uma
+    // linha só existe de um lado, o outro lado ganha uma lacuna vazia, pra
+    // manter tudo alinhado igual numa comparação de versões em merge.
+    oldPane.innerHTML = ops.map(op => op.type === 'added'
+      ? DIFF_LINE_EMPTY
+      : revisaoDiffLineHtml(op.oldText, op.type === 'removed' ? ' diff-line-removed' : '')
+    ).join('');
+    // newIdx acompanha a posição de cada linha em `newLines` (0-based, na ordem
+    // original) pra dar um alvo estável de scroll/highlight pro painel de
+    // Capturas — os "buracos" das linhas removidas não contam, exatamente como
+    // o algoritmo de diff consome newLines em ordem.
+    let newIdx = 0;
+    newPane.innerHTML = ops.map(op => {
+      if(op.type === 'removed') return DIFF_LINE_EMPTY;
+      const html = revisaoDiffLineHtml(op.newText, op.type === 'added' ? ' diff-line-added' : '', newIdx);
+      newIdx++;
+      return html;
+    }).join('');
+    await renderRevisaoCapturas(doc, newLines);
   }
+  // As duas colunas rolam juntas, igual num visualizador de diff/merge — sem
+  // isso, comparar linhas alinhadas ficaria impossível ao rolar uma sozinha.
+  (function setupRevisaoScrollSync(){
+    const oldPane = document.getElementById('revisaoOldPane');
+    const newPane = document.getElementById('revisaoNewPane');
+    if(!oldPane || !newPane) return;
+    let syncing = false;
+    function mirror(from, to){
+      return () => {
+        if(syncing || revisaoSuppressMirror) return;
+        syncing = true;
+        to.scrollTop = from.scrollTop;
+        // o scroll que essa atribuição dispara no destino chega de forma
+        // assíncrona (só no próximo frame) — resetar `syncing` aqui na hora
+        // não protege contra esse eco, que voltava e cortava a rolagem suave
+        // no meio do caminho. Por isso o reset espera o próximo frame também.
+        requestAnimationFrame(() => { syncing = false; });
+      };
+    }
+    oldPane.addEventListener('scroll', mirror(oldPane, newPane));
+    newPane.addEventListener('scroll', mirror(newPane, oldPane));
+  })();
   document.getElementById('approveRevisaoDocBtn').addEventListener('click', async () => {
     const doc = await dbGet(userPath('/RevisaoDocumento'));
     if(!doc) return;
@@ -2391,6 +2616,39 @@ Gere o documento ATUALIZADO completo — todas as áreas existentes (reorganizad
     await renderInbox(); await renderRevisao();
   });
 
+  /* ---------- GAVETAS COMO TEXTO (edição em massa, mesmo formato da Revisão IA) ---------- */
+  document.getElementById('gavetasTextViewBtn').addEventListener('click', async () => {
+    const gavetas = await dbGet(userPath('/Gavetas')) || {};
+    const doc = serializeGavetasToDoc(gavetas);
+    const textEl = document.getElementById('gavetasTextArea');
+    textEl.innerHTML = doc.split('\n').map(l => `<div class="diff-line">${l ? escapeHtml(l) : '&nbsp;'}</div>`).join('');
+    document.getElementById('gavetasTextModal').classList.add('active');
+  });
+  document.getElementById('gavetasTextCancelBtn').addEventListener('click', () => {
+    document.getElementById('gavetasTextModal').classList.remove('active');
+  });
+  document.getElementById('gavetasTextModal').addEventListener('click', (e) => {
+    if(e.target.id === 'gavetasTextModal') document.getElementById('gavetasTextModal').classList.remove('active');
+  });
+  document.getElementById('gavetasTextSaveBtn').addEventListener('click', async () => {
+    if(!await showConfirm('Salvar essas alterações? Isso substitui as Gavetas atuais pelo conteúdo editado aqui.')) return;
+    const finalText = document.getElementById('gavetasTextArea').innerText;
+    const parsedGavetas = parseDocToGavetas(finalText);
+    const existing = await dbGet(userPath('/Gavetas')) || {};
+    await Promise.all(Object.keys(existing).map(gid => dbDelete(userPath('/Gavetas/' + gid))));
+    for(let i = 0; i < parsedGavetas.length; i++){
+      const g = parsedGavetas[i];
+      const gid = newId();
+      const items = {};
+      g.items.forEach((text, idx) => {
+        items[newId()] = { text: forceBulletText(text), order: idx, addedAt: new Date().toISOString() };
+      });
+      await dbPut(userPath('/Gavetas/' + gid), { name: g.name, order: i, collapsed:false, items });
+    }
+    document.getElementById('gavetasTextModal').classList.remove('active');
+    await renderStorage();
+  });
+
   /* ---------- STORAGE (Gavetas) ---------- */
   document.getElementById('newGavetaOpenBtn').addEventListener('click', async () => {
     const name = await showPrompt('newGavetaModal', 'newGavetaModalInput', 'newGavetaModalOkBtn', 'newGavetaModalCancelBtn');
@@ -2398,6 +2656,14 @@ Gere o documento ATUALIZADO completo — todas as áreas existentes (reorganizad
     const existing = await dbGet(userPath('/Gavetas')) || {};
     const id = newId();
     await dbPut(userPath('/Gavetas/' + id), { name, order: Object.keys(existing).length, collapsed:false, items:{} });
+    await renderStorage();
+  });
+  document.getElementById('deleteSelectedGavetasBtn').addEventListener('click', async () => {
+    const n = selectedGavetasForDelete.size;
+    if(!n) return;
+    if(!await showConfirm(`Excluir ${n} gaveta${n > 1 ? 's' : ''} selecionada${n > 1 ? 's' : ''} e todo o conteúdo delas?`)) return;
+    await Promise.all([...selectedGavetasForDelete].map(gid => dbDelete(userPath('/Gavetas/' + gid))));
+    selectedGavetasForDelete.clear();
     await renderStorage();
   });
 
@@ -2581,10 +2847,23 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
   }
 
   const editingGavetas = new Set();
+  // Seleção de gavetas pra exclusão em massa — mantida à parte do render pra
+  // sobreviver a um re-render que não mexeu nessas gavetas (ex: reordenar).
+  const selectedGavetasForDelete = new Set();
+  function updateDeleteSelectedGavetasBtn(){
+    const btn = document.getElementById('deleteSelectedGavetasBtn');
+    if(!btn) return;
+    const n = selectedGavetasForDelete.size;
+    btn.style.display = n ? '' : 'none';
+    btn.textContent = 'Excluir selecionadas (' + n + ')';
+  }
   async function renderStorage(){
     const el = document.getElementById('gavetaList');
     const data = await dbGet(userPath('/Gavetas')) || {};
     const gavetas = Object.entries(data).sort((a,b) => (a[1].order||0) - (b[1].order||0));
+    // Tira da seleção qualquer gaveta que não existe mais.
+    [...selectedGavetasForDelete].forEach(gid => { if(!data[gid]) selectedGavetasForDelete.delete(gid); });
+    updateDeleteSelectedGavetasBtn();
     if(!gavetas.length){ el.innerHTML = '<p class="empty-state">Nenhuma gaveta ainda. Crie uma acima, ou aprove itens na Revisão IA.</p>'; return; }
     el.innerHTML = gavetas.map(([id, g], idx) => {
       const items = Object.entries(g.items || {}).sort((a,b) => (a[1].order||0) - (b[1].order||0));
@@ -2594,6 +2873,7 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
       return `
       <div class="gaveta-card ${g.collapsed && !isEditing ? 'collapsed' : ''}" data-gid="${id}">
         <div class="gaveta-head" data-toggle-collapse="${id}">
+          ${isEditing ? '' : `<input type="checkbox" class="gaveta-select-checkbox" data-gid-select="${id}" ${selectedGavetasForDelete.has(id) ? 'checked' : ''} onclick="event.stopPropagation()" title="Selecionar pra excluir em massa">`}
           <span class="gaveta-chevron">▾</span>
           ${isEditing
             ? `<input type="text" class="gaveta-name-edit" data-gid-name-edit="${id}" value="${escapeHtml(g.name)}" onclick="event.stopPropagation()">`
@@ -2620,7 +2900,7 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
 
     el.querySelectorAll('[data-toggle-collapse]').forEach(headEl => {
       headEl.addEventListener('click', (e) => {
-        if(e.target.closest('.gaveta-actions')) return;
+        if(e.target.closest('.gaveta-actions') || e.target.closest('.gaveta-select-checkbox')) return;
         const gid = headEl.getAttribute('data-toggle-collapse');
         if(editingGavetas.has(gid)) return;
         const g = data[gid];
@@ -2632,10 +2912,15 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
           .catch(err => console.error('Erro ao salvar estado da gaveta', err));
       });
     });
+    el.querySelectorAll('[data-gid-select]').forEach(cb => cb.addEventListener('change', () => {
+      const gid = cb.getAttribute('data-gid-select');
+      if(cb.checked) selectedGavetasForDelete.add(gid); else selectedGavetasForDelete.delete(gid);
+      updateDeleteSelectedGavetasBtn();
+    }));
     el.querySelectorAll('[data-move-up]').forEach(btn => btn.addEventListener('click', () => swapGavetaOrder(gavetas, btn.getAttribute('data-move-up'), -1)));
     el.querySelectorAll('[data-move-down]').forEach(btn => btn.addEventListener('click', () => swapGavetaOrder(gavetas, btn.getAttribute('data-move-down'), 1)));
     el.querySelectorAll('[data-del-gaveta]').forEach(btn => btn.addEventListener('click', async () => {
-      if(!confirm('Excluir esta gaveta e todo o seu conteúdo?')) return;
+      if(!await showConfirm('Excluir esta gaveta e todo o seu conteúdo?')) return;
       await dbDelete(userPath('/Gavetas/' + btn.getAttribute('data-del-gaveta')));
       await renderStorage();
     }));

@@ -264,6 +264,18 @@
   </div>
 </div>
 
+<!-- MODAL — GAVETAS COMO TEXTO -->
+<div class="confirm-modal" id="gavetasTextModal">
+  <div class="confirm-modal-panel confirm-modal-panel-wide">
+    <p class="confirm-modal-text" style="margin-bottom:12px;">Todas as suas Gavetas num documento só — edite direto aqui e salve.</p>
+    <div class="revisao-diff-pane revisao-diff-pane-editable" id="gavetasTextArea" style="height:58vh; margin-bottom:16px;" contenteditable="true" spellcheck="false"></div>
+    <div class="confirm-modal-actions">
+      <button class="btn btn-ghost btn-sm" id="gavetasTextCancelBtn">Cancelar</button>
+      <button class="btn btn-primary btn-sm" id="gavetasTextSaveBtn">Salvar alterações</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL — NOVA CAPTURA -->
 <div class="confirm-modal" id="newCaptureModal">
   <div class="confirm-modal-panel">
@@ -613,12 +625,13 @@
 
     <!-- Gavetas -->
     <div class="subview active" id="storage-gavetas">
-      <div class="subview-toolbar">
-        <p class="subview-toolbar-label">Suas Gavetas — reordene, edite, minimize.</p>
+      <div class="subview-toolbar" style="justify-content:flex-end;">
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-reject btn-sm" id="deleteSelectedGavetasBtn" style="display:none;">Excluir selecionadas</button>
           <button class="btn btn-ghost btn-sm" id="newGavetaOpenBtn">+ Nova gaveta</button>
           <button class="btn btn-ghost btn-sm" id="expandAllGavetasBtn">Maximizar todos</button>
           <button class="btn btn-ghost btn-sm" id="collapseAllGavetasBtn">Minimizar todos</button>
+          <button class="btn btn-ghost btn-sm" id="gavetasTextViewBtn">📄 Ver como texto</button>
           <button class="btn btn-approve btn-sm" id="runStorageAiOrganizeBtn">✦ Analisar Gavetas com IA</button>
         </div>
       </div>
@@ -630,8 +643,7 @@
 
     <!-- Capturas -->
     <div class="subview" id="storage-captura">
-      <div class="subview-toolbar">
-        <p class="subview-toolbar-label">Itens capturados, ainda não organizados em Gavetas.</p>
+      <div class="subview-toolbar" style="justify-content:flex-end;">
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn btn-ghost btn-sm" id="newCaptureOpenBtn">+ Nova captura</button>
           <button class="btn btn-approve btn-sm" id="runAiOrganizeBtn" style="display:none;">✦ Organizar Capturas com IA</button>
@@ -648,7 +660,6 @@
         <p class="empty-state">Nenhuma reorganização pendente. Vá em Capturas e clique em "Organizar Capturas com IA".</p>
       </div>
       <div id="revisaoDocWrap" style="display:none;">
-        <p class="view-desc" style="margin:0 0 14px;">A IA juntou suas Gavetas com as novas Capturas e reorganizou tudo num documento único. O que mudou está destacado — edite a versão atualizada à direita antes de decidir. Nada muda de verdade até você aprovar.</p>
         <div class="revisao-diff-grid">
           <div class="revisao-diff-col">
             <p class="revisao-diff-label">Versão atual</p>
@@ -657,6 +668,10 @@
           <div class="revisao-diff-col">
             <p class="revisao-diff-label">Versão atualizada <span class="revisao-diff-editable-tag">clique pra editar</span></p>
             <div class="revisao-diff-pane revisao-diff-pane-editable" id="revisaoNewPane" contenteditable="true" spellcheck="false"></div>
+          </div>
+          <div class="revisao-diff-col">
+            <p class="revisao-diff-label">Capturas originais <span class="revisao-diff-editable-tag">clique pra localizar</span></p>
+            <div class="revisao-diff-pane revisao-capturas-pane" id="revisaoCapturasPane"></div>
           </div>
         </div>
         <div class="revisao-doc-actions">
