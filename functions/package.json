@@ -1,0 +1,14 @@
+{
+  "name": "lifeos-functions",
+  "description": "Proxy de IA do Life OS — Claude Sonnet 5, com a chave fora do navegador",
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.72.0",
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^6.1.0"
+  },
+  "private": true
+}

@@ -1,0 +1,5 @@
+# Cache do Firebase CLI e dependências das functions
+.firebase/
+functions/node_modules/
+firebase-debug.log
+firebase-debug.*.log

@@ -5,8 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Life OS — Sistema Operacional para Evolução Pessoal</title>
 <link rel="shortcut icon" href="platform-favicon.ico">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="theme-color" content="#60519b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Life OS">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -49,7 +54,9 @@
 
 <div id="appShell" style="display:none;">
 
-<aside class="sidebar">
+<a class="skip-link" href="#view-hoje">Pular para o conteúdo</a>
+
+<aside class="sidebar" aria-label="Navegação lateral">
   <div class="brand">
     <div class="brand-mark">L</div>
     <div>
@@ -85,6 +92,8 @@
     <div class="nav-item" data-view="diario"><span class="dot"></span> Diário</div>
     <div class="nav-item" data-view="planoalimentar"><span class="dot"></span> Plano Alimentar</div>
     <div class="nav-item" data-view="objetivos"><span class="dot"></span> Objetivos</div>
+    <div class="nav-item" data-view="decisoes"><span class="dot"></span> Decisões</div>
+    <div class="nav-item" data-view="busca"><span class="dot"></span> Perguntar</div>
     <div class="nav-item" data-view="visionboard"><span class="dot"></span> Vision Board</div>
   </nav>
 
@@ -94,6 +103,16 @@
   </div>
 </aside>
 
+<!-- NAVEGAÇÃO MOBILE — abaixo de 880px a sidebar vira gaveta e esta barra assume -->
+<div class="mobile-scrim" id="mobileScrim"></div>
+<nav class="mobile-nav" id="mobileNav" aria-label="Navegação principal">
+  <button type="button" class="mobile-nav-item active" data-view="hoje"><span class="mn-icon">◉</span>Hoje</button>
+  <button type="button" class="mobile-nav-item" data-view="tarefas"><span class="mn-icon">✓</span>Tarefas</button>
+  <button type="button" class="mobile-nav-item" data-view="agenda"><span class="mn-icon">▦</span>Agenda</button>
+  <button type="button" class="mobile-nav-item" data-view="storage"><span class="mn-icon">▤</span>Arquivo<span class="mn-badge" id="mobileInboxBadge"></span></button>
+  <button type="button" class="mobile-nav-item" id="mobileMoreBtn" aria-expanded="false"><span class="mn-icon">≡</span>Menu</button>
+</nav>
+
 <!-- MODAL — PESQUISA GLOBAL -->
 <div class="search-modal" id="searchModal">
   <div class="search-modal-panel">
@@ -102,14 +121,17 @@
       <input type="text" class="search-modal-input" id="searchModalInput" placeholder="Pesquisar objetivos, projetos, tarefas, notas, diário..." autocomplete="off">
       <span class="search-trigger-kbd">esc</span>
     </div>
-    <div class="search-modal-scopes">
-      <span class="search-scope">Objetivos</span>
-      <span class="search-scope">Projetos</span>
-      <span class="search-scope">Tarefas</span>
-      <span class="search-scope">Notas</span>
-      <span class="search-scope">Diário</span>
+    <div class="search-modal-scopes" id="searchScopes">
+      <button type="button" class="search-scope active" data-scope="">Tudo</button>
+      <button type="button" class="search-scope" data-scope="objetivo">Objetivos</button>
+      <button type="button" class="search-scope" data-scope="tarefa">Tarefas</button>
+      <button type="button" class="search-scope" data-scope="nota">Notas</button>
+      <button type="button" class="search-scope" data-scope="diario">Diário</button>
+      <button type="button" class="search-scope" data-scope="evento">Agenda</button>
+      <button type="button" class="search-scope" data-scope="decisao">Decisões</button>
     </div>
-    <div class="search-modal-empty">Comece a digitar para pesquisar em toda a plataforma.</div>
+    <div class="search-results" id="searchResults"></div>
+    <div class="search-modal-empty" id="searchEmpty">Comece a digitar para pesquisar em toda a plataforma.</div>
   </div>
 </div>
 
@@ -458,6 +480,109 @@
   </div>
 </div>
 
+<!-- MODAL — NOVA/EDITAR DECISÃO -->
+<div class="confirm-modal" id="decisaoModal">
+  <div class="confirm-modal-panel confirm-modal-panel-wide">
+    <p class="confirm-modal-text" style="margin-bottom:12px;" id="decisaoModalTitle">Nova decisão</p>
+    <label class="modal-field-label">Título</label>
+    <input type="text" id="decisaoTituloInput" class="modal-text-input" placeholder="ex: Aceitar a proposta de emprego?" autocomplete="off">
+    <div class="modal-field-row">
+      <div>
+        <label class="modal-field-label">Categoria</label>
+        <input type="text" id="decisaoCategoriaInput" class="modal-text-input" placeholder="ex: Carreira, Financeiro, Pessoal..." list="decisaoCategoriaList">
+        <datalist id="decisaoCategoriaList"></datalist>
+      </div>
+      <div>
+        <label class="modal-field-label">Importância</label>
+        <select id="decisaoImportanciaInput" class="modal-text-input">
+          <option value="alta">Alta</option>
+          <option value="media" selected>Média</option>
+          <option value="baixa">Baixa</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-field-row">
+      <div>
+        <label class="modal-field-label">Status</label>
+        <select id="decisaoStatusInput" class="modal-text-input">
+          <option value="em_analise">Em análise</option>
+          <option value="decidida">Decidida</option>
+          <option value="cancelada">Cancelada</option>
+        </select>
+      </div>
+      <div>
+        <label class="modal-field-label">Data</label>
+        <input type="date" id="decisaoDataInput" class="modal-text-input">
+      </div>
+    </div>
+    <label class="modal-field-label">Contexto (situação, problema, objetivo, informações relevantes)</label>
+    <textarea id="decisaoContextoInput" class="modal-text-input" rows="4" placeholder="Descreva livremente a situação..." style="resize:vertical;"></textarea>
+    <label class="modal-field-label">Critérios importantes (opcional, um por linha — pode atribuir peso com "nome, peso" de 1 a 5)</label>
+    <textarea id="decisaoCriteriosInput" class="modal-text-input" rows="3" placeholder="ex: Salário, 5&#10;Qualidade de vida, 4&#10;Aprendizado, 3" style="resize:vertical;"></textarea>
+    <div class="confirm-modal-actions">
+      <button class="btn btn-ghost btn-sm" id="decisaoCancelBtn">Cancelar</button>
+      <button class="btn btn-primary btn-sm" id="decisaoOkBtn">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL — NOVA/EDITAR OPÇÃO DA DECISÃO -->
+<div class="confirm-modal" id="decisaoOpcaoModal">
+  <div class="confirm-modal-panel">
+    <p class="confirm-modal-text" style="margin-bottom:12px;" id="decisaoOpcaoModalTitle">Nova opção</p>
+    <label class="modal-field-label">Nome da opção</label>
+    <input type="text" id="decisaoOpcaoNomeInput" class="modal-text-input" placeholder="ex: Aceitar a proposta" autocomplete="off">
+    <label class="modal-field-label">Prós (um por linha)</label>
+    <textarea id="decisaoOpcaoProsInput" class="modal-text-input" rows="3" placeholder="ex: salário maior&#10;trabalho remoto" style="resize:vertical;"></textarea>
+    <label class="modal-field-label">Contras (um por linha)</label>
+    <textarea id="decisaoOpcaoContrasInput" class="modal-text-input" rows="3" placeholder="ex: empresa menor&#10;maior risco" style="resize:vertical;"></textarea>
+    <div class="confirm-modal-actions">
+      <button class="btn btn-ghost btn-sm" id="decisaoOpcaoCancelBtn">Cancelar</button>
+      <button class="btn btn-primary btn-sm" id="decisaoOpcaoOkBtn">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL — REGISTRAR RESULTADO DA DECISÃO -->
+<div class="confirm-modal" id="decisaoResultadoModal">
+  <div class="confirm-modal-panel">
+    <p class="confirm-modal-text" style="margin-bottom:12px;">Registrar resultado</p>
+    <label class="modal-field-label">Opção escolhida</label>
+    <select id="decisaoResultadoEscolhaInput" class="modal-text-input"></select>
+    <label class="modal-field-label">Justificativa</label>
+    <textarea id="decisaoResultadoJustificativaInput" class="modal-text-input" rows="3" placeholder="Por que essa foi a escolha certa neste momento?" style="resize:vertical;"></textarea>
+    <div class="confirm-modal-actions">
+      <button class="btn btn-ghost btn-sm" id="decisaoResultadoCancelBtn">Cancelar</button>
+      <button class="btn btn-primary btn-sm" id="decisaoResultadoOkBtn">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL — REVISÃO FUTURA DA DECISÃO -->
+<div class="confirm-modal" id="decisaoRevisaoModal">
+  <div class="confirm-modal-panel">
+    <p class="confirm-modal-text" style="margin-bottom:12px;">Revisão futura</p>
+    <label class="modal-field-label">Valeu a pena?</label>
+    <select id="decisaoRevisaoValeuInput" class="modal-text-input">
+      <option value="sim">Sim</option>
+      <option value="parcial">Parcialmente</option>
+      <option value="nao">Não</option>
+    </select>
+    <label class="modal-field-label">Faria de novo?</label>
+    <select id="decisaoRevisaoFariaInput" class="modal-text-input">
+      <option value="sim">Sim</option>
+      <option value="nao">Não</option>
+      <option value="talvez">Talvez</option>
+    </select>
+    <label class="modal-field-label">Quais consequências surgiram?</label>
+    <textarea id="decisaoRevisaoConsequenciasInput" class="modal-text-input" rows="3" placeholder="Descreva o que aconteceu desde então..." style="resize:vertical;"></textarea>
+    <div class="confirm-modal-actions">
+      <button class="btn btn-ghost btn-sm" id="decisaoRevisaoCancelBtn">Cancelar</button>
+      <button class="btn btn-primary btn-sm" id="decisaoRevisaoOkBtn">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL — ADICIONAR IMAGEM (Vision Board) -->
 <div class="confirm-modal" id="visionAddModal">
   <div class="confirm-modal-panel" style="max-width:560px;">
@@ -503,6 +628,33 @@
           <div class="day-progress-track"><div class="day-progress-fill" id="dayProgressFill" style="width:0%"></div></div>
         </div>
       </div>
+    </div>
+
+    <!-- HUD DE PROGRESSO — nível, XP do dia, sequência e os 4 atributos -->
+    <div class="gam-hud" id="gamHud">
+      <div class="gam-hud-main">
+        <div class="gam-nivel-bloco">
+          <span class="gam-nivel-label">NÍVEL</span>
+          <span class="gam-nivel-num" id="gamNivel">1</span>
+        </div>
+        <div class="gam-xp-bloco">
+          <div class="gam-xp-top">
+            <span class="gam-xp-texto" id="gamXpTexto">0 / 100 XP</span>
+            <span class="gam-hoje-xp" id="gamHojeXp">+0 hoje</span>
+          </div>
+          <div class="gam-xp-track"><i class="gam-xp-fill" id="gamXpBarra" style="width:0%"></i></div>
+        </div>
+        <div class="gam-streak-bloco">
+          <span class="gam-streak-flama">🔥</span>
+          <span class="gam-streak-txt" id="gamStreak">0 dias</span>
+        </div>
+      </div>
+      <div class="gam-attr-grid" id="gamAtributos"></div>
+    </div>
+
+    <div class="panel gam-missoes-panel">
+      <p class="panel-title">Missões de hoje</p>
+      <div id="gamMissoesList"><p class="empty-state">Carregando...</p></div>
     </div>
 
     <div class="hero-card">
@@ -831,8 +983,64 @@
       <button class="btn btn-primary btn-sm" id="objAddBtn">+ Novo objetivo</button>
     </div>
 
+    <div class="panel trofeus-panel">
+      <p class="panel-title">Salão de troféus <span class="tag tag-gold" id="trofeusCount">0 / 0</span></p>
+      <div class="trofeus-grid" id="trofeusGrid"></div>
+    </div>
+
     <div class="obj-detail-list" id="objetivosList">
       <p class="empty-state">Carregando...</p>
+    </div>
+  </section>
+
+  <!-- DECISÕES -->
+  <section class="view" id="view-decisoes">
+    <div class="view-head">
+      <div>
+        <p class="eyebrow">Evoluir</p>
+        <h1 class="view-title">Central de Decisões</h1>
+        <p class="view-desc">Registre decisões importantes com contexto, opções e critérios — meses depois, entenda exatamente por que decidiu o que decidiu.</p>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" id="decisaoPadroesBtn">✦ Padrões com IA</button>
+        <button class="btn btn-primary btn-sm" id="decisaoAddBtn">+ Nova decisão</button>
+      </div>
+    </div>
+
+    <div class="dec-padroes-box" id="decisaoPadroesBox" style="display:none;"></div>
+
+    <div class="dec-filters" id="decisaoFilters">
+      <button class="dec-filter-chip active" data-dec-filter="todas">Todas</button>
+      <button class="dec-filter-chip" data-dec-filter="em_analise">Em análise</button>
+      <button class="dec-filter-chip" data-dec-filter="decidida">Decididas</button>
+      <button class="dec-filter-chip" data-dec-filter="cancelada">Canceladas</button>
+    </div>
+
+    <div class="dec-list" id="decisoesList">
+      <p class="empty-state">Carregando...</p>
+    </div>
+  </section>
+
+  <!-- BUSCA SEMÂNTICA -->
+  <section class="view" id="view-busca">
+    <div class="view-head">
+      <div>
+        <p class="eyebrow">Evoluir</p>
+        <h1 class="view-title">Perguntar ao LifeOS</h1>
+        <p class="view-desc">Converse com sua própria vida — pergunte sobre tarefas, capturas, objetivos, diário, agenda e decisões, em linguagem natural.</p>
+      </div>
+    </div>
+
+    <div class="busca-chat-wrap">
+      <div class="busca-chat-log" id="buscaChatLog">
+        <div class="busca-empty-hint">
+          Experimente perguntar: <em>"O que estou esquecendo?"</em>, <em>"Quais decisões tomei este mês?"</em> ou <em>"Onde falei sobre X?"</em>
+        </div>
+      </div>
+      <div class="busca-chat-input-row">
+        <input type="text" id="buscaChatInput" class="modal-text-input" placeholder="Pergunte algo sobre sua vida...">
+        <button class="btn btn-primary btn-sm" id="buscaChatSendBtn">Perguntar</button>
+      </div>
     </div>
   </section>
 
@@ -1073,15 +1281,26 @@
 
     <div class="config-section" style="margin-bottom:16px;">
       <p class="config-section-title">Aparência</p>
-      <p class="config-section-desc">Escolha a cor principal da plataforma (hoje o verde). Ela é usada em botões, barras de progresso e destaques em geral.</p>
+      <p class="config-section-desc">Tema e cor principal da plataforma. A cor é usada em botões, barras de progresso e destaques em geral.</p>
+      <div class="config-row">
+        <div>
+          <div class="config-row-label">Tema</div>
+          <div class="config-row-desc">"Sistema" acompanha a configuração do seu computador ou celular.</div>
+        </div>
+        <div class="theme-choice">
+          <button type="button" class="theme-opt" data-theme-mode="claro">☀ Claro</button>
+          <button type="button" class="theme-opt" data-theme-mode="escuro">☾ Escuro</button>
+          <button type="button" class="theme-opt" data-theme-mode="sistema">◐ Sistema</button>
+        </div>
+      </div>
       <div class="config-row">
         <div>
           <div class="config-row-label">Cor principal</div>
           <div class="config-row-desc">Aplica na hora e fica salva pra próxima vez que você abrir.</div>
         </div>
         <div style="display:flex; gap:10px; align-items:center; flex-shrink:0; position:relative;">
-          <button type="button" id="corPrincipalSwatchBtn" class="cor-swatch-btn" style="background:#7fa37a;" aria-label="Escolher cor principal"></button>
-          <button class="btn btn-ghost btn-sm" id="corPrincipalResetBtn">Restaurar verde</button>
+          <button type="button" id="corPrincipalSwatchBtn" class="cor-swatch-btn" style="background:#60519b;" aria-label="Escolher cor principal"></button>
+          <button class="btn btn-ghost btn-sm" id="corPrincipalResetBtn">Restaurar violeta</button>
           <div class="cor-swatch-popover" id="corPrincipalPopover"></div>
         </div>
       </div>
@@ -1139,6 +1358,14 @@
 
 <div class="timeline-hover-tip" id="timelineHoverTip"><span class="tip-name"></span><span class="tip-time"></span></div>
 
+<!-- Captura rápida: presente em qualquer tela, some quando a gaveta mobile abre -->
+<button type="button" class="captura-fab" id="capturaFab" title="Captura rápida (C)" aria-label="Captura rápida">＋</button>
+
+<!-- Camada de feedback da gamificação: XP subindo e o cartão de level up -->
+<div class="gam-xp-pops" id="gamXpPops" aria-live="polite"></div>
+<div class="gam-levelup" id="gamLevelUp" aria-live="polite"></div>
+
+<script src="js/gamification.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

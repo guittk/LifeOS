@@ -1,30 +1,201 @@
-  /* ---------- Aparência: cor principal customizável (aplica cedo pra evitar "flash" da cor padrão) ---------- */
-  const COR_PRINCIPAL_PADRAO = '#7fa37a';
+  /* ---------- Tema (claro / escuro / sistema) ----------
+     Aplicado antes de qualquer outra coisa pra não haver "flash" do tema errado.
+     'sistema' não escreve data-theme nenhum no <html>: nesse estado quem decide
+     é o @media (prefers-color-scheme) do CSS. */
+  const THEME_KEY = 'lifeosTheme';
+  const THEME_MODES = ['sistema', 'claro', 'escuro'];
+  let temaAtual = 'sistema';
+
+  function temaEfetivo(){
+    if(temaAtual === 'claro') return 'claro';
+    if(temaAtual === 'escuro') return 'escuro';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro';
+  }
+  function applyTheme(mode){
+    temaAtual = THEME_MODES.indexOf(mode) === -1 ? 'sistema' : mode;
+    const root = document.documentElement;
+    if(temaAtual === 'sistema') root.removeAttribute('data-theme');
+    else root.setAttribute('data-theme', temaAtual === 'escuro' ? 'dark' : 'light');
+    // Barra do sistema no celular (e no app instalado) acompanha o tema.
+    const metaTema = document.querySelector('meta[name="theme-color"]');
+    if(metaTema) metaTema.setAttribute('content', temaEfetivo() === 'escuro' ? '#15161f' : '#eceaf4');
+    document.querySelectorAll('.theme-opt').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-theme-mode') === temaAtual);
+    });
+    // O acento precisa ser recalculado: o mesmo hex não serve nos dois fundos.
+    applyCorPrincipal(localStorage.getItem('corPrincipal') || COR_PRINCIPAL_PADRAO);
+  }
+  function escolherTema(mode){
+    applyTheme(mode);
+    localStorage.setItem(THEME_KEY, temaAtual);
+    if(typeof session !== 'undefined' && session){
+      dbPatchSilent(userPath('/Config'), { tema: temaAtual })
+        .catch(err => console.error('Erro ao salvar o tema', err));
+    }
+  }
+  /* ---------- Aparência: cor principal customizável ---------- */
+  const COR_PRINCIPAL_PADRAO = '#60519b';
   function hexToRgb(hex){
     const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
-    if(!m) return { r:127, g:163, b:122 };
+    if(!m) return { r:96, g:81, b:155 };
     return { r: parseInt(m[1],16), g: parseInt(m[2],16), b: parseInt(m[3],16) };
   }
+  // Paleta Cyberpunk Cartoon: violeta da referência + os neons de função.
   const COR_PRINCIPAL_PRESETS = [
-    '#7fa37a', '#5a8f6e', '#3f7d9e', '#6a91b4', '#4f6fd1', '#9b86c9',
-    '#c26fb0', '#b46a5c', '#d1745f', '#e08a3c', '#ffc400', '#c9a227',
-    '#8a9a3f', '#4fae8f', '#5cb3b0', '#7d6f5c'
+    '#60519b', '#7a68c4', '#4f6fd1', '#0f9fb8', '#12a594', '#4f8f0c',
+    '#8a9a3f', '#a86a00', '#d1745f', '#c62b4a', '#d1327c', '#9b3fb0',
+    '#5a4da8', '#3f7d9e', '#6a91b4', '#7d6f5c'
   ];
+  function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+
+  /* Ajuste do acento por tema, em HSL.
+     Misturar o hex com branco clareia mas DESSATURA: o violeta #60519b vira um
+     lilás acinzentado sem energia nenhuma — exatamente o oposto do neon que a
+     direção pede. Mexer em luminosidade e saturação separadamente mantém a cor
+     viva no fundo escuro. */
+  function hexToHsl(hex){
+    let { r, g, b } = hexToRgb(hex);
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r,g,b), min = Math.min(r,g,b);
+    const l = (max + min) / 2;
+    let h = 0, s = 0;
+    if(max !== min){
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if(max === r) h = ((g - b) / d + (g < b ? 6 : 0));
+      else if(max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60;
+    }
+    return { h, s: s * 100, l: l * 100 };
+  }
+  function hslToRgb(h, s, l){
+    h = ((h % 360) + 360) % 360; s /= 100; l /= 100;
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const m = l - c / 2;
+    let r = 0, g = 0, b = 0;
+    if(h < 60){ r = c; g = x; }
+    else if(h < 120){ r = x; g = c; }
+    else if(h < 180){ g = c; b = x; }
+    else if(h < 240){ g = x; b = c; }
+    else if(h < 300){ r = x; b = c; }
+    else { r = c; b = x; }
+    return {
+      r: Math.round((r + m) * 255),
+      g: Math.round((g + m) * 255),
+      b: Math.round((b + m) * 255)
+    };
+  }
   function applyCorPrincipal(hex){
     if(!hex) hex = COR_PRINCIPAL_PADRAO;
-    const { r, g, b } = hexToRgb(hex);
+    const escuro = temaEfetivo() === 'escuro';
+    const hsl = hexToHsl(hex);
+    // No escuro: bem mais claro e mais saturado, pra virar neon em vez de pastel.
+    const c = escuro
+      ? hslToRgb(hsl.h, clamp(hsl.s + 35, 0, 88), clamp(hsl.l + 28, 58, 78))
+      : hexToRgb(hex);
+    const { r, g, b } = c;
+    const efetivo = `rgb(${r},${g},${b})`;
     const root = document.documentElement.style;
-    root.setProperty('--sage', hex);
-    root.setProperty('--sage-soft', `rgba(${r},${g},${b},0.14)`);
-    root.setProperty('--sage-line', `rgba(${r},${g},${b},0.4)`);
-    root.setProperty('--sage-dark', `rgb(${Math.round(r*0.56)},${Math.round(g*0.56)},${Math.round(b*0.56)})`);
+    root.setProperty('--sage', efetivo);
+    root.setProperty('--sage-soft', `rgba(${r},${g},${b},${escuro ? 0.16 : 0.13})`);
+    root.setProperty('--sage-line', `rgba(${r},${g},${b},0.45)`);
+    // Variante escura do acento (usada no gradiente da marca).
+    const d = hslToRgb(hsl.h, hsl.s, clamp(hsl.l - 18, 12, 60));
+    root.setProperty('--sage-dark', `rgb(${d.r},${d.g},${d.b})`);
+    // O botão do seletor mostra sempre o hex escolhido, não o ajustado.
     const swatchBtn = document.getElementById('corPrincipalSwatchBtn');
     if(swatchBtn) swatchBtn.style.background = hex;
     document.querySelectorAll('.cor-swatch-option').forEach(el => {
       el.classList.toggle('active', el.getAttribute('data-cor') === hex);
     });
   }
-  applyCorPrincipal(localStorage.getItem('corPrincipal') || COR_PRINCIPAL_PADRAO);
+
+  // Só agora: applyTheme() chama applyCorPrincipal(), que depende das constantes
+  // acima — inverter a ordem daria erro de acesso antes da inicialização.
+  applyTheme(localStorage.getItem(THEME_KEY) || 'sistema');
+  // Quem está em "sistema" acompanha a troca do SO em tempo real.
+  try{
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if(temaAtual === 'sistema') applyTheme('sistema');
+    });
+  }catch(e){ /* navegador antigo: só não acompanha a troca ao vivo */ }
+
+  /* ---------- Acessibilidade ----------
+     O HTML tinha 3 atributos aria em 1.300 linhas e nenhum tabindex. Isto aqui
+     marca as regiões e os diálogos de uma vez, em vez de espalhar atributos por
+     dezenas de blocos de markup. */
+  (function marcarSemantica(){
+    const main = document.querySelector('.main');
+    if(main){ main.setAttribute('role', 'main'); main.setAttribute('id', 'conteudo'); }
+
+    // Todo modal do app usa a mesma casca .confirm-modal / .confirm-modal-panel.
+    document.querySelectorAll('.confirm-modal, .search-modal').forEach(m => {
+      const painel = m.querySelector('.confirm-modal-panel, .search-modal-panel');
+      if(!painel) return;
+      painel.setAttribute('role', 'dialog');
+      painel.setAttribute('aria-modal', 'true');
+      // O primeiro texto do painel serve de nome acessível do diálogo.
+      const titulo = painel.querySelector('.confirm-modal-text, .search-modal-input');
+      if(titulo){
+        if(!titulo.id) titulo.id = 'dlg-t-' + Math.random().toString(36).slice(2, 8);
+        painel.setAttribute('aria-labelledby', titulo.id);
+      }
+    });
+
+    /* Focus trap: sem isso o Tab escapa do diálogo e vai navegando pela página
+       atrás dele — quem usa teclado ou leitor de tela se perde e não acha o
+       botão de fechar. Um listener só, na captura, serve todos os modais. */
+    document.addEventListener('keydown', (e) => {
+      if(e.key !== 'Tab') return;
+      const modal = document.querySelector('.confirm-modal.active, .search-modal.active');
+      if(!modal) return;
+      const foco = modal.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), ' +
+        'select:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])'
+      );
+      const visiveis = Array.from(foco).filter(el => el.offsetParent !== null || el === document.activeElement);
+      if(!visiveis.length) return;
+      const primeiro = visiveis[0];
+      const ultimo = visiveis[visiveis.length - 1];
+      // Foco fora do modal (veio da página atrás): traz pra dentro.
+      if(!modal.contains(document.activeElement)){
+        e.preventDefault();
+        primeiro.focus();
+        return;
+      }
+      if(e.shiftKey && document.activeElement === primeiro){
+        e.preventDefault();
+        ultimo.focus();
+      }else if(!e.shiftKey && document.activeElement === ultimo){
+        e.preventDefault();
+        primeiro.focus();
+      }
+    }, true);
+
+    // Botões que só têm ícone ou símbolo não dizem nada a um leitor de tela.
+    const rotulos = {
+      visionLayersCloseBtn: 'Fechar o painel de camadas',
+      corPrincipalSwatchBtn: 'Escolher a cor principal',
+      importIcsBtn: 'Importar eventos de um arquivo .ics',
+      gavetasTextViewBtn: 'Ver todas as gavetas como texto'
+    };
+    Object.entries(rotulos).forEach(([id, rotulo]) => {
+      const el = document.getElementById(id);
+      if(el && !el.getAttribute('aria-label')) el.setAttribute('aria-label', rotulo);
+    });
+  })();
+
+  /* ---------- PWA: service worker ----------
+     Só registra sob http/https. Aberto como file:// o navegador bloqueia, e a
+     exceção não tratada apareceria no console sem motivo. */
+  if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js')
+        .catch(err => console.warn('Service worker não registrado:', err));
+    });
+  }
 
   /* ---------- Navegação principal ---------- */
   const navItems = document.querySelectorAll('.nav-item[data-view]');
@@ -37,15 +208,71 @@
     const el = document.getElementById('view-' + target);
     if(el){ el.classList.add('active'); }
     document.querySelector('.main').scrollTo({top:0, behavior:'smooth'});
+    syncMobileNav(target);
+    closeMobileMenu();
+    // A view desenha na primeira abertura (ver VIEW_RENDERERS). Sem await: a
+    // troca de tela é imediata e cada seção mostra seu próprio "Carregando...".
+    renderView(target);
   }
 
   navItems.forEach(item => {
     item.addEventListener('click', () => goToView(item.getAttribute('data-view')));
+    // A navegação era <div>: não recebia foco nem respondia ao teclado.
+    item.setAttribute('role', 'button');
+    item.setAttribute('tabindex', '0');
+    item.addEventListener('keydown', (e) => {
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); item.click(); }
+    });
   });
 
   /* Qualquer botão/elemento com data-view-link também navega */
   document.querySelectorAll('[data-view-link]').forEach(el => {
     el.addEventListener('click', () => goToView(el.getAttribute('data-view-link')));
+  });
+
+  /* ---------- Navegação mobile ----------
+     Abaixo de 880px a sidebar vira gaveta: a barra inferior leva direto às 4
+     telas mais usadas e o botão "Menu" abre a sidebar por cima do conteúdo. */
+  const sidebarEl = document.querySelector('.sidebar');
+  const mobileNavEl = document.getElementById('mobileNav');
+  const mobileScrimEl = document.getElementById('mobileScrim');
+  const mobileMoreBtn = document.getElementById('mobileMoreBtn');
+
+  function closeMobileMenu(){
+    if(!sidebarEl) return;
+    sidebarEl.classList.remove('open');
+    if(mobileScrimEl) mobileScrimEl.classList.remove('active');
+    if(mobileMoreBtn) mobileMoreBtn.setAttribute('aria-expanded', 'false');
+  }
+  function toggleMobileMenu(){
+    if(!sidebarEl) return;
+    const open = sidebarEl.classList.toggle('open');
+    if(mobileScrimEl) mobileScrimEl.classList.toggle('active', open);
+    if(mobileMoreBtn) mobileMoreBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  // Marca o item da barra inferior correspondente à view atual. Views que não
+  // têm botão próprio (Rotina, Objetivos...) não acendem nenhum — o "Menu"
+  // continua sendo o caminho pra elas.
+  function syncMobileNav(view){
+    if(!mobileNavEl) return;
+    mobileNavEl.querySelectorAll('.mobile-nav-item[data-view]').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-view') === view);
+    });
+  }
+
+  if(mobileNavEl){
+    mobileNavEl.querySelectorAll('.mobile-nav-item[data-view]').forEach(btn => {
+      btn.addEventListener('click', () => goToView(btn.getAttribute('data-view')));
+    });
+  }
+  if(mobileMoreBtn) mobileMoreBtn.addEventListener('click', toggleMobileMenu);
+  if(mobileScrimEl) mobileScrimEl.addEventListener('click', closeMobileMenu);
+  document.addEventListener('keydown', (e) => {
+    if(e.key === 'Escape' && sidebarEl && sidebarEl.classList.contains('open')) closeMobileMenu();
+  });
+  // Voltando pro desktop, a gaveta não pode continuar "aberta" por baixo.
+  window.addEventListener('resize', () => {
+    if(window.innerWidth > 880) closeMobileMenu();
   });
 
   /* ---------- Sub-abas (Tarefas: Hoje / Semana / Lista / Kanban) ---------- */
@@ -61,17 +288,305 @@
     });
   });
 
-  /* ---------- Pesquisa global (Ctrl/Cmd + K) ---------- */
+  /* ---------- Pesquisa global (Ctrl/Cmd + K) ----------
+     O modal existia mas nunca buscou nada: só focava o input. Agora ele monta um
+     índice achatado de tudo que é texto no Quadro ativo (tarefas, capturas,
+     gavetas, objetivos e seus pontos, diário, agenda, decisões, Monday) e filtra
+     em memória. As leituras passam pelo cache do dbGet, então reabrir a busca
+     logo em seguida não custa rede. */
   const searchModal = document.getElementById('searchModal');
   const searchModalInput = document.getElementById('searchModalInput');
+  const searchResultsEl = document.getElementById('searchResults');
+  const searchEmptyEl = document.getElementById('searchEmpty');
+  const searchScopesEl = document.getElementById('searchScopes');
+
+  const SEARCH_KIND_LABEL = {
+    tarefa:'Tarefa', nota:'Nota', gaveta:'Gaveta', objetivo:'Objetivo',
+    ponto:'Ponto', diario:'Diário', evento:'Agenda', decisao:'Decisão', monday:'Monday'
+  };
+  const SEARCH_KIND_VIEW = {
+    tarefa:'tarefas', nota:'storage', gaveta:'storage', objetivo:'objetivos',
+    ponto:'objetivos', diario:'diario', evento:'agenda', decisao:'decisoes', monday:'monday'
+  };
+  // Agrupa os tipos sob o filtro que aparece na barra de escopos.
+  const SEARCH_SCOPE_OF = {
+    tarefa:'tarefa', monday:'tarefa', nota:'nota', gaveta:'nota',
+    objetivo:'objetivo', ponto:'objetivo', diario:'diario', evento:'evento', decisao:'decisao'
+  };
+
+  let searchIndex = null;
+  let searchIndexPromise = null;
+  let searchScope = '';
+  let searchSelIdx = 0;
+  let searchDebounce = null;
+
+  /* Comandos do Ctrl+K — o campo não só busca, ele age. Cada comando tem
+     palavras-chave próprias pra ser encontrado por sinônimo (quem digita
+     "anotar" quer capturar). */
+  const SEARCH_COMANDOS = [
+    { rotulo:'Nova captura',       chaves:'capturar anotar ideia inbox nota',  run: () => abrirCapturaRapida() },
+    { rotulo:'Nova tarefa',        chaves:'tarefa todo fazer',                 run: () => { goToView('tarefas'); document.getElementById('addTaskOpenBtn').click(); } },
+    { rotulo:'Novo evento',        chaves:'evento agenda compromisso',         run: () => { goToView('agenda'); document.getElementById('addEventOpenBtn').click(); } },
+    { rotulo:'Novo objetivo',      chaves:'objetivo meta',                     run: () => { goToView('objetivos'); document.getElementById('objAddBtn').click(); } },
+    { rotulo:'Nova decisão',       chaves:'decisao decidir escolha',           run: () => { goToView('decisoes'); document.getElementById('decisaoAddBtn').click(); } },
+    { rotulo:'Escrever no Diário', chaves:'diario escrever humor',             run: () => goToView('diario') },
+    { rotulo:'Perguntar ao LifeOS',chaves:'perguntar ia buscar semantica',     run: () => goToView('busca') },
+    { rotulo:'Configurações',      chaves:'config tema cor conta quadro',      run: () => goToView('config') }
+  ];
+  // Toda view também é um comando de navegação.
+  const SEARCH_VIEWS = [
+    ['hoje','Hoje'], ['storage','Arquivo'], ['tarefas','Tarefas'], ['monday','Monday'],
+    ['agenda','Agenda'], ['rotina','Rotina'], ['casa','Casa'], ['financas','Finanças'],
+    ['fluencia','Fluência'], ['bateria','Bateria'], ['academia','Academia'], ['diario','Diário'],
+    ['planoalimentar','Plano Alimentar'], ['objetivos','Objetivos'], ['decisoes','Decisões'],
+    ['visionboard','Vision Board']
+  ].map(([v, nome]) => ({
+    rotulo: 'Ir para ' + nome, chaves: 'ir abrir ' + nome + ' ' + v, run: () => goToView(v)
+  }));
+
+  function comandosCasando(qNorm){
+    const todos = SEARCH_COMANDOS.concat(SEARCH_VIEWS);
+    if(!qNorm) return SEARCH_COMANDOS.slice(0, 5); // campo vazio: as ações mais úteis
+    return todos.filter(c => searchNorm(c.rotulo + ' ' + c.chaves).indexOf(qNorm) !== -1).slice(0, 6);
+  }
+
+  // Sem acento e sem caixa: "decisao" precisa achar "decisão".
+  function searchNorm(s){
+    return String(s == null ? '' : s)
+      .normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+  }
+  function searchPush(list, kind, title, sub){
+    const t = String(title || '').trim();
+    if(!t) return;
+    list.push({ kind, title: t, sub: sub || '', hay: searchNorm(t + ' ' + (sub || '')) });
+  }
+
+  async function buildSearchIndex(){
+    const [tasks, inbox, gavetas, objetivos, diario, events, decisoes, monday] = await Promise.all([
+      dbGet(userPath('/Tasks')), dbGet(userPath('/Inbox')), dbGet(userPath('/Gavetas')),
+      dbGet(userPath('/objetivos')), dbGet(userPath('/DiarioEntradas')), dbGet(userPath('/Events')),
+      dbGet(userPath('/Decisoes')), dbGet(userPath('/MondayTasks'))
+    ]);
+    const list = [];
+    Object.values(tasks || {}).forEach(t => {
+      searchPush(list, 'tarefa', t.name, (t.done ? 'concluída' : 'a fazer') + (t.date ? ' · ' + fmtShortDate(t.date) : ''));
+    });
+    Object.values(monday || {}).forEach(t => {
+      searchPush(list, 'monday', t.nome || t.name, [t.responsavel, t.status].filter(Boolean).join(' · '));
+    });
+    Object.values(inbox || {}).forEach(i => {
+      if(i.status !== 'processed') searchPush(list, 'nota', i.text, 'captura');
+    });
+    Object.values(gavetas || {}).forEach(g => {
+      searchPush(list, 'gaveta', g.name, 'gaveta');
+      Object.values(g.items || {}).forEach(it => searchPush(list, 'nota', it.text, 'em ' + (g.name || 'gaveta')));
+    });
+    Object.values(objetivos || {}).forEach(o => {
+      searchPush(list, 'objetivo', o.nome, o.descricao);
+      Object.values(o.pontos || {}).forEach(p => searchPush(list, 'ponto', p.nome, 'em ' + (o.nome || 'objetivo')));
+    });
+    Object.values(diario || {}).forEach(e => {
+      searchPush(list, 'diario', e.text, (e.mood || '') + ' ' + fmtShortDate((e.createdAt || '').slice(0,10)));
+    });
+    Object.values(events || {}).forEach(e => {
+      searchPush(list, 'evento', e.title, [fmtShortDate(e.date), e.time].filter(Boolean).join(' · '));
+    });
+    Object.values(decisoes || {}).forEach(d => {
+      searchPush(list, 'decisao', d.titulo, [d.categoria, d.status].filter(Boolean).join(' · '));
+      Object.values(d.opcoes || {}).forEach(o => searchPush(list, 'decisao', o.nome, 'opção de ' + (d.titulo || 'decisão')));
+    });
+    return list;
+  }
+
+  function ensureSearchIndex(){
+    if(searchIndex) return Promise.resolve(searchIndex);
+    if(!searchIndexPromise){
+      // withoutLoading: o overlay global taparia o próprio modal de busca.
+      searchIndexPromise = withoutLoading(buildSearchIndex)
+        .then(list => { searchIndex = list; return list; })
+        .catch(err => { console.error('Falha ao montar o índice de busca:', err); searchIndex = []; return []; })
+        .finally(() => { searchIndexPromise = null; });
+    }
+    return searchIndexPromise;
+  }
+
+  // Destaca o trecho encontrado sem quebrar o escape de HTML.
+  function searchHighlight(text, qNorm){
+    const raw = String(text || '');
+    if(!qNorm) return escapeHtml(raw);
+    const at = searchNorm(raw).indexOf(qNorm);
+    if(at === -1) return escapeHtml(raw);
+    return escapeHtml(raw.slice(0, at)) +
+           '<mark>' + escapeHtml(raw.slice(at, at + qNorm.length)) + '</mark>' +
+           escapeHtml(raw.slice(at + qNorm.length));
+  }
+
+  function renderSearchResults(){
+    const q = searchModalInput.value.trim();
+    const qNorm = searchNorm(q);
+
+    // Ações só aparecem no escopo "Tudo": filtrar por Diário e ver "Nova tarefa"
+    // no meio dos resultados seria ruído.
+    const acoes = searchScope ? [] : comandosCasando(qNorm);
+
+    let hits = [];
+    if(q && searchIndex){
+      hits = searchIndex
+        .filter(it => (!searchScope || SEARCH_SCOPE_OF[it.kind] === searchScope) && it.hay.indexOf(qNorm) !== -1)
+        // Quem casa no começo do título vem primeiro — é o que a pessoa quis digitar.
+        .sort((a, b) => searchNorm(a.title).indexOf(qNorm) - searchNorm(b.title).indexOf(qNorm))
+        .slice(0, 40);
+    }
+
+    if(!acoes.length && !hits.length){
+      searchResultsEl.innerHTML = '';
+      searchEmptyEl.textContent = !q
+        ? 'Comece a digitar para pesquisar ou executar uma ação.'
+        : (searchIndex ? 'Nada encontrado para "' + q + '".' : 'Carregando seus dados...');
+      searchEmptyEl.style.display = '';
+      return;
+    }
+
+    searchEmptyEl.style.display = 'none';
+    const totalItens = acoes.length + hits.length;
+    searchSelIdx = Math.min(searchSelIdx, totalItens - 1);
+
+    let html = '';
+    let i = 0;
+    if(acoes.length){
+      html += '<p class="search-group-label">Ações</p>';
+      html += acoes.map((c) => {
+        const idx = i++;
+        return `
+        <button type="button" class="search-result${idx === searchSelIdx ? ' sel' : ''}" data-search-acao="${idx}">
+          <span class="search-result-kind">Ação</span>
+          <span class="search-result-body">
+            <span class="search-result-title">${searchHighlight(c.rotulo, qNorm)}</span>
+          </span>
+        </button>`;
+      }).join('');
+    }
+    if(hits.length){
+      html += '<p class="search-group-label">Resultados</p>';
+      html += hits.map((it) => {
+        const idx = i++;
+        return `
+        <button type="button" class="search-result${idx === searchSelIdx ? ' sel' : ''}" data-search-view="${SEARCH_KIND_VIEW[it.kind]}">
+          <span class="search-result-kind">${SEARCH_KIND_LABEL[it.kind]}</span>
+          <span class="search-result-body">
+            <span class="search-result-title">${searchHighlight(it.title, qNorm)}</span>
+            ${it.sub ? `<span class="search-result-sub">${escapeHtml(it.sub)}</span>` : ''}
+          </span>
+        </button>`;
+      }).join('');
+    }
+    searchResultsEl.innerHTML = html;
+    // Guarda as ações desta renderização pro clique resolver pelo índice.
+    searchResultsEl._acoes = acoes;
+  }
+
+  function moveSearchSel(delta){
+    const items = searchResultsEl.querySelectorAll('.search-result');
+    if(!items.length) return;
+    searchSelIdx = (searchSelIdx + delta + items.length) % items.length;
+    items.forEach((el, i) => el.classList.toggle('sel', i === searchSelIdx));
+    const sel = items[searchSelIdx];
+    if(sel) sel.scrollIntoView({ block:'nearest' });
+  }
+  function openSearchSel(){
+    const sel = searchResultsEl.querySelector('.search-result.sel') || searchResultsEl.querySelector('.search-result');
+    if(sel) sel.click();
+  }
+
   function openSearch(){
     searchModal.classList.add('active');
+    searchSelIdx = 0;
+    renderSearchResults();
     setTimeout(() => searchModalInput.focus(), 30);
+    // O índice é montado uma vez por sessão de busca; invalidado ao fechar.
+    ensureSearchIndex().then(renderSearchResults);
   }
   function closeSearch(){
     searchModal.classList.remove('active');
     searchModalInput.value = '';
+    searchResultsEl.innerHTML = '';
+    searchSelIdx = 0;
+    // Solta o índice pra próxima abertura refletir o que mudou desde então.
+    searchIndex = null;
   }
+
+  if(searchModalInput){
+    searchModalInput.addEventListener('input', () => {
+      searchSelIdx = 0;
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(renderSearchResults, 90);
+    });
+    searchModalInput.addEventListener('keydown', (e) => {
+      if(e.key === 'ArrowDown'){ e.preventDefault(); moveSearchSel(1); }
+      else if(e.key === 'ArrowUp'){ e.preventDefault(); moveSearchSel(-1); }
+      else if(e.key === 'Enter'){ e.preventDefault(); openSearchSel(); }
+    });
+  }
+  if(searchResultsEl){
+    searchResultsEl.addEventListener('click', (e) => {
+      const acaoBtn = e.target.closest('[data-search-acao]');
+      if(acaoBtn){
+        const acoes = searchResultsEl._acoes || [];
+        const cmd = acoes[Number(acaoBtn.getAttribute('data-search-acao'))];
+        closeSearch();
+        if(cmd && typeof cmd.run === 'function'){
+          try{ cmd.run(); }
+          catch(err){ console.error('Falha ao executar o comando:', err); }
+        }
+        return;
+      }
+      const btn = e.target.closest('[data-search-view]');
+      if(!btn) return;
+      const view = btn.getAttribute('data-search-view');
+      closeSearch();
+      if(view) goToView(view);
+    });
+  }
+  if(searchScopesEl){
+    searchScopesEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-scope]');
+      if(!btn) return;
+      searchScope = btn.getAttribute('data-scope') || '';
+      searchScopesEl.querySelectorAll('.search-scope').forEach(b => b.classList.toggle('active', b === btn));
+      searchSelIdx = 0;
+      renderSearchResults();
+      searchModalInput.focus();
+    });
+  }
+
+  /* ---------- Captura rápida global ----------
+     Antes, capturar exigia ir até Arquivo → Capturas → + Nova captura. Fricção
+     em cima do gesto que precisa ter menos fricção de todos. */
+  const capturaFab = document.getElementById('capturaFab');
+  function abrirCapturaRapida(){
+    const modal = document.getElementById('newCaptureModal');
+    if(!modal) return;
+    closeSearch();
+    modal.classList.add('active');
+    setTimeout(() => {
+      const inp = document.getElementById('newCaptureModalInput');
+      if(inp){ inp.value = ''; inp.focus(); }
+    }, 30);
+  }
+  if(capturaFab) capturaFab.addEventListener('click', abrirCapturaRapida);
+  document.addEventListener('keydown', (e) => {
+    // "C" abre a captura — só quando o foco não está num campo de texto.
+    if(e.key !== 'c' && e.key !== 'C') return;
+    if(e.metaKey || e.ctrlKey || e.altKey) return;
+    const alvo = e.target;
+    const digitando = alvo && (alvo.tagName === 'INPUT' || alvo.tagName === 'TEXTAREA' ||
+                               alvo.tagName === 'SELECT' || alvo.isContentEditable);
+    if(digitando) return;
+    if(document.querySelector('.confirm-modal.active')) return;
+    e.preventDefault();
+    abrirCapturaRapida();
+  });
+
   const searchTriggerBtn = document.getElementById('searchTrigger');
   if(searchTriggerBtn){ searchTriggerBtn.addEventListener('click', openSearch); }
   if(searchModal){ searchModal.addEventListener('click', (e) => { if(e.target === searchModal){ closeSearch(); } }); }
@@ -112,6 +627,15 @@
     dayProgressLabel.textContent = done + ' de ' + total + ' concluídas (' + pct + '%)';
     dayProgressFill.style.width = pct + '%';
     seqCountTag.textContent = total + ' hoje';
+    // 80% da fila fecha o dia e mantém a sequência viva. gamFecharDia() só conta
+    // uma vez por dia, então pode ser chamada a cada atualização sem risco.
+    // gamProgresso só existe depois do gamInit() no boot. Sem esta guarda,
+    // a chamada que updateFlowUI() faz durante a montagem do app dispararia
+    // userPath() antes de activeDataUid ser inicializado (erro de TDZ).
+    if(typeof gamProgresso !== 'undefined' && gamProgresso){
+      if(total > 0 && pct >= 80) gamFecharDia();
+      gamRenderMissoes();
+    }
   }
 
   function updateHeroCard(){
@@ -240,16 +764,17 @@
     const mood = activeChip ? activeChip.getAttribute('data-mood') : '🙂';
     const id = newId();
     await dbPut(userPath('/DiarioEntradas/' + id), { mood, text, createdAt: new Date().toISOString() });
+    await grantXp('diario', { chave: 'diario_' + id, contador: 'diario' });
     textEl.value = '';
     await renderDiario();
   });
 
   /* =======================================================================
-     FIREBASE + OPENAI — camada de dados real (substitui os dados fictícios)
+     FIREBASE — camada de dados real (a IA vive no proxy, em functions/)
      ======================================================================= */
 
-  const FIREBASE_API_KEY = "AIzaSyAQqB__M-gKZWHS4zQ1eIA-X6rGqzVtr0I";
-  const FIREBASE_DB_URL  = "https://anki-71f4f-default-rtdb.firebaseio.com";
+  const FIREBASE_API_KEY = "AIzaSyAkNtMewsDzOQZLSLq4_x4yx_QXu3sPagg";
+  const FIREBASE_DB_URL  = "https://basehub-135f5-default-rtdb.firebaseio.com";
   const SESSION_KEY = "lifeos_v5_session";
 
   let session = null;      // { idToken, uid, email, expiresAt }
@@ -257,7 +782,6 @@
   let currentBoardId = null; // Quadro atualmente selecionado (o id é sempre o uid do dono do quadro)
   let myBoards = {};         // { boardId: { name, role: 'owner'|'member', permissions? } }
   let userDisplayName = ''; // nome de exibição, salvo em /Profile/DisplayName
-  let openaiApiKey = null; // carregada de /openAiKey após login
 
   function escapeHtml(str){
     return String(str == null ? '' : str)
@@ -288,11 +812,60 @@
       const raw = localStorage.getItem(SESSION_KEY);
       if(!raw) return null;
       const s = JSON.parse(raw);
-      if(!s || !s.idToken || !s.expiresAt || Date.now() > s.expiresAt) return null;
+      if(!s || !s.idToken) return null;
+      // Uma sessão vencida ainda serve se tiver refreshToken: ensureFreshToken()
+      // troca por um token novo antes da primeira chamada. Sem refreshToken
+      // (sessão criada por uma versão antiga do app), só resta pedir login.
+      if(!s.refreshToken && (!s.expiresAt || Date.now() > s.expiresAt)) return null;
       return s;
     }catch(e){ return null; }
   }
   function clearSession(){ session = null; localStorage.removeItem(SESSION_KEY); }
+
+  /* Renovação do token de acesso.
+     O idToken do Firebase vale 1 hora. Sem renovar, a pessoa é jogada de volta pra
+     tela de login no meio do dia. O refreshToken (devolvido no login) é trocado por
+     um idToken novo em securetoken.googleapis.com — que responde em snake_case,
+     diferente do Identity Toolkit. */
+  let refreshInFlight = null;
+
+  async function refreshIdToken(){
+    if(!session || !session.refreshToken) return false;
+    const res = await fetchWithTimeout('https://securetoken.googleapis.com/v1/token?key=' + FIREBASE_API_KEY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(session.refreshToken)
+    });
+    const data = await res.json();
+    if(!res.ok || !data.id_token) return false;
+    saveSession(Object.assign({}, session, {
+      idToken: data.id_token,
+      refreshToken: data.refresh_token || session.refreshToken,
+      expiresAt: Date.now() + (parseInt(data.expires_in || '3600', 10) * 1000) - 60000
+    }));
+    return true;
+  }
+
+  // Chamada antes de toda requisição ao banco. Renova quando faltam menos de 5
+  // minutos. O refreshInFlight garante uma única renovação mesmo quando o boot
+  // dispara dezenas de leituras em paralelo.
+  async function ensureFreshToken(){
+    if(!session || !session.refreshToken) return;
+    if(Date.now() < (session.expiresAt || 0) - 300000) return;
+    if(!refreshInFlight){
+      refreshInFlight = refreshIdToken()
+        .catch((err) => { console.error('Falha ao renovar a sessão:', err); return false; })
+        .finally(() => { refreshInFlight = null; });
+    }
+    const ok = await refreshInFlight;
+    // Só desloga se o token já venceu de fato. Uma falha de rede com token ainda
+    // válido não deve derrubar a sessão — a próxima chamada tenta de novo.
+    if(!ok && Date.now() > (session.expiresAt || 0)){
+      clearSession();
+      showAppMessage('Sua sessão expirou. Entre novamente.', 'error');
+      setTimeout(() => location.reload(), 1500);
+    }
+  }
 
   /* ---------- Loading global (IA / operações assíncronas) ---------- */
   const globalLoadingEl = document.getElementById('globalLoading');
@@ -419,61 +992,135 @@
     const qs = session && session.idToken ? ('auth=' + session.idToken) : '';
     return FIREBASE_DB_URL + path + '.json' + (qs ? '?' + qs : '');
   }
-  async function dbGet(path){
+
+  /* ---------- Cache de leitura ----------
+     Antes, cada função de render ia à rede do zero: /Gavetas era buscado em 10
+     lugares, /VisionBoard em 5, /objetivos em 3. O cache guarda cada caminho por
+     um tempo curto e é invalidado por qualquer escrita que o toque, então a
+     leitura seguinte a uma escrita sempre vê o dado novo.
+
+     A invalidação percorre a árvore nos dois sentidos: escrever em
+     /users/x/Tasks/abc invalida também /users/x/Tasks (ancestral), e escrever em
+     /users/x/Tasks invalida /users/x/Tasks/abc (descendente). */
+  const DB_CACHE_TTL_MS = 30000;
+  const dbCache = new Map(); // path -> { at, value }
+
+  function dbCacheClear(){ dbCache.clear(); }
+  function dbCacheInvalidate(path){
+    for(const key of Array.from(dbCache.keys())){
+      if(key === path || key.startsWith(path + '/') || path.startsWith(key + '/')){
+        dbCache.delete(key);
+      }
+    }
+  }
+  // Os valores voltam clonados: várias telas leem o mesmo caminho e algumas
+  // mutam o que recebem — sem o clone, uma contaminaria as outras.
+  function cloneValue(v){ return v == null ? v : JSON.parse(JSON.stringify(v)); }
+
+  /* Ponto único de saída de rede: renova o token, monta a URL e trata o erro.
+     Toda função db* abaixo passa por aqui. */
+  async function dbFetch(path, options, errLabel){
+    await ensureFreshToken();
+    const res = await fetchWithTimeout(buildUrl(path), options);
+    if(!res.ok) throw new Error(errLabel + ' ' + path);
+    return await res.json();
+  }
+  function jsonBody(data){
+    return { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) };
+  }
+
+  async function dbGet(path, opts){
+    const skipCache = opts && opts.fresh;
+    if(!skipCache){
+      const hit = dbCache.get(path);
+      if(hit && (Date.now() - hit.at) < DB_CACHE_TTL_MS) return cloneValue(hit.value);
+    }
     showLoading('Carregando...');
     try{
-      const res = await fetchWithTimeout(buildUrl(path));
-      if(!res.ok) throw new Error('Erro ao ler ' + path);
-      return await res.json();
+      const value = await dbFetch(path, undefined, 'Erro ao ler');
+      dbCache.set(path, { at: Date.now(), value });
+      return cloneValue(value);
     } finally { hideLoading(); }
   }
   async function dbPut(path, data){
     showLoading('Salvando...');
     try{
-      const res = await fetchWithTimeout(buildUrl(path), { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
-      if(!res.ok) throw new Error('Erro ao salvar ' + path);
-      return await res.json();
+      dbCacheInvalidate(path);
+      return await dbFetch(path, Object.assign({ method:'PUT' }, jsonBody(data)), 'Erro ao salvar');
     } finally { hideLoading(); }
   }
   async function dbPatch(path, data){
     showLoading('Salvando...');
     try{
-      const res = await fetchWithTimeout(buildUrl(path), { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
-      if(!res.ok) throw new Error('Erro ao atualizar ' + path);
-      return await res.json();
+      dbCacheInvalidate(path);
+      return await dbFetch(path, Object.assign({ method:'PATCH' }, jsonBody(data)), 'Erro ao atualizar');
     } finally { hideLoading(); }
   }
   // Mesma coisa que dbPatch, mas sem acionar o overlay de loading global — para
   // ajustes instantâneos de UI (ex: minimizar/maximizar um card) que não devem
   // travar a tela esperando a rede.
   async function dbPatchSilent(path, data){
-    const res = await fetchWithTimeout(buildUrl(path), { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
-    if(!res.ok) throw new Error('Erro ao atualizar ' + path);
-    return await res.json();
+    dbCacheInvalidate(path);
+    return await dbFetch(path, Object.assign({ method:'PATCH' }, jsonBody(data)), 'Erro ao atualizar');
   }
   async function dbPutSilent(path, data){
-    const res = await fetchWithTimeout(buildUrl(path), { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
-    if(!res.ok) throw new Error('Erro ao salvar ' + path);
-    return await res.json();
+    dbCacheInvalidate(path);
+    return await dbFetch(path, Object.assign({ method:'PUT' }, jsonBody(data)), 'Erro ao salvar');
   }
   async function dbDeleteSilent(path){
-    const res = await fetchWithTimeout(buildUrl(path), { method:'DELETE' });
-    if(!res.ok) throw new Error('Erro ao remover ' + path);
-    return await res.json();
+    dbCacheInvalidate(path);
+    return await dbFetch(path, { method:'DELETE' }, 'Erro ao remover');
   }
   async function dbDelete(path){
     showLoading('Removendo...');
     try{
-      const res = await fetchWithTimeout(buildUrl(path), { method:'DELETE' });
-      if(!res.ok) throw new Error('Erro ao remover ' + path);
-      return await res.json();
+      dbCacheInvalidate(path);
+      return await dbFetch(path, { method:'DELETE' }, 'Erro ao remover');
     } finally { hideLoading(); }
   }
   function userPath(sub){ return '/users/' + (activeDataUid || session.uid) + sub; }
 
-  async function loadOpenAiKey(){
-    try{ openaiApiKey = await dbGet('/openAiKey'); }
-    catch(e){ console.error('Não foi possível carregar a chave da OpenAI', e); openaiApiKey = null; }
+  /* ---------- Chamada à IA (Claude via Cloud Function) ----------
+     Ponto único para as 4 features de IA: Revisão de Capturas, reorganização de
+     Gavetas, padrões em Decisões e Perguntar ao LifeOS.
+
+     Não existe caminho direto do navegador de propósito. Chamar a Anthropic
+     daqui exigiria mandar a chave para o cliente — que é exatamente o problema
+     que este proxy resolve. Sem a function publicada, as features de IA ficam
+     desligadas e avisam; o resto do app funciona normalmente.
+
+     Preencha IA_PROXY_URL com a URL que `firebase deploy --only functions`
+     imprime (instruções completas no topo de functions/index.js). */
+  // Pré-preenchido a partir do projeto (basehub-135f5) e da região da function.
+  // CONFIRA contra a URL que `firebase deploy --only functions` imprime: funções
+  // de 2ª geração às vezes recebem um domínio .run.app em vez deste alias.
+  // Deixe vazio ('') para desligar a IA de propósito.
+  const IA_PROXY_URL = 'https://southamerica-east1-basehub-135f5.cloudfunctions.net/iaProxy';
+
+  /* system: as instruções (papel, regras, formato de saída)
+     prompt: o que se pede nesta chamada
+     O Claude separa os dois — `system` é parâmetro próprio, e `messages` só
+     aceita user/assistant. Mandar as instruções como uma mensagem de sistema,
+     no formato da OpenAI, seria rejeitado. */
+  async function chamarIA(system, prompt){
+    if(!IA_PROXY_URL){
+      throw new Error('As features de IA precisam da Cloud Function publicada. ' +
+                      'Veja as instruções em functions/index.js.');
+    }
+    await ensureFreshToken();
+    const res = await fetchWithTimeout(IA_PROXY_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + (session && session.idToken)
+      },
+      body: JSON.stringify({ system: system || '', prompt: prompt || '' })
+    }, 120000); // esforço alto pensa mais: o teto de 15s padrão não serve aqui
+    let data;
+    try{ data = await res.json(); }
+    catch(e){ throw new Error('A IA devolveu uma resposta ilegível.'); }
+    if(!res.ok) throw new Error(data.error || 'A IA não respondeu.');
+    return data.text;
   }
 
   /* ---------- Quadros (Grupos/Famílias) ----------
@@ -566,6 +1213,8 @@
     currentBoardId = boardId;
     activeDataUid = boardId;
     localStorage.setItem(BOARD_ID_STORAGE_KEY, boardId);
+    dbCacheClear();
+    markAllViewsStale(); // o Quadro novo tem outros dados: tudo precisa redesenhar
     renderBoardSwitcher();
     applyBoardPermissionsToNav();
     await bootApp();
@@ -682,7 +1331,13 @@
   }
 
   function populateCasaResponsavelSelects(){
-    const nomes = Object.entries(casaMembros).sort((a,b) => a[1].localeCompare(b[1]));
+    // String(): casaMembros é { id: nome }, mas se um registro vier como objeto
+    // (formato antigo ou dado torto), o localeCompare estoura — e como esta
+    // função roda fora do guardRender, o boot inteiro morria e TODAS as telas
+    // ficavam presas em "Carregando...".
+    const nomes = Object.entries(casaMembros)
+      .filter(([, nome]) => nome != null && typeof nome !== 'object')
+      .sort((a,b) => String(a[1]).localeCompare(String(b[1])));
     const atividadeSelect = document.getElementById('casaAtividadeResponsavelInput');
     const regraSelect = document.getElementById('casaRegraResponsavelInput');
     const mondaySelect = document.getElementById('mondayResponsavelModalInput');
@@ -712,7 +1367,13 @@
   function renderConfigCasaMembros(){
     const wrap = document.getElementById('configCasaMembrosList');
     if(!wrap) return;
-    const nomes = Object.entries(casaMembros).sort((a,b) => a[1].localeCompare(b[1]));
+    // String(): casaMembros é { id: nome }, mas se um registro vier como objeto
+    // (formato antigo ou dado torto), o localeCompare estoura — e como esta
+    // função roda fora do guardRender, o boot inteiro morria e TODAS as telas
+    // ficavam presas em "Carregando...".
+    const nomes = Object.entries(casaMembros)
+      .filter(([, nome]) => nome != null && typeof nome !== 'object')
+      .sort((a,b) => String(a[1]).localeCompare(String(b[1])));
     if(!nomes.length){ wrap.innerHTML = '<p class="empty-state" style="margin:0;">Nenhuma pessoa cadastrada ainda.</p>'; return; }
     wrap.innerHTML = nomes.map(([id, nome]) => `
       <div class="config-tag"><span>${escapeHtml(nome)}</span><button data-del-membro="${id}" title="Remover">×</button></div>
@@ -778,22 +1439,79 @@
   /* ---------- CASA (dados do Quadro ativo — atividades, regras, erros) ---------- */
   const CASA_FREQ_LABELS = { diaria:'Diária', semanal:'Semanal', quinzenal:'Quinzenal', mensal:'Mensal' };
 
+  /* Atividades da casa eram só criar e excluir — não havia como dizer "fiz".
+     Agora cada uma guarda `feitaEm` (a data da última vez) e volta a aparecer
+     como pendente conforme a frequência. É isso que permite dar XP por elas. */
+  const CASA_FREQ_DIAS = { diaria: 1, semanal: 7, quinzenal: 14, mensal: 30 };
+
+  function casaDiasDesde(dataStr){
+    if(!dataStr) return Infinity;
+    const d = new Date(dataStr + 'T00:00:00');
+    if(isNaN(d)) return Infinity;
+    return Math.floor((new Date(todayStr() + 'T00:00:00') - d) / 86400000);
+  }
+  // Uma atividade está pendente quando já passou o intervalo da frequência
+  // desde a última vez que foi marcada.
+  function casaAtividadeStatus(a){
+    const intervalo = CASA_FREQ_DIAS[a.frequencia] || 1;
+    const dias = casaDiasDesde(a.feitaEm);
+    if(dias === Infinity) return { pendente: true, texto: 'nunca feita' };
+    if(dias >= intervalo) return { pendente: true, texto: dias === 0 ? 'pendente' : 'pendente há ' + dias + (dias === 1 ? ' dia' : ' dias') };
+    const faltam = intervalo - dias;
+    return {
+      pendente: false,
+      texto: dias === 0 ? 'feita hoje' : 'feita há ' + dias + (dias === 1 ? ' dia' : ' dias'),
+      proxima: faltam === 1 ? 'volta amanhã' : 'volta em ' + faltam + ' dias'
+    };
+  }
+
   async function renderCasaAtividades(){
     const el = document.getElementById('casaAtividadesList');
     const data = await dbGet(userPath('/casa/atividades')) || {};
-    const entries = Object.entries(data).sort((a,b) => (a[1].criadoEm||'').localeCompare(b[1].criadoEm||''));
+    const entries = Object.entries(data).sort((a,b) => {
+      // Pendentes primeiro: é o que precisa de ação hoje.
+      const pa = casaAtividadeStatus(a[1]).pendente ? 0 : 1;
+      const pb = casaAtividadeStatus(b[1]).pendente ? 0 : 1;
+      return pa - pb || (a[1].criadoEm||'').localeCompare(b[1].criadoEm||'');
+    });
     if(!entries.length){ el.innerHTML = '<p class="empty-state">Nenhuma atividade cadastrada ainda.</p>'; return; }
-    el.innerHTML = entries.map(([id, a]) => `
-      <div class="casa-card" data-id="${id}">
+    el.innerHTML = entries.map(([id, a]) => {
+      const st = casaAtividadeStatus(a);
+      return `
+      <div class="casa-card ${st.pendente ? '' : 'casa-card-feita'}" data-id="${id}">
+        <button type="button" class="casa-check" data-done-atividade="${id}"
+                aria-label="${st.pendente ? 'Marcar como feita' : 'Desmarcar'}"
+                title="${st.pendente ? 'Marcar como feita' : 'Desmarcar'}">${st.pendente ? '' : '✓'}</button>
         <div class="casa-card-main">
           <p class="casa-card-title">${escapeHtml(a.nome)}</p>
           <div class="casa-card-meta">
             <span>${CASA_FREQ_LABELS[a.frequencia] || a.frequencia || ''}</span>
             ${a.responsavel ? `<span>· ${escapeHtml(a.responsavel)}</span>` : ''}
+            <span class="casa-status ${st.pendente ? 'casa-status-pendente' : ''}">· ${escapeHtml(st.texto)}</span>
+            ${st.proxima ? `<span class="casa-status">· ${escapeHtml(st.proxima)}</span>` : ''}
           </div>
         </div>
         <div class="casa-card-actions"><button data-del-atividade="${id}">excluir</button></div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
+
+    el.querySelectorAll('[data-done-atividade]').forEach(btn => btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-done-atividade');
+      const a = data[id];
+      if(!a) return;
+      const st = casaAtividadeStatus(a);
+      if(st.pendente){
+        const hoje = todayStr();
+        await dbPatch(userPath('/casa/atividades/' + id), { feitaEm: hoje });
+        // A chave inclui a data: a mesma tarefa paga de novo no próximo ciclo,
+        // mas marcar e desmarcar no mesmo dia não rende XP repetido.
+        await grantXp('casa_atividade', { chave: 'casa_' + id + '_' + hoje });
+      }else{
+        await dbPatch(userPath('/casa/atividades/' + id), { feitaEm: null });
+      }
+      await renderCasaAtividades();
+    }));
+
     el.querySelectorAll('[data-del-atividade]').forEach(btn => btn.addEventListener('click', async () => {
       if(!await showConfirm('Excluir esta atividade?')) return;
       await dbDelete(userPath('/casa/atividades/' + btn.getAttribute('data-del-atividade')));
@@ -1075,11 +1793,53 @@
       });
     });
   }
+  /* Paga XP por ponto e por objetivo concluído. Roda a cada render dos
+     Objetivos; as chaves impedem pagar duas vezes o mesmo ponto. */
+  async function premiarObjetivosConcluidos(data){
+    if(typeof gamProgresso === 'undefined' || !gamProgresso) return;
+    for(const [oid, o] of Object.entries(data || {})){
+      const pontos = Object.entries(o.pontos || {});
+      for(const [pid, p] of pontos){
+        if(pontoProgresso(p) >= 100){
+          await grantXp('ponto_objetivo', { chave: 'ponto_' + oid + '_' + pid });
+        }
+      }
+      const pct = pontos.length
+        ? Math.round(pontos.reduce((s, [, p]) => s + pontoProgresso(p), 0) / pontos.length)
+        : 0;
+      if(pontos.length && pct >= 100){
+        await grantXp('objetivo', { chave: 'obj_' + oid, contador: 'objetivos' });
+      }
+    }
+  }
+
+  /* ---------- Objetivos como boss fights ----------
+     A barra de vida é o que FALTA (100 − progresso), então ela desce conforme
+     você avança. O prazo é o cronômetro: a menos de 7 dias entra em alerta. */
+  function bossHud(o, pct, hojeStr){
+    if(!o.prazo) return '';
+    const dias = Math.round((new Date(o.prazo + 'T00:00:00') - new Date(hojeStr + 'T00:00:00')) / 86400000);
+    const vida = Math.max(0, 100 - pct);
+    let estado = 'boss-ok', rotulo = dias + (dias === 1 ? ' dia restante' : ' dias restantes');
+    if(pct >= 100){ estado = 'boss-vencido'; rotulo = 'DERROTADO'; }
+    else if(dias < 0){ estado = 'boss-atrasado'; rotulo = Math.abs(dias) + (dias === -1 ? ' dia de atraso' : ' dias de atraso'); }
+    else if(dias <= 7){ estado = 'boss-urgente'; }
+    return `
+      <div class="boss-hud ${estado}">
+        <div class="boss-hud-top">
+          <span class="boss-hud-label">${pct >= 100 ? '☠ boss' : '❤ vida do boss'}</span>
+          <span class="boss-hud-timer">${rotulo}</span>
+        </div>
+        <div class="boss-vida-track"><i style="width:${vida}%"></i></div>
+      </div>`;
+  }
+
   async function renderObjetivos(){
     const el = document.getElementById('objetivosList');
     const data = await dbGet(userPath('/objetivos')) || {};
     const counts = await fetchAutoActionCounts();
     aplicarAutoProgresso(data, counts);
+    await premiarObjetivosConcluidos(data);
     const entries = Object.entries(data).sort((a,b) => {
       const pa = OBJ_PRIORIDADE_ORDER[a[1].prioridade] ?? 1;
       const pb = OBJ_PRIORIDADE_ORDER[b[1].prioridade] ?? 1;
@@ -1116,6 +1876,7 @@
           ${o.prazo ? `<span class="prazo-pill ${prazoOverdue ? 'prazo-futuro' : 'prazo-datado'}" style="${prazoOverdue ? 'color:var(--coral);border-color:rgba(180,106,92,0.4);' : ''}">${prazoOverdue ? 'atrasado · ' : 'até '}${fmtShortDate(o.prazo)}</span>` : ''}
         </div>
         <div class="obj-bar-track"><div class="obj-bar-fill" style="width:${pct}%; background:linear-gradient(90deg, var(--obj-cat-color, var(--sage)), var(--obj-cat-color, var(--sage)));"></div></div>
+        ${bossHud(o, pct, hojeStr)}
         <div class="obj-foot" style="margin-bottom:0;">
           <span>${total ? total + ' ponto' + (total === 1 ? '' : 's') + ' · progresso médio' : 'sem pontos ainda'}</span>
           <span>${pct}%</span>
@@ -1832,6 +2593,398 @@
     await renderVisionBoard();
   });
 
+  /* ---------- Central de Decisões ---------- */
+  const DEC_STATUS_LABEL = { em_analise: 'Em análise', decidida: 'Decidida', cancelada: 'Cancelada' };
+  const DEC_IMPORTANCIA_LABEL = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
+  const DEC_COLORS = [
+    { color: 'var(--blue)', soft: 'var(--blue-soft)' },
+    { color: 'var(--purple)', soft: 'var(--purple-soft)' },
+    { color: 'var(--gold)', soft: 'var(--gold-soft)' },
+    { color: 'var(--coral)', soft: 'var(--coral-soft)' },
+    { color: 'var(--sage)', soft: 'var(--sage-soft)' }
+  ];
+  function decColorForCategoria(cat){
+    const s = String(cat || '').trim().toLowerCase();
+    if(!s) return DEC_COLORS[0];
+    let hash = 0;
+    for(let i = 0; i < s.length; i++){ hash = (hash * 31 + s.charCodeAt(i)) >>> 0; }
+    return DEC_COLORS[hash % DEC_COLORS.length];
+  }
+  function decParseLines(text){
+    return String(text || '').split('\n').map(s => s.trim()).filter(Boolean);
+  }
+  function decParseCriterios(text){
+    const out = {};
+    decParseLines(text).forEach(line => {
+      const parts = line.split(',');
+      const nome = (parts[0] || '').trim();
+      if(!nome) return;
+      let peso = parseInt(parts[1], 10);
+      if(!Number.isFinite(peso) || peso < 1) peso = 3;
+      if(peso > 5) peso = 5;
+      out[newId()] = { nome, peso };
+    });
+    return out;
+  }
+
+  let decEditingId = null;
+  let decCurrentFilter = 'todas';
+  let decOpcaoEditingDecId = null;
+  let decOpcaoEditingId = null;
+
+  async function renderDecisoes(){
+    const el = document.getElementById('decisoesList');
+    const data = await dbGet(userPath('/Decisoes')) || {};
+    const entries = Object.entries(data)
+      .filter(([, d]) => decCurrentFilter === 'todas' || d.status === decCurrentFilter)
+      .sort((a, b) => (b[1].data || b[1].criadoEm || '').localeCompare(a[1].data || a[1].criadoEm || ''));
+
+    if(!entries.length){
+      el.innerHTML = '<p class="empty-state">Nenhuma decisão registrada ainda. Crie a primeira com "+ Nova decisão".</p>';
+      return;
+    }
+
+    el.innerHTML = entries.map(([id, d]) => {
+      const cat = decColorForCategoria(d.categoria);
+      const opcoes = Object.entries(d.opcoes || {}).sort((a,b) => (a[1].ordem||0) - (b[1].ordem||0));
+      const criterios = Object.entries(d.criterios || {});
+      const status = d.status || 'em_analise';
+      return `
+      <div class="dec-card" data-dec-id="${id}" style="--dec-color:${cat.color}; --dec-soft:${cat.soft};">
+        <div class="dec-card-head">
+          <div>
+            <p class="dec-title">${escapeHtml(d.titulo)}</p>
+            <div class="dec-meta-row">
+              ${d.categoria ? `<span class="dec-pill">${escapeHtml(d.categoria)}</span>` : ''}
+              <span class="dec-pill status-${status}">${DEC_STATUS_LABEL[status] || status}</span>
+              <span class="dec-pill">${DEC_IMPORTANCIA_LABEL[d.importancia] || 'Média'}</span>
+              <span class="dec-date">${d.data ? fmtShortDate(d.data) : ''}</span>
+            </div>
+          </div>
+          <div class="dec-actions">
+            <button data-edit-decisao="${id}">editar</button>
+            <button data-del-decisao="${id}">excluir</button>
+          </div>
+        </div>
+        ${d.contexto ? `<p class="dec-contexto">${escapeHtml(d.contexto)}</p>` : ''}
+
+        ${criterios.length ? `
+        <p class="dec-section-label">Critérios importantes</p>
+        <div class="dec-criterios-list">
+          ${criterios.map(([, c]) => `<span class="dec-criterio-chip">${escapeHtml(c.nome)} <span class="dec-criterio-peso">${'★'.repeat(c.peso)}</span></span>`).join('')}
+        </div>` : ''}
+
+        <p class="dec-section-label">Opções</p>
+        <div class="dec-opcoes-grid">
+          ${opcoes.map(([oid, o]) => `
+            <div class="dec-opcao-card">
+              <div class="dec-opcao-nome">${escapeHtml(o.nome)}</div>
+              ${(o.pros||[]).length ? `<ul class="dec-opcao-lista pros">${(o.pros||[]).map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>` : ''}
+              ${(o.contras||[]).length ? `<ul class="dec-opcao-lista contras">${(o.contras||[]).map(c => `<li>${escapeHtml(c)}</li>`).join('')}</ul>` : ''}
+              <div class="dec-opcao-foot">
+                <button data-edit-opcao="${oid}" data-dec-id="${id}">editar</button>
+                <button data-del-opcao="${oid}" data-dec-id="${id}">excluir</button>
+              </div>
+            </div>`).join('')}
+        </div>
+        <button class="dec-add-inline-btn" data-add-opcao="${id}">+ Adicionar opção</button>
+
+        ${d.resultado ? `
+        <div class="dec-resultado-box">
+          <div class="dec-resultado-label">Decisão tomada</div>
+          <strong>${escapeHtml(d.resultado.escolhaNome || '')}</strong>
+          ${d.resultado.justificativa ? `<p style="margin:6px 0 0;">${escapeHtml(d.resultado.justificativa)}</p>` : ''}
+        </div>` : (status === 'decidida' ? `<button class="dec-add-inline-btn" data-add-resultado="${id}">+ Registrar resultado</button>` : '')}
+
+        ${d.revisao ? `
+        <div class="dec-revisao-box">
+          <div class="dec-revisao-label">Revisão futura · ${fmtShortDate(d.revisao.data)}</div>
+          Valeu a pena: <strong>${escapeHtml(d.revisao.valeu === 'sim' ? 'Sim' : d.revisao.valeu === 'parcial' ? 'Parcialmente' : 'Não')}</strong> ·
+          Faria de novo: <strong>${escapeHtml(d.revisao.faria === 'sim' ? 'Sim' : d.revisao.faria === 'nao' ? 'Não' : 'Talvez')}</strong>
+          ${d.revisao.consequencias ? `<p style="margin:6px 0 0;">${escapeHtml(d.revisao.consequencias)}</p>` : ''}
+          <div class="dec-opcao-foot" style="margin-top:8px;"><button data-add-revisao="${id}">editar revisão</button></div>
+        </div>` : (d.resultado ? `<button class="dec-add-inline-btn" data-add-revisao="${id}">+ Registrar revisão futura</button>` : '')}
+      </div>`;
+    }).join('');
+
+    el.querySelectorAll('[data-edit-decisao]').forEach(btn => btn.addEventListener('click', () => openDecisaoModal(btn.getAttribute('data-edit-decisao'))));
+    el.querySelectorAll('[data-del-decisao]').forEach(btn => btn.addEventListener('click', async () => {
+      if(!await showConfirm('Excluir esta decisão e todo o histórico dela?')) return;
+      await dbDelete(userPath('/Decisoes/' + btn.getAttribute('data-del-decisao')));
+      await renderDecisoes();
+    }));
+    el.querySelectorAll('[data-add-opcao]').forEach(btn => btn.addEventListener('click', () => openDecisaoOpcaoModal(btn.getAttribute('data-add-opcao'), null)));
+    el.querySelectorAll('[data-edit-opcao]').forEach(btn => btn.addEventListener('click', () => openDecisaoOpcaoModal(btn.getAttribute('data-dec-id'), btn.getAttribute('data-edit-opcao'))));
+    el.querySelectorAll('[data-del-opcao]').forEach(btn => btn.addEventListener('click', async () => {
+      if(!await showConfirm('Excluir esta opção?')) return;
+      await dbDelete(userPath('/Decisoes/' + btn.getAttribute('data-dec-id') + '/opcoes/' + btn.getAttribute('data-del-opcao')));
+      await renderDecisoes();
+    }));
+    el.querySelectorAll('[data-add-resultado]').forEach(btn => btn.addEventListener('click', () => openDecisaoResultadoModal(btn.getAttribute('data-add-resultado'))));
+    el.querySelectorAll('[data-add-revisao]').forEach(btn => btn.addEventListener('click', () => openDecisaoRevisaoModal(btn.getAttribute('data-add-revisao'))));
+  }
+
+  document.querySelectorAll('#decisaoFilters [data-dec-filter]').forEach(btn => btn.addEventListener('click', () => {
+    decCurrentFilter = btn.getAttribute('data-dec-filter');
+    document.querySelectorAll('#decisaoFilters [data-dec-filter]').forEach(b => b.classList.toggle('active', b === btn));
+    renderDecisoes();
+  }));
+
+  async function populateDecisaoCategoriaDatalist(){
+    const list = document.getElementById('decisaoCategoriaList');
+    if(list.options.length) return;
+    const data = await dbGet(userPath('/Decisoes')) || {};
+    const cats = [...new Set(Object.values(data).map(d => d.categoria).filter(Boolean))];
+    list.innerHTML = cats.map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
+  }
+
+  function openDecisaoModal(id){
+    decEditingId = id || null;
+    populateDecisaoCategoriaDatalist();
+    document.getElementById('decisaoModalTitle').textContent = id ? 'Editar decisão' : 'Nova decisão';
+    document.getElementById('decisaoTituloInput').value = '';
+    document.getElementById('decisaoCategoriaInput').value = '';
+    document.getElementById('decisaoImportanciaInput').value = 'media';
+    document.getElementById('decisaoStatusInput').value = 'em_analise';
+    document.getElementById('decisaoDataInput').value = todayStr();
+    document.getElementById('decisaoContextoInput').value = '';
+    document.getElementById('decisaoCriteriosInput').value = '';
+    if(id){
+      dbGet(userPath('/Decisoes/' + id)).then(d => {
+        if(!d) return;
+        document.getElementById('decisaoTituloInput').value = d.titulo || '';
+        document.getElementById('decisaoCategoriaInput').value = d.categoria || '';
+        document.getElementById('decisaoImportanciaInput').value = d.importancia || 'media';
+        document.getElementById('decisaoStatusInput').value = d.status || 'em_analise';
+        document.getElementById('decisaoDataInput').value = d.data || todayStr();
+        document.getElementById('decisaoContextoInput').value = d.contexto || '';
+        document.getElementById('decisaoCriteriosInput').value = Object.values(d.criterios || {}).map(c => c.nome + ', ' + c.peso).join('\n');
+      });
+    }
+    document.getElementById('decisaoModal').classList.add('active');
+  }
+  document.getElementById('decisaoAddBtn').addEventListener('click', () => openDecisaoModal(null));
+  document.getElementById('decisaoCancelBtn').addEventListener('click', () => document.getElementById('decisaoModal').classList.remove('active'));
+  document.getElementById('decisaoOkBtn').addEventListener('click', async () => {
+    const titulo = document.getElementById('decisaoTituloInput').value.trim();
+    if(!titulo){ showAppMessage('Digite o título da decisão.', 'error'); return; }
+    const categoria = document.getElementById('decisaoCategoriaInput').value.trim();
+    const importancia = document.getElementById('decisaoImportanciaInput').value;
+    const status = document.getElementById('decisaoStatusInput').value;
+    const data = document.getElementById('decisaoDataInput').value || todayStr();
+    const contexto = document.getElementById('decisaoContextoInput').value.trim();
+    const criterios = decParseCriterios(document.getElementById('decisaoCriteriosInput').value);
+    if(decEditingId){
+      await dbPatch(userPath('/Decisoes/' + decEditingId), { titulo, categoria, importancia, status, data, contexto, criterios });
+    } else {
+      const novaDecId = newId();
+      await dbPut(userPath('/Decisoes/' + novaDecId), { titulo, categoria, importancia, status, data, contexto, criterios, criadoEm: new Date().toISOString() });
+      await grantXp('decisao', { chave: 'dec_' + novaDecId, contador: 'decisoes' });
+    }
+    document.getElementById('decisaoModal').classList.remove('active');
+    await renderDecisoes();
+  });
+
+  function openDecisaoOpcaoModal(decId, opcaoId){
+    decOpcaoEditingDecId = decId;
+    decOpcaoEditingId = opcaoId || null;
+    document.getElementById('decisaoOpcaoModalTitle').textContent = opcaoId ? 'Editar opção' : 'Nova opção';
+    document.getElementById('decisaoOpcaoNomeInput').value = '';
+    document.getElementById('decisaoOpcaoProsInput').value = '';
+    document.getElementById('decisaoOpcaoContrasInput').value = '';
+    if(opcaoId){
+      dbGet(userPath('/Decisoes/' + decId + '/opcoes/' + opcaoId)).then(o => {
+        if(!o) return;
+        document.getElementById('decisaoOpcaoNomeInput').value = o.nome || '';
+        document.getElementById('decisaoOpcaoProsInput').value = (o.pros || []).join('\n');
+        document.getElementById('decisaoOpcaoContrasInput').value = (o.contras || []).join('\n');
+      });
+    }
+    document.getElementById('decisaoOpcaoModal').classList.add('active');
+  }
+  document.getElementById('decisaoOpcaoCancelBtn').addEventListener('click', () => document.getElementById('decisaoOpcaoModal').classList.remove('active'));
+  document.getElementById('decisaoOpcaoOkBtn').addEventListener('click', async () => {
+    const nome = document.getElementById('decisaoOpcaoNomeInput').value.trim();
+    if(!nome){ showAppMessage('Digite o nome da opção.', 'error'); return; }
+    const pros = decParseLines(document.getElementById('decisaoOpcaoProsInput').value);
+    const contras = decParseLines(document.getElementById('decisaoOpcaoContrasInput').value);
+    const path = '/Decisoes/' + decOpcaoEditingDecId + '/opcoes/' + (decOpcaoEditingId || newId());
+    await dbPut(userPath(path), { nome, pros, contras });
+    document.getElementById('decisaoOpcaoModal').classList.remove('active');
+    await renderDecisoes();
+  });
+
+  let decResultadoEditingId = null;
+  async function openDecisaoResultadoModal(decId){
+    decResultadoEditingId = decId;
+    const d = await dbGet(userPath('/Decisoes/' + decId)) || {};
+    const opcoes = Object.entries(d.opcoes || {});
+    const sel = document.getElementById('decisaoResultadoEscolhaInput');
+    sel.innerHTML = opcoes.length
+      ? opcoes.map(([oid, o]) => `<option value="${oid}">${escapeHtml(o.nome)}</option>`).join('')
+      : '<option value="">(nenhuma opção cadastrada — descreva na justificativa)</option>';
+    if(d.resultado && d.resultado.escolhaOpcaoId) sel.value = d.resultado.escolhaOpcaoId;
+    document.getElementById('decisaoResultadoJustificativaInput').value = d.resultado ? (d.resultado.justificativa || '') : '';
+    document.getElementById('decisaoResultadoModal').classList.add('active');
+  }
+  document.getElementById('decisaoResultadoCancelBtn').addEventListener('click', () => document.getElementById('decisaoResultadoModal').classList.remove('active'));
+  document.getElementById('decisaoResultadoOkBtn').addEventListener('click', async () => {
+    const sel = document.getElementById('decisaoResultadoEscolhaInput');
+    const escolhaOpcaoId = sel.value;
+    const escolhaNome = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : '';
+    const justificativa = document.getElementById('decisaoResultadoJustificativaInput').value.trim();
+    await dbPatch(userPath('/Decisoes/' + decResultadoEditingId), {
+      resultado: { escolhaOpcaoId, escolhaNome, justificativa, data: todayStr() }
+    });
+    document.getElementById('decisaoResultadoModal').classList.remove('active');
+    await renderDecisoes();
+  });
+
+  let decRevisaoEditingId = null;
+  async function openDecisaoRevisaoModal(decId){
+    decRevisaoEditingId = decId;
+    const d = await dbGet(userPath('/Decisoes/' + decId)) || {};
+    document.getElementById('decisaoRevisaoValeuInput').value = d.revisao ? d.revisao.valeu : 'sim';
+    document.getElementById('decisaoRevisaoFariaInput').value = d.revisao ? d.revisao.faria : 'sim';
+    document.getElementById('decisaoRevisaoConsequenciasInput').value = d.revisao ? (d.revisao.consequencias || '') : '';
+    document.getElementById('decisaoRevisaoModal').classList.add('active');
+  }
+  document.getElementById('decisaoRevisaoCancelBtn').addEventListener('click', () => document.getElementById('decisaoRevisaoModal').classList.remove('active'));
+  document.getElementById('decisaoRevisaoOkBtn').addEventListener('click', async () => {
+    const valeu = document.getElementById('decisaoRevisaoValeuInput').value;
+    const faria = document.getElementById('decisaoRevisaoFariaInput').value;
+    const consequencias = document.getElementById('decisaoRevisaoConsequenciasInput').value.trim();
+    await dbPatch(userPath('/Decisoes/' + decRevisaoEditingId), {
+      revisao: { valeu, faria, consequencias, data: todayStr() }
+    });
+    // Voltar numa decisão meses depois é o hábito mais difícil da Central —
+    // por isso paga mais que registrar a decisão original.
+    await grantXp('decisao_revisao', { chave: 'decrev_' + decRevisaoEditingId });
+    document.getElementById('decisaoRevisaoModal').classList.remove('active');
+    await renderDecisoes();
+  });
+
+  /* ---------- Decisões: padrões via IA ---------- */
+  document.getElementById('decisaoPadroesBtn').addEventListener('click', async () => {
+    if(!IA_PROXY_URL){ showAppMessage('As features de IA precisam da Cloud Function publicada.', 'error'); return; }
+    const box = document.getElementById('decisaoPadroesBox');
+    const data = await dbGet(userPath('/Decisoes')) || {};
+    const entries = Object.entries(data);
+    if(!entries.length){ showAppMessage('Registre ao menos uma decisão para a IA identificar padrões.', 'info'); return; }
+    showLoading('Analisando padrões nas suas decisões...');
+    try{
+      const dump = entries.map(([id, d]) => ({
+        titulo: d.titulo, categoria: d.categoria, importancia: d.importancia, status: d.status, data: d.data,
+        contexto: d.contexto,
+        criterios: Object.values(d.criterios || {}).map(c => c.nome + ' (peso ' + c.peso + ')'),
+        opcoes: Object.values(d.opcoes || {}).map(o => o.nome),
+        resultado: d.resultado ? { escolha: d.resultado.escolhaNome, justificativa: d.resultado.justificativa } : null,
+        revisao: d.revisao ? { valeu: d.revisao.valeu, faria: d.revisao.faria, consequencias: d.revisao.consequencias } : null
+      }));
+      const systemPrompt = 'Você analisa um histórico de decisões pessoais de um usuário do app LifeOS e identifica padrões de comportamento na forma como ele decide. ' +
+        'Responda em português, em 3 a 6 frases curtas e diretas, no estilo "Você costuma priorizar X ao invés de Y", "Decisões de categoria Z normalmente consideram W", "Suas decisões de tipo X costumam ser revistas após N meses". ' +
+        'Baseie-se apenas nos dados fornecidos, sem inventar. Se houver poucos dados, diga isso brevemente e aponte o que já dá para notar.\n\nDecisões (JSON): ' + JSON.stringify(dump);
+      const texto = (await chamarIA(systemPrompt, 'Analise as decisões acima e aponte os padrões.')).trim();
+      box.innerHTML = '<button class="dec-padroes-close" id="decisaoPadroesCloseBtn">✕</button>✦ ' + escapeHtml(texto);
+      box.style.display = 'block';
+      document.getElementById('decisaoPadroesCloseBtn').addEventListener('click', () => { box.style.display = 'none'; });
+    }catch(err){
+      showAppMessage('Erro ao analisar padrões: ' + err.message, 'error');
+    }finally{
+      hideLoading();
+    }
+  });
+
+  /* ---------- Busca Semântica (Perguntar ao LifeOS) ---------- */
+  const BUSCA_TIPO_VIEW = { tarefas: 'tarefas', inbox: 'storage', storage: 'storage', objetivos: 'objetivos', diario: 'diario', agenda: 'agenda', decisoes: 'decisoes' };
+  const BUSCA_TIPO_LABEL = { tarefas: 'Tarefa', inbox: 'Captura', storage: 'Gaveta', objetivos: 'Objetivo', diario: 'Diário', agenda: 'Agenda', decisoes: 'Decisão' };
+
+  function buscaTruncate(s, n){ s = String(s || ''); return s.length > n ? s.slice(0, n) + '…' : s; }
+
+  async function buscaColetarContexto(){
+    const [tasks, inbox, gavetas, objetivos, diario, events, decisoes] = await Promise.all([
+      dbGet(userPath('/Tasks')), dbGet(userPath('/Inbox')), dbGet(userPath('/Gavetas')),
+      dbGet(userPath('/objetivos')), dbGet(userPath('/DiarioEntradas')), dbGet(userPath('/Events')),
+      dbGet(userPath('/Decisoes'))
+    ]);
+    const ctx = {};
+    ctx.tarefas = Object.values(tasks || {}).slice(-80).map(t => ({ nome: t.name, data: t.date, feita: !!t.done }));
+    ctx.capturas = Object.values(inbox || {}).slice(-80).map(i => buscaTruncate(i.text, 160));
+    ctx.gavetas = Object.entries(gavetas || {}).map(([, g]) => ({
+      nome: g.name, itens: Object.values(g.items || {}).slice(-40).map(it => buscaTruncate(it.text, 160))
+    }));
+    ctx.objetivos = Object.values(objetivos || {}).map(o => ({
+      nome: o.nome, descricao: o.descricao, categoria: o.categoria,
+      pontos: Object.values(o.pontos || {}).map(p => p.nome)
+    }));
+    ctx.diario = Object.values(diario || {}).slice(-80).map(e => ({ data: (e.createdAt||'').slice(0,10), humor: e.mood, texto: buscaTruncate(e.text, 160) }));
+    ctx.agenda = Object.values(events || {}).slice(-80).map(e => ({ titulo: e.title, data: e.date, hora: e.time }));
+    ctx.decisoes = Object.values(decisoes || {}).map(d => ({
+      titulo: d.titulo, categoria: d.categoria, status: d.status, data: d.data, contexto: buscaTruncate(d.contexto, 300),
+      opcoes: Object.values(d.opcoes || {}).map(o => o.nome),
+      resultado: d.resultado ? { escolha: d.resultado.escolhaNome, justificativa: d.resultado.justificativa } : null,
+      revisao: d.revisao || null
+    }));
+    return ctx;
+  }
+
+  function buscaAppendMsg(role, html){
+    const log = document.getElementById('buscaChatLog');
+    const hint = log.querySelector('.busca-empty-hint');
+    if(hint) hint.remove();
+    const el = document.createElement('div');
+    el.className = 'busca-msg ' + role;
+    el.innerHTML = html;
+    log.appendChild(el);
+    log.scrollTop = log.scrollHeight;
+    return el;
+  }
+
+  async function buscaEnviarPergunta(){
+    const input = document.getElementById('buscaChatInput');
+    const pergunta = input.value.trim();
+    if(!pergunta) return;
+    if(!IA_PROXY_URL){ showAppMessage('As features de IA precisam da Cloud Function publicada.', 'error'); return; }
+
+    buscaAppendMsg('user', escapeHtml(pergunta));
+    input.value = '';
+    const sendBtn = document.getElementById('buscaChatSendBtn');
+    sendBtn.disabled = true;
+    const loadingEl = buscaAppendMsg('ai loading', 'pensando...');
+
+    try{
+      const ctx = await buscaColetarContexto();
+      const systemPrompt = 'Você é um assistente que responde perguntas em português sobre a vida pessoal de um usuário do LifeOS, usando apenas os dados fornecidos abaixo (tarefas, capturas, gavetas/projetos, objetivos, diário, agenda e decisões). ' +
+        'Seja direto e específico, citando datas e nomes quando existirem. Se não houver informação suficiente, diga isso claramente em vez de inventar. ' +
+        'Responda APENAS com um objeto JSON, sem markdown, no formato exato: {"resposta": "texto da resposta em português", "referencias": [{"tipo": "tarefas|capturas|storage|objetivos|diario|agenda|decisoes", "texto": "trecho curto de referência"}]}. ' +
+        'Inclua no máximo 6 referências, só das fontes realmente usadas na resposta.\n\nDados do usuário (JSON): ' + JSON.stringify(ctx);
+
+      const parsed = extractJson(await chamarIA(systemPrompt, pergunta));
+      const resposta = parsed.resposta || '(sem resposta)';
+      const refs = Array.isArray(parsed.referencias) ? parsed.referencias.slice(0, 6) : [];
+
+      loadingEl.classList.remove('loading');
+      loadingEl.innerHTML = escapeHtml(resposta) +
+        (refs.length ? '<div class="busca-refs">' + refs.map(r => {
+          const tipoKey = String(r.tipo || '').toLowerCase().replace('capturas','inbox');
+          const view = BUSCA_TIPO_VIEW[tipoKey] || BUSCA_TIPO_VIEW[r.tipo] || 'busca';
+          const label = BUSCA_TIPO_LABEL[tipoKey] || BUSCA_TIPO_LABEL[r.tipo] || r.tipo || '';
+          return `<span class="busca-ref-chip" data-view-link="${view}" title="${escapeHtml(r.texto || '')}">${escapeHtml(label)} → abrir</span>`;
+        }).join('') + '</div>' : '');
+      loadingEl.querySelectorAll('[data-view-link]').forEach(chip => chip.addEventListener('click', () => goToView(chip.getAttribute('data-view-link'))));
+    }catch(err){
+      loadingEl.classList.remove('loading');
+      loadingEl.textContent = 'Erro ao consultar a IA: ' + err.message;
+    }finally{
+      sendBtn.disabled = false;
+      document.getElementById('buscaChatLog').scrollTop = document.getElementById('buscaChatLog').scrollHeight;
+    }
+  }
+  document.getElementById('buscaChatSendBtn').addEventListener('click', buscaEnviarPergunta);
+  document.getElementById('buscaChatInput').addEventListener('keydown', (e) => {
+    if(e.key === 'Enter'){ e.preventDefault(); buscaEnviarPergunta(); }
+  });
+
   /* ---------- Autenticação (Identity Toolkit REST) ---------- */
   async function identityRequest(kind, email, password){
     showLoading('Entrando...');
@@ -1866,16 +3019,18 @@
   async function afterLoginSuccess(data){
     saveSession({
       idToken: data.idToken,
+      refreshToken: data.refreshToken, // sem isso a sessão morre em 1h e não volta
       uid: data.localId,
       email: data.email,
-      expiresAt: Date.now() + (parseInt(data.expiresIn || '3600', 10) * 1000) - 30000
+      expiresAt: Date.now() + (parseInt(data.expiresIn || '3600', 10) * 1000) - 60000
     });
+    dbCacheClear();
     activeDataUid = session.uid;
     currentBoardId = session.uid;
     await dbPatch('/users/' + session.uid + '/Profile', { Email: data.email, LastLogin: new Date().toISOString() });
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appShell').style.display = '';
-    await loadOpenAiKey();
+    document.body.classList.add('app-ativo');
     await initBoards();
     await bootApp();
     checkPendingInvites();
@@ -2002,13 +3157,42 @@
     localStorage.setItem('corPrincipal', hex);
     dbPatchSilent(userPath('/Config'), { corPrincipal: hex }).catch(err => console.error('Erro ao salvar cor principal', err));
   }
+  /* Cores extras destravadas por conquista.
+     São ADICIONAIS às 16 livres — nenhuma cor que já existia foi trancada.
+     Recompensa tem que somar; tirar algo que a pessoa já usava seria punição. */
+  const COR_PRINCIPAL_RECOMPENSAS = [
+    { hex:'#ff5ea8', nome:'Magenta Neon',  conquista:'maquina',          comoGanhar:'30 dias seguidos de sequência' },
+    { hex:'#34d9f0', nome:'Ciano Neon',    conquista:'poliglota',        comoGanhar:'1.000 cards de Fluência' },
+    { hex:'#b8f34a', nome:'Ácido',         conquista:'centuriao',        comoGanhar:'100 tarefas concluídas' },
+    { hex:'#ffb020', nome:'Âmbar',         conquista:'arquiteto',        comoGanhar:'Primeiro objetivo em 100%' },
+    { hex:'#e8e8f4', nome:'Osso',          conquista:'nivel10',          comoGanhar:'Nível 10 em qualquer atributo' }
+  ];
+  function corDesbloqueada(id){
+    return !!(typeof gamProgresso !== 'undefined' && gamProgresso &&
+              gamProgresso.conquistas && gamProgresso.conquistas[id]);
+  }
+
   function renderCorPrincipalPopover(){
     const pop = document.getElementById('corPrincipalPopover');
-    if(!pop || pop.children.length) return;
-    pop.innerHTML = COR_PRINCIPAL_PRESETS.map(hex => `<button type="button" class="cor-swatch-option" data-cor="${hex}" style="background:${hex};" aria-label="${hex}"></button>`).join('');
-    pop.querySelectorAll('.cor-swatch-option').forEach(btn => btn.addEventListener('click', () => {
+    if(!pop) return;
+    // Re-renderiza sempre: uma conquista pode ter caído desde a última abertura.
+    const livres = COR_PRINCIPAL_PRESETS.map(hex =>
+      `<button type="button" class="cor-swatch-option" data-cor="${hex}" style="background:${hex};" aria-label="${hex}"></button>`).join('');
+    const recompensas = COR_PRINCIPAL_RECOMPENSAS.map(c => {
+      const ok = corDesbloqueada(c.conquista);
+      return `<button type="button" class="cor-swatch-option ${ok ? '' : 'cor-swatch-locked'}"
+        ${ok ? `data-cor="${c.hex}"` : `data-cor-locked="${escapeHtml(c.comoGanhar)}"`}
+        style="background:${c.hex};" title="${escapeHtml(ok ? c.nome : c.nome + ' — ' + c.comoGanhar)}"
+        aria-label="${escapeHtml(ok ? c.nome : c.nome + ', bloqueada: ' + c.comoGanhar)}">${ok ? '' : '🔒'}</button>`;
+    }).join('');
+    pop.innerHTML = livres + `<div class="cor-swatch-sep">recompensas</div>` + recompensas;
+
+    pop.querySelectorAll('[data-cor]').forEach(btn => btn.addEventListener('click', () => {
       escolherCorPrincipal(btn.getAttribute('data-cor'));
       pop.classList.remove('active');
+    }));
+    pop.querySelectorAll('[data-cor-locked]').forEach(btn => btn.addEventListener('click', () => {
+      showAppMessage('Cor bloqueada — destrava com: ' + btn.getAttribute('data-cor-locked'), 'info');
     }));
   }
   document.getElementById('corPrincipalSwatchBtn').addEventListener('click', (e) => {
@@ -2028,12 +3212,23 @@
   async function loadCorPrincipal(){
     try{
       const config = await dbGet(userPath('/Config')) || {};
+      // O tema vem antes da cor: applyCorPrincipal ajusta o acento conforme o
+      // fundo, então aplicar na ordem errada calcularia pro tema errado.
+      if(config.tema){
+        applyTheme(config.tema);
+        localStorage.setItem(THEME_KEY, config.tema);
+      }
       if(config.corPrincipal){
         applyCorPrincipal(config.corPrincipal);
         localStorage.setItem('corPrincipal', config.corPrincipal);
       }
-    } catch(e){ /* mantém a cor já aplicada a partir do localStorage */ }
+    } catch(e){ /* mantém tema e cor já aplicados a partir do localStorage */ }
   }
+
+  // Seletor de tema em Configurações → Aparência
+  document.querySelectorAll('.theme-opt').forEach(btn => {
+    btn.addEventListener('click', () => escolherTema(btn.getAttribute('data-theme-mode')));
+  });
 
   /* ---------- INBOX ---------- */
   async function addInboxItem(text, source){
@@ -2102,6 +3297,8 @@
     const items = Object.entries(data).filter(([id,it]) => it.status !== 'processed');
     document.getElementById('navInboxBadge').textContent = items.length;
     document.getElementById('inboxCountTab').textContent = items.length ? '(' + items.length + ')' : '';
+    const mobileBadge = document.getElementById('mobileInboxBadge');
+    if(mobileBadge) mobileBadge.textContent = items.length ? String(items.length) : '';
     const aiOrganizeBtn = document.getElementById('runAiOrganizeBtn');
     // Só mostra o botão de organizar com IA se houver itens ainda não enviados para revisão
     const organizable = items.filter(([id,it]) => it.status !== 'awaiting_review');
@@ -2123,7 +3320,7 @@
     });
   }
 
-  /* ---------- REVISÃO IA (organização via OpenAI, modelo Pull Request) ---------- */
+  /* ---------- REVISÃO IA (organização via Claude, modelo Pull Request) ---------- */
   function extractJson(text){
     const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
     return JSON.parse(cleaned);
@@ -2321,14 +3518,13 @@ Formato de saída — isto é OBRIGATÓRIO, porque o texto é interpretado por u
 
   document.getElementById('runAiOrganizeBtn').addEventListener('click', async () => {
     const btn = document.getElementById('runAiOrganizeBtn');
-    if(!openaiApiKey){ await loadOpenAiKey(); }
-    if(!openaiApiKey){ alert('Não foi possível carregar a chave da OpenAI do Firebase.'); return; }
+    if(!IA_PROXY_URL){ showAppMessage('As features de IA precisam da Cloud Function publicada.', 'error'); return; }
     btn.disabled = true; btn.textContent = '✦ Organizando...';
     showLoading('Organizando sua Inbox com IA...');
     try{
       const inbox = await dbGet(userPath('/Inbox')) || {};
       const pending = Object.entries(inbox).filter(([id,it]) => it.status === 'pending');
-      if(!pending.length){ alert('Não há itens novos em Capturas para organizar.'); return; }
+      if(!pending.length){ showAppMessage('Não há itens novos em Capturas para organizar.', 'info'); return; }
       const gavetas = await dbGet(userPath('/Gavetas')) || {};
       const oldDoc = serializeGavetasToDoc(gavetas);
       // Preserva as quebras de linha originais de cada captura (antes isso virava
@@ -2345,20 +3541,11 @@ ${capturasText}
 
 Gere o documento ATUALIZADO completo — todas as áreas existentes (reorganizadas se fizer sentido) mais as novas capturas já incorporadas nos lugares certos. Devolva o documento inteiro, não só as mudanças.`;
 
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + openaiApiKey },
-        body: JSON.stringify({
-          model:'gpt-4o-mini', temperature:0.4,
-          messages:[{ role:'system', content: ORGANIZER_SYSTEM_PROMPT }, { role:'user', content: userPrompt }]
-        })
-      });
-      const data = await res.json();
-      if(!res.ok) throw new Error((data.error && data.error.message) || 'Erro na chamada à OpenAI');
+      const conteudoIA = await chamarIA(ORGANIZER_SYSTEM_PROMPT, userPrompt);
       // normaliza quebras de linha (a API às vezes devolve \r\n) — sem isso, um \r
       // invisível no fim de cada linha faz TODA linha parecer diferente no diff,
       // mesmo quando o texto visível é idêntico ao da versão antiga.
-      const rawNewDoc = data.choices[0].message.content.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').replace(/\r\n?/g, '\n').trim();
+      const rawNewDoc = conteudoIA.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').replace(/\r\n?/g, '\n').trim();
       // rede de segurança: se a IA mesmo assim devolver duas áreas com o mesmo
       // nome, junta antes de mostrar a revisão (ver mergeDuplicateAreas); e se
       // algum trecho das capturas ficou de fora, anexa numa área de reserva em
@@ -2373,7 +3560,7 @@ Gere o documento ATUALIZADO completo — todas as áreas existentes (reorganizad
       await renderRevisao();
       document.querySelector('.subtab[data-target="storage-revisao"]').click();
     }catch(err){
-      alert('Erro ao organizar com IA: ' + err.message);
+      showAppMessage('Erro ao organizar com IA: ' + err.message, 'error');
     }finally{
       hideLoading();
       btn.disabled = false; btn.textContent = '✦ Organizar Capturas com IA';
@@ -2670,8 +3857,7 @@ Gere o documento ATUALIZADO completo — todas as áreas existentes (reorganizad
   /* ---------- REORGANIZAÇÃO DE GAVETAS VIA IA (modelo Pull Request) ---------- */
   document.getElementById('runStorageAiOrganizeBtn').addEventListener('click', async () => {
     const btn = document.getElementById('runStorageAiOrganizeBtn');
-    if(!openaiApiKey){ await loadOpenAiKey(); }
-    if(!openaiApiKey){ showAppMessage('Não foi possível carregar a chave da OpenAI do Firebase.', 'error'); return; }
+    if(!IA_PROXY_URL){ showAppMessage('As features de IA precisam da Cloud Function publicada.', 'error'); return; }
     btn.disabled = true; btn.textContent = '✦ Analisando...';
     showLoading('Analisando suas Gavetas com IA...');
     try{
@@ -2701,14 +3887,7 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
   ]
 }`;
 
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + openaiApiKey },
-        body: JSON.stringify({ model:'gpt-4o-mini', temperature:0.3, messages:[{ role:'system', content: systemPrompt }] })
-      });
-      const data = await res.json();
-      if(!res.ok) throw new Error((data.error && data.error.message) || 'Erro na chamada à OpenAI');
-      const proposal = extractJson(data.choices[0].message.content);
+      const proposal = extractJson(await chamarIA(systemPrompt, 'Analise as Gavetas acima e proponha as ações.'));
       const acoes = Array.isArray(proposal.acoes) ? proposal.acoes : [];
       if(!acoes.length){ showAppMessage('A IA não encontrou mudanças relevantes a propor — sua organização já está boa.', 'success'); return; }
 
@@ -3116,6 +4295,7 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
   async function confirmMealHoje(mid, status){
     const today = todayStr();
     await dbPut(userPath('/MealLog/' + today + '/' + mid), { status, at: new Date().toISOString() });
+    if(status === 'done') await grantXp('refeicao', { chave: 'ref_' + today + '_' + mid });
     await renderHojePlanoAlimentar();
   }
 
@@ -3295,8 +4475,8 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
 
   async function renderAcademia(){
     const [dias, metas] = await Promise.all([
-      dbGet(userPath('/AcademiaDias')) || {},
-      dbGet(userPath('/AcademiaMetas')) || {}
+      dbGet(userPath('/AcademiaDias')),
+      dbGet(userPath('/AcademiaMetas'))
     ]);
     academiaDraft = cloneAcademia(dias);
     const metasData = metas || {};
@@ -3967,9 +5147,9 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
       }
       await renderAgenda();
       await renderHojeAvisosEventos();
-      alert(events.length + ' evento(s) importado(s) do .ics.');
+      showAppMessage(events.length + ' evento(s) importado(s) do .ics.', 'success');
     }catch(err){
-      alert('Erro ao importar .ics: ' + err.message);
+      showAppMessage('Erro ao importar .ics: ' + err.message, 'error');
       await renderAgenda();
     }finally{
       e.target.value = '';
@@ -4165,6 +5345,8 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
 
   async function toggleTaskDone(id, done){
     await dbPatch(userPath('/Tasks/' + id), { done });
+    // Mesma chave usada pela fila de Hoje: concluir aqui ou lá paga uma vez só.
+    if(done) await grantXp('tarefa', { chave: 'tarefa_' + id, contador: 'tarefas' });
     await renderTaskGroups(); await renderHojeQueue();
   }
   async function deleteTask(id){
@@ -4224,8 +5406,8 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
   async function renderTaskGroups(){
     const el = document.getElementById('taskGroupsList');
     const [groupsData, tasksData] = await Promise.all([
-      dbGet(userPath('/TaskGroups')) || {},
-      dbGet(userPath('/Tasks')) || {}
+      dbGet(userPath('/TaskGroups')),
+      dbGet(userPath('/Tasks'))
     ]);
     const groups = groupsData || {};
     const tasks = tasksData || {};
@@ -4458,6 +5640,7 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
       const id = pill.getAttribute('data-pick-status-for');
       openStatusDropdown(pill, async (status) => {
         await dbPatchSilent(userPath('/MondayTasks/' + id), { status });
+        if(status === 'done') await grantXp('tarefa', { chave: 'monday_' + id, contador: 'tarefas' });
         await renderMondayTasks();
       });
     }));
@@ -4583,12 +5766,17 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
   async function renderHojeQueue(){
     const today = todayStr();
     const dow = new Date().getDay(); // 0=domingo
-    const [tasksData, academiaDias, skipsData] = await Promise.all([
-      dbGet(userPath('/Tasks')) || {},
-      dbGet(userPath('/AcademiaDias')) || {},
-      dbGet(userPath('/HojeSkips/' + today)) || {}
+    // Atenção: o default precisa vir DEPOIS do await. Escrever `dbGet(x) || {}`
+    // aqui dentro aplicaria o `||` na Promise (sempre truthy), nunca no valor —
+    // e o Firebase devolve null para caminhos vazios (conta nova).
+    const [tasksRaw, academiaRaw, skipsRaw] = await Promise.all([
+      dbGet(userPath('/Tasks')),
+      dbGet(userPath('/AcademiaDias')),
+      dbGet(userPath('/HojeSkips/' + today))
     ]);
-    const skips = skipsData || {};
+    const tasksData = tasksRaw || {};
+    const academiaDias = academiaRaw || {};
+    const skips = skipsRaw || {};
 
     const todaysTasks = Object.entries(tasksData).filter(([id,t]) => t.date === today);
     const diaHoje = academiaDias[dow] || {};
@@ -4600,7 +5788,12 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
         const key = 'tarefa_' + id;
         return {
           kind:'tarefa', obj: 'Tarefa', name: t.name, time: t.horario || '', done: !!t.done, skipped: !!skips[key],
-          onComplete: async () => { await dbPatch(userPath('/Tasks/' + id), { done:true }); },
+          onComplete: async () => {
+            await dbPatch(userPath('/Tasks/' + id), { done:true });
+            // A chave torna o ganho idempotente: desmarcar e remarcar não paga de novo.
+            await grantXp('tarefa', { chave: 'tarefa_' + id, contador: 'tarefas' });
+            if(t.date === today) await grantXp('tarefa_no_prazo', { chave: 'prazo_' + id });
+          },
           onSkip: async (skipped) => { await dbPatch(userPath('/HojeSkips/' + today), { [key]: skipped ? true : null }); }
         };
       }),
@@ -4608,7 +5801,16 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
         const key = 'treino_' + eid;
         return {
           kind:'treino', obj: 'Academia', name: e.nome, time: treinoHorario, done: !!(e.doneDates && e.doneDates[today]), skipped: !!skips[key],
-          onComplete: async () => { await dbPatch(userPath('/AcademiaDias/' + dow + '/exercicios/' + eid + '/doneDates'), { [today]: true }); },
+          onComplete: async () => {
+            await dbPatch(userPath('/AcademiaDias/' + dow + '/exercicios/' + eid + '/doneDates'), { [today]: true });
+            await grantXp('exercicio', { chave: 'ex_' + eid + '_' + today, contador: 'exercicios' });
+            // Bônus quando o último exercício do dia fecha o treino inteiro.
+            const restantes = exerciciosHoje.filter(([oid, oe]) =>
+              oid !== eid && !(oe.doneDates && oe.doneDates[today]));
+            if(!restantes.length){
+              await grantXp('treino_completo', { chave: 'treino_' + dow + '_' + today, contador: 'treinos' });
+            }
+          },
           onSkip: async (skipped) => { await dbPatch(userPath('/HojeSkips/' + today), { [key]: skipped ? true : null }); }
         };
       })
@@ -4629,8 +5831,8 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
     const el = document.getElementById('hojeHidratacaoList');
     const today = todayStr();
     const [metas, consumo] = await Promise.all([
-      dbGet(userPath('/AcademiaMetas')) || {},
-      dbGet(userPath('/AcademiaConsumo/' + today)) || {}
+      dbGet(userPath('/AcademiaMetas')),
+      dbGet(userPath('/AcademiaConsumo/' + today))
     ]);
     const metasData = metas || {};
     const consumoData = consumo || {};
@@ -4681,7 +5883,12 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
 
     el.querySelectorAll('[data-add-agua]').forEach(btn => btn.addEventListener('click', async () => {
       const add = Number(btn.getAttribute('data-add-agua'));
-      await dbPatch(userPath('/AcademiaConsumo/' + today), { aguaMl: aguaAtual + add });
+      const novoTotal = aguaAtual + add;
+      await dbPatch(userPath('/AcademiaConsumo/' + today), { aguaMl: novoTotal });
+      // Paga uma vez, no momento em que a meta do dia é atingida.
+      if(aguaMeta > 0 && novoTotal >= aguaMeta && aguaAtual < aguaMeta){
+        await grantXp('agua_meta', { chave: 'agua_' + today });
+      }
       await renderHojeHidratacao();
     }));
     el.querySelectorAll('[data-reset-agua]').forEach(btn => btn.addEventListener('click', async () => {
@@ -4710,8 +5917,8 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
     if(!el) return;
     const today = todayStr();
     const [config, consumo] = await Promise.all([
-      dbGet(userPath('/PlanoAlimentarConfig')) || {},
-      dbGet(userPath('/AcademiaConsumo/' + today)) || {}
+      dbGet(userPath('/PlanoAlimentarConfig')),
+      dbGet(userPath('/AcademiaConsumo/' + today))
     ]);
     const configData = config || {};
     const consumoData = consumo || {};
@@ -4971,6 +6178,70 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
       renderErrorState(containerIds, label, fn);
     }
   }
+  /* ---------- Render sob demanda ----------
+     Antes, bootApp() desenhava as 17 telas de uma vez: ~50 requisições HTTP no
+     login para montar Vision Board, Decisões, Monday e Plano Alimentar que
+     ninguém estava olhando — com o overlay global travado o tempo todo.
+
+     Agora o boot desenha só "Hoje" e o que é global (o badge da Inbox na
+     sidebar). Cada outra view desenha na primeira vez que é aberta. "Hoje"
+     redesenha a cada visita, porque é a tela que precisa estar sempre correta —
+     e com o cache de leitura isso quase nunca custa rede. */
+  const VIEW_RENDERERS = {
+    hoje: [
+      [renderHojeQueue,          'a fila de hoje',              []],
+      [renderHojeAvisosEventos,  'os avisos e eventos',         'hojeAvisosEventosList'],
+      [renderHojeHidratacao,     'água & creatina',             'hojeHidratacaoList'],
+      [renderHojePlanoAlimentar, 'o plano alimentar de hoje',   'hojePlanoAlimentarList'],
+      [renderHojeInsulina,       'a insulina de hoje',          'hojeInsulinaList'],
+      [renderHojeObjetivos,      'os objetivos de hoje',        'hojeObjetivosList'],
+      [renderRotinaHoje,         'a rotina de hoje',            'rotinaHojeUpcoming'],
+      [renderHojeTimeline,       'a linha do tempo de hoje',    'hojeTimeline24hTrack'],
+      [renderFluenciaToday,      'o Fluência de hoje',          []]
+    ],
+    storage: [
+      [renderRevisao,        'a Revisão',             'revisaoEmptyState'],
+      [renderStorage,        'as Gavetas',            'gavetaList'],
+      [renderStorageRevisao, 'a Revisão de Gavetas',  'storageRevisaoList']
+    ],
+    tarefas: [
+      [renderTasks,      'as Tarefas',            []],
+      [renderTaskGroups, 'os grupos de tarefas',  'taskGroupsList']
+    ],
+    monday:         [[renderMondayTasks, 'o Monday', 'mondayList']],
+    agenda:         [[renderAgenda, 'a Agenda', 'agendaList']],
+    rotina:         [[renderRotina, 'a Rotina', 'rotinaDaysGrid']],
+    casa: [
+      [renderCasaAtividades, 'as atividades da Casa', 'casaAtividadesList'],
+      [renderCasaRegras,     'as regras da Casa',     'casaRegrasList'],
+      [renderCasaErros,      'os erros da Casa',      'casaErrosList']
+    ],
+    financas:       [[renderFinancas, 'as Finanças', []]],
+    objetivos:      [[renderObjetivos, 'os Objetivos', 'objetivosList']],
+    decisoes:       [[renderDecisoes, 'as Decisões', 'decisoesList']],
+    visionboard:    [[renderVisionBoard, 'o Vision Board', 'visionBoard']],
+    fluencia:       [[renderFluencia, 'o Fluência', []]],
+    bateria:        [[renderBateria, 'a Bateria', []]],
+    academia:       [[renderAcademia, 'a Academia', 'academiaDaysGrid']],
+    diario:         [[renderDiario, 'o Diário', 'diarioEntriesList']],
+    planoalimentar: [[renderPlanoAlimentar, 'o Plano Alimentar', 'paDaysGrid']],
+    busca:          [],
+    config:         []
+  };
+
+  const viewsRendered = new Set();
+  function markAllViewsStale(){ viewsRendered.clear(); }
+
+  async function renderView(name){
+    if(!session) return;
+    const jobs = VIEW_RENDERERS[name];
+    if(!jobs) return;
+    // "hoje" sempre redesenha; as demais, só na primeira abertura.
+    if(name !== 'hoje' && viewsRendered.has(name)) return;
+    viewsRendered.add(name); // marca antes de aguardar: evita render duplo em clique rápido
+    await Promise.allSettled(jobs.map(([fn, label, containers]) => guardRender(fn, label, containers)));
+  }
+
   async function bootApp(){
     await renderHojeHeader();
     renderSidebarDate();
@@ -4980,41 +6251,26 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
     if(configNameEl) configNameEl.value = userDisplayName;
     const configBoardNameEl = document.getElementById('configBoardNameInput');
     if(configBoardNameEl) configBoardNameEl.value = (myBoards[session.uid] && myBoards[session.uid].name) || 'Meu Quadro';
-    await loadCasaMembros();
-    loadCorPrincipal();
-    loadDiarioTheme();
-    renderConfigCasaMembros();
-    populateCasaResponsavelSelects();
+    // Este trecho roda antes do Promise.allSettled e não passa por guardRender:
+    // qualquer exceção aqui matava o boot inteiro e deixava as 17 telas em
+    // "Carregando..." para sempre. Cada passo agora falha sozinho.
+    const preludio = [
+      ['os membros da Casa', loadCasaMembros],
+      ['a cor principal',    loadCorPrincipal],
+      ['o tema do Diário',   loadDiarioTheme],
+      ['a lista de pessoas', renderConfigCasaMembros],
+      ['os campos de responsável', populateCasaResponsavelSelects]
+    ];
+    for(const [rotulo, fn] of preludio){
+      try{ await fn(); }
+      catch(err){ console.error('Falha no boot ao carregar ' + rotulo + ':', err); }
+    }
+    // renderInbox fica no boot mesmo pertencendo ao Arquivo: é ele que preenche
+    // o badge de contagem na sidebar, visível de qualquer tela.
     await Promise.allSettled([
-      guardRender(renderHojeQueue, 'a fila de hoje', []),
-      guardRender(renderHojeAvisosEventos, 'os avisos e eventos', 'hojeAvisosEventosList'),
-      guardRender(renderHojeHidratacao, 'água & creatina', 'hojeHidratacaoList'),
-      guardRender(renderHojePlanoAlimentar, 'o plano alimentar de hoje', 'hojePlanoAlimentarList'),
-      guardRender(renderHojeInsulina, 'a insulina de hoje', 'hojeInsulinaList'),
-      guardRender(renderHojeObjetivos, 'os objetivos de hoje', 'hojeObjetivosList'),
-      guardRender(renderRotinaHoje, 'a rotina de hoje', 'rotinaHojeUpcoming'),
-      guardRender(renderHojeTimeline, 'a linha do tempo de hoje', 'hojeTimeline24hTrack'),
-      guardRender(renderFluenciaToday, 'o Fluência de hoje', []),
       guardRender(renderInbox, 'a Inbox', 'inboxList'),
-      guardRender(renderRevisao, 'a Revisão', 'revisaoEmptyState'),
-      guardRender(renderStorage, 'as Gavetas', 'gavetaList'),
-      guardRender(renderStorageRevisao, 'a Revisão de Gavetas', 'storageRevisaoList'),
-      guardRender(renderAgenda, 'a Agenda', 'agendaList'),
-      guardRender(renderTasks, 'as Tarefas', []),
-      guardRender(renderTaskGroups, 'os grupos de tarefas', 'taskGroupsList'),
-      guardRender(renderMondayTasks, 'o Monday', 'mondayList'),
-      guardRender(renderAcademia, 'a Academia', 'academiaDaysGrid'),
-      guardRender(renderDiario, 'o Diário', 'diarioEntriesList'),
-      guardRender(renderPlanoAlimentar, 'o Plano Alimentar', 'paDaysGrid'),
-      guardRender(renderRotina, 'a Rotina', 'rotinaDaysGrid'),
-      guardRender(renderFluencia, 'o Fluência', []),
-      guardRender(renderBateria, 'a Bateria', []),
-      guardRender(renderFinancas, 'as Finanças', []),
-      guardRender(renderCasaAtividades, 'as atividades da Casa', 'casaAtividadesList'),
-      guardRender(renderCasaRegras, 'as regras da Casa', 'casaRegrasList'),
-      guardRender(renderCasaErros, 'os erros da Casa', 'casaErrosList'),
-      guardRender(renderObjetivos, 'os Objetivos', 'objetivosList'),
-      guardRender(renderVisionBoard, 'o Vision Board', 'visionBoard')
+      guardRender(gamInit, 'o seu progresso', 'gamMissoesList'),
+      renderView('hoje')
     ]);
     // Trava de segurança: garante que o overlay global de loading nunca fique
     // travado após o boot, independentemente de qualquer erro acima.
@@ -5030,8 +6286,8 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
       currentBoardId = session.uid;
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('appShell').style.display = '';
-      await loadOpenAiKey();
-      await initBoards();
+    document.body.classList.add('app-ativo');
+        await initBoards();
       await bootApp();
       checkPendingInvites();
     }

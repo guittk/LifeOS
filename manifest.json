@@ -1,0 +1,53 @@
+{
+  "name": "Life OS — Sistema Operacional para Evolução Pessoal",
+  "short_name": "Life OS",
+  "description": "Tarefas, agenda, rotina, treino, plano alimentar, diário e objetivos — num lugar só.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#15161f",
+  "theme_color": "#60519b",
+  "categories": ["productivity", "lifestyle", "health"],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "maskable"
+    },
+    {
+      "src": "platform-favicon.ico",
+      "type": "image/x-icon",
+      "sizes": "48x48"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Hoje",
+      "short_name": "Hoje",
+      "description": "A fila de execução do dia",
+      "url": "./index.html#hoje"
+    },
+    {
+      "name": "Captura rápida",
+      "short_name": "Capturar",
+      "description": "Jogar uma ideia no Arquivo sem categorizar",
+      "url": "./index.html#captura"
+    },
+    {
+      "name": "Diário",
+      "short_name": "Diário",
+      "description": "Escrever a entrada de hoje",
+      "url": "./index.html#diario"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Life OS">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9b8bf0"/>
+      <stop offset="1" stop-color="#60519b"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#15161f"/>
+  <rect x="56" y="56" width="400" height="400" rx="80" fill="url(#g)"/>
+  <rect x="56" y="56" width="400" height="400" rx="80" fill="none" stroke="#1e202c" stroke-width="16"/>
+  <path d="M186 150v190h140" fill="none" stroke="#14121f" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

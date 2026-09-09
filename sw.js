@@ -1,0 +1,114 @@
+/* =============================================================================
+   SERVICE WORKER — Life OS
+
+   Duas estratégias, por natureza do recurso:
+
+   1. Shell do app (html/css/js/ícones): cache-first com revalidação em segundo
+      plano. Abre instantâneo e continua funcionando sem rede.
+   2. Leituras do Firebase: network-first com fallback pro cache. Online você vê
+      sempre o dado atual; offline você vê o último estado conhecido em vez de
+      uma tela de erro.
+
+   Escritas (PUT/PATCH/DELETE) e chamadas de auth/IA NUNCA passam por cache —
+   sem rede elas falham, e o app já trata esse erro.
+
+   Bump o CACHE_VERSION a cada deploy pra invalidar o shell antigo.
+   ============================================================================= */
+
+const CACHE_VERSION = 'lifeos-v1';
+const SHELL_CACHE = CACHE_VERSION + '-shell';
+const DATA_CACHE  = CACHE_VERSION + '-dados';
+
+const SHELL = [
+  './',
+  './index.html',
+  './css/style.css',
+  './js/gamification.js',
+  './js/app.js',
+  './manifest.json',
+  './icon.svg',
+  './icon-maskable.svg',
+  './platform-favicon.ico'
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(SHELL_CACHE)
+      // addAll falha inteiro se um arquivo falhar; individualmente, um 404 num
+      // recurso opcional não impede a instalação.
+      .then((cache) => Promise.allSettled(SHELL.map((url) => cache.add(url))))
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((nomes) => Promise.all(
+        nomes.filter((n) => !n.startsWith(CACHE_VERSION)).map((n) => caches.delete(n))
+      ))
+      .then(() => self.clients.claim())
+  );
+});
+
+// A URL do Firebase carrega o token em ?auth=... — o token gira, então usar a
+// URL crua como chave faria o cache errar sempre. A chave normalizada tira a
+// query e mantém só o caminho do nó.
+function chaveDeDados(url) {
+  const u = new URL(url);
+  return new Request(u.origin + u.pathname, { method: 'GET' });
+}
+
+function ehLeituraDeDados(request, url) {
+  return request.method === 'GET' && url.hostname.endsWith('firebaseio.com');
+}
+
+function ehShell(request, url) {
+  return request.method === 'GET'
+    && url.origin === self.location.origin
+    && !url.pathname.startsWith('/__');   // rotas do harness de dev
+}
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  let url;
+  try { url = new URL(request.url); } catch (e) { return; }
+
+  // Auth, IA e escritas: sempre rede, nunca cache.
+  if (request.method !== 'GET') return;
+  if (url.hostname.includes('googleapis.com') || url.hostname.includes('openai.com')) return;
+
+  if (ehLeituraDeDados(request, url)) {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          const copia = res.clone();
+          caches.open(DATA_CACHE).then((c) => c.put(chaveDeDados(request.url), copia));
+          return res;
+        })
+        .catch(() => caches.open(DATA_CACHE)
+          .then((c) => c.match(chaveDeDados(request.url)))
+          .then((hit) => hit || new Response('null', {
+            status: 200, headers: { 'Content-Type': 'application/json' }
+          })))
+    );
+    return;
+  }
+
+  if (ehShell(request, url)) {
+    event.respondWith(
+      caches.match(request).then((hit) => {
+        const rede = fetch(request)
+          .then((res) => {
+            if (res && res.status === 200) {
+              const copia = res.clone();
+              caches.open(SHELL_CACHE).then((c) => c.put(request, copia));
+            }
+            return res;
+          })
+          .catch(() => hit);
+        return hit || rede;
+      })
+    );
+  }
+});
