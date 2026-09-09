@@ -2111,3 +2111,39 @@
   }
   .parse-hint.active{ opacity:1; max-height:40px; margin:-8px 0 14px; }
   .flow-recorrente{ color:var(--blue); background:var(--blue-soft); }
+
+  /* ============================================================================
+     FASE 7 — fechamento do dia
+     ============================================================================ */
+  .fech-kicker{
+    font-family:var(--mono); font-size:9.5px; letter-spacing:.17em; text-transform:uppercase;
+    color:var(--blue); margin:0 0 6px;
+  }
+  .fech-titulo{ font-family:var(--serif); font-weight:700; font-size:24px; margin:0 0 18px; }
+  .fech-resumo{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); gap:10px;
+    margin-bottom:20px; padding-bottom:18px; border-bottom:1px solid var(--line);
+  }
+  .fech-stat{ display:flex; flex-direction:column; gap:2px; }
+  .fech-stat b{
+    font-family:var(--serif); font-size:22px; font-weight:700; line-height:1;
+    font-variant-numeric:tabular-nums;
+  }
+  .fech-stat .fech-xp{ color:var(--acid); }
+  .fech-stat span{
+    font-family:var(--mono); font-size:9px; letter-spacing:.13em; text-transform:uppercase;
+    color:var(--text-dim);
+  }
+  .fech-cols{ display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:18px; }
+  .fech-col-label{
+    font-family:var(--mono); font-size:9.5px; letter-spacing:.15em; text-transform:uppercase;
+    color:var(--text-dim); margin:0 0 8px;
+  }
+  .fech-lista{ max-height:170px; overflow-y:auto; display:flex; flex-direction:column; gap:5px; }
+  .fech-item{
+    font-size:13px; color:var(--text-mut); padding:6px 9px;
+    border:1px solid var(--line); border-radius:7px; background:var(--bg);
+    display:flex; align-items:center; gap:8px; justify-content:space-between;
+  }
+  #fechFeitas .fech-item{ color:var(--text-dim); text-decoration:line-through; }
+  #abrirFechamentoBtn{ margin-left:auto; }

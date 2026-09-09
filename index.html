@@ -610,6 +610,42 @@
   </div>
 </div>
 
+<!-- MODAL — FECHAMENTO DO DIA -->
+<div class="confirm-modal" id="fechamentoModal">
+  <div class="confirm-modal-panel confirm-modal-panel-wide">
+    <p class="fech-kicker">// fechamento do dia</p>
+    <h2 class="fech-titulo" id="fechTitulo">Como foi hoje?</h2>
+
+    <div class="fech-resumo" id="fechResumo"></div>
+
+    <div class="fech-cols">
+      <div>
+        <p class="fech-col-label">Feito hoje</p>
+        <div class="fech-lista" id="fechFeitas"></div>
+      </div>
+      <div>
+        <p class="fech-col-label">Rola para amanhã</p>
+        <div class="fech-lista" id="fechPendentes"></div>
+      </div>
+    </div>
+
+    <p class="fech-col-label" style="margin-top:16px;">Uma linha sobre o dia — vai pro Diário</p>
+    <div class="mood-row" id="fechMoodRow">
+      <div class="mood-chip" data-mood="😞">😞</div>
+      <div class="mood-chip" data-mood="😕">😕</div>
+      <div class="mood-chip active" data-mood="🙂">🙂</div>
+      <div class="mood-chip" data-mood="😄">😄</div>
+      <div class="mood-chip" data-mood="🤩">🤩</div>
+    </div>
+    <textarea id="fechTexto" class="modal-text-input" rows="2" placeholder="Opcional — o que marcou o dia?" style="resize:vertical;"></textarea>
+
+    <div class="confirm-modal-actions">
+      <button class="btn btn-ghost btn-sm" id="fechCancelBtn">Agora não</button>
+      <button class="btn btn-primary btn-sm" id="fechOkBtn">Fechar o dia</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL — CONVITES PENDENTES (ao logar) -->
 <div class="confirm-modal" id="boardInvitesPendingModal">
   <div class="confirm-modal-panel">
@@ -658,6 +694,7 @@
           <span class="gam-streak-flama">🔥</span>
           <span class="gam-streak-txt" id="gamStreak">0 dias</span>
         </div>
+        <button type="button" class="btn btn-ghost btn-sm" id="abrirFechamentoBtn">Fechar o dia</button>
       </div>
       <div class="gam-attr-grid" id="gamAtributos"></div>
     </div>
@@ -1314,6 +1351,13 @@
           <button type="button" class="theme-opt" data-theme-mode="escuro">☾ Escuro</button>
           <button type="button" class="theme-opt" data-theme-mode="sistema">◐ Sistema</button>
         </div>
+      </div>
+      <div class="config-row">
+        <div>
+          <div class="config-row-label">Notificações</div>
+          <div class="config-row-desc">Três avisos e só: início de bloco da rotina, refeição com insulina, e sequência em risco às 21h. Funcionam com o app aberto ou instalado.</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="notificacoesBtn" type="button">Ativar</button>
       </div>
       <div class="config-row">
         <div>

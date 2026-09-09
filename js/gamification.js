@@ -120,8 +120,10 @@ function gamEstadoVazio(){
     streak: { atual: 0, melhor: 0, ultimoDia: '', escudos: 1, escudoMes: '' },
     contadores: { tarefas: 0, exercicios: 0, treinos: 0, cards: 0, diario: 0, decisoes: 0, objetivos: 0 },
     conquistas: {},
-    eventos: {},   // ledger de idempotência
-    historico: {}  // { 'YYYY-MM-DD': xp do dia }
+    eventos: {},       // ledger de idempotência
+    historico: {},     // { 'YYYY-MM-DD': xp do dia }
+    diasFechados: {},  // { 'YYYY-MM-DD': { humor, em } }
+    avisos: {}         // notificações já disparadas, por dia — evita repetir
   };
 }
 // Normaliza o que vem do banco: um nó parcial (ou ausente) não pode quebrar nada.
@@ -129,12 +131,14 @@ function gamNormalizar(raw){
   var vazio = gamEstadoVazio();
   if(!raw || typeof raw !== 'object') return vazio;
   return {
-    xp:          Object.assign(vazio.xp, raw.xp || {}),
-    streak:      Object.assign(vazio.streak, raw.streak || {}),
-    contadores:  Object.assign(vazio.contadores, raw.contadores || {}),
-    conquistas:  raw.conquistas || {},
-    eventos:     raw.eventos || {},
-    historico:   raw.historico || {}
+    xp:           Object.assign(vazio.xp, raw.xp || {}),
+    streak:       Object.assign(vazio.streak, raw.streak || {}),
+    contadores:   Object.assign(vazio.contadores, raw.contadores || {}),
+    conquistas:   raw.conquistas || {},
+    eventos:      raw.eventos || {},
+    historico:    raw.historico || {},
+    diasFechados: raw.diasFechados || {},
+    avisos:       raw.avisos || {}
   };
 }
 
@@ -435,6 +439,119 @@ function gamRenderTrofeus(){
 
   var contador = document.getElementById('trofeusCount');
   if(contador) contador.textContent = ganhas + ' / ' + GAM_CONQUISTAS.length;
+}
+
+/* ============================================================================
+   FECHAMENTO DO DIA
+   O dia nunca terminava: o que ficou por fazer não era revisto, e a sequência
+   avançava em silêncio. Este ritual de 30 segundos mostra o que foi feito, o
+   que rola pra amanhã, e captura uma linha sobre o dia direto no Diário.
+   ============================================================================ */
+var fechHumor = '🙂';
+
+function fechDiaJaFechado(){
+  return !!(gamProgresso && gamProgresso.diasFechados && gamProgresso.diasFechados[todayStr()]);
+}
+
+async function abrirFechamento(){
+  var modal = document.getElementById('fechamentoModal');
+  if(!modal) return;
+  if(!gamProgresso) await gamCarregar();
+
+  var hoje = todayStr();
+  // `activities` é montado por renderHojeQueue e reflete a fila real de hoje.
+  var fila = (typeof activities !== 'undefined' && Array.isArray(activities)) ? activities : [];
+  var feitas = fila.filter(function(a){ return a.done; });
+  var pendentes = fila.filter(function(a){ return !a.done && !a.skipped; });
+  var xpHoje = (gamProgresso.historico && gamProgresso.historico[hoje]) || 0;
+
+  var titulo = document.getElementById('fechTitulo');
+  if(titulo){
+    titulo.textContent = feitas.length && !pendentes.length ? 'Dia zerado.'
+      : feitas.length ? 'Como foi hoje?'
+      : 'Dia difícil?';
+  }
+
+  var resumo = document.getElementById('fechResumo');
+  if(resumo){
+    var pct = fila.length ? Math.round((feitas.length / fila.length) * 100) : 0;
+    resumo.innerHTML =
+      '<div class="fech-stat"><b>' + feitas.length + '/' + fila.length + '</b><span>concluídas</span></div>' +
+      '<div class="fech-stat"><b>' + pct + '%</b><span>do dia</span></div>' +
+      '<div class="fech-stat"><b class="fech-xp">+' + xpHoje + '</b><span>XP hoje</span></div>' +
+      '<div class="fech-stat"><b>' + ((gamProgresso.streak && gamProgresso.streak.atual) || 0) + '</b><span>dias seguidos</span></div>';
+  }
+
+  var listaHtml = function(itens, vazio){
+    if(!itens.length) return '<p class="empty-state">' + vazio + '</p>';
+    return itens.map(function(a){
+      return '<div class="fech-item">' + escapeHtml(a.name) +
+             (a.atraso ? '<span class="tag flow-atraso">' + a.atraso + 'd</span>' : '') + '</div>';
+    }).join('');
+  };
+  var elFeitas = document.getElementById('fechFeitas');
+  var elPend = document.getElementById('fechPendentes');
+  if(elFeitas) elFeitas.innerHTML = listaHtml(feitas, 'Nada concluído hoje.');
+  if(elPend) elPend.innerHTML = listaHtml(pendentes, 'Nada pendente — dia limpo.');
+
+  var texto = document.getElementById('fechTexto');
+  if(texto) texto.value = '';
+  fechHumor = '🙂';
+  document.querySelectorAll('#fechMoodRow .mood-chip').forEach(function(c){
+    c.classList.toggle('active', c.getAttribute('data-mood') === fechHumor);
+  });
+
+  modal.classList.add('active');
+}
+
+async function confirmarFechamento(){
+  var hoje = todayStr();
+  var texto = document.getElementById('fechTexto');
+  var conteudo = texto ? texto.value.trim() : '';
+
+  // A linha sobre o dia vira uma entrada de Diário de verdade — não um campo
+  // solto. Assim ela conta para os objetivos e para o atributo Mente.
+  if(conteudo){
+    var id = newId();
+    await dbPut(userPath('/DiarioEntradas/' + id), {
+      mood: fechHumor, text: conteudo, createdAt: new Date().toISOString()
+    });
+    await grantXp('diario', { chave: 'diario_' + id, contador: 'diario' });
+  }
+
+  if(!gamProgresso) await gamCarregar();
+  if(!gamProgresso.diasFechados) gamProgresso.diasFechados = {};
+  gamProgresso.diasFechados[hoje] = { humor: fechHumor, em: new Date().toISOString() };
+  gamFecharDia();          // conta o dia na sequência
+  gamAgendarSalvar();
+
+  document.getElementById('fechamentoModal').classList.remove('active');
+  showAppMessage('Dia fechado. Até amanhã.', 'success');
+  if(typeof renderDiario === 'function') await renderDiario();
+  gamRenderHud();
+
+  // A IA organiza as capturas do dia aqui, no fechamento — não por um botão que
+  // você precisa lembrar de clicar. O resultado espera na aba Revisão, para
+  // você aprovar amanhã. Sem a Cloud Function publicada, isso simplesmente não
+  // acontece e o fechamento segue normal.
+  organizarCapturasNoFechamento();
+}
+
+async function organizarCapturasNoFechamento(){
+  var btn = document.getElementById('runAiOrganizeBtn');
+  if(!btn || btn.style.display === 'none') return;   // nada pendente para organizar
+  if(typeof IA_PROXY_URL === 'undefined' || !IA_PROXY_URL) return;
+  try{
+    var inbox = await dbGet(userPath('/Inbox')) || {};
+    var pendentes = Object.values(inbox).filter(function(i){
+      return i.status !== 'processed' && i.status !== 'awaiting_review';
+    });
+    if(!pendentes.length) return;
+    showAppMessage('Organizando ' + pendentes.length + ' captura(s) — o resultado espera em Revisão.', 'info');
+    btn.click();
+  }catch(err){
+    console.warn('Falha ao organizar capturas no fechamento:', err);
+  }
 }
 
 /* Ponto de entrada chamado pelo boot do app. */

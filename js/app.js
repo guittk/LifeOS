@@ -197,6 +197,126 @@
     });
   }
 
+  /* ---------- Notificações ----------
+     O app esperava você lembrar dele. Três avisos, e só três — mais que isso
+     vira ruído e a pessoa desliga tudo.
+
+     LIMITE HONESTO: sem servidor de push, estes avisos só disparam com o app
+     aberto (inclusive instalado, rodando em segundo plano no celular). Push
+     de verdade, com o app fechado, exigiria Firebase Cloud Messaging e uma
+     function — fica fora do escopo atual. */
+  const NOTIF_KEY = 'lifeosNotificacoes';
+  let notifTimer = null;
+
+  function notificacoesLigadas(){
+    return localStorage.getItem(NOTIF_KEY) === 'sim' &&
+           typeof Notification !== 'undefined' && Notification.permission === 'granted';
+  }
+
+  async function pedirPermissaoNotificacoes(){
+    if(typeof Notification === 'undefined'){
+      showAppMessage('Este navegador não suporta notificações.', 'error');
+      return false;
+    }
+    let permissao = Notification.permission;
+    if(permissao === 'default') permissao = await Notification.requestPermission();
+    if(permissao !== 'granted'){
+      localStorage.setItem(NOTIF_KEY, 'nao');
+      showAppMessage('Notificações bloqueadas pelo navegador.', 'error');
+      atualizarBotaoNotificacoes();
+      return false;
+    }
+    localStorage.setItem(NOTIF_KEY, 'sim');
+    atualizarBotaoNotificacoes();
+    new Notification('Life OS', { body: 'Pronto — vou te avisar do essencial.', icon: 'icon.svg' });
+    return true;
+  }
+
+  function atualizarBotaoNotificacoes(){
+    const btn = document.getElementById('notificacoesBtn');
+    if(!btn) return;
+    const bloqueado = typeof Notification !== 'undefined' && Notification.permission === 'denied';
+    btn.textContent = bloqueado ? 'Bloqueadas no navegador'
+                    : notificacoesLigadas() ? 'Desativar' : 'Ativar';
+    btn.disabled = bloqueado;
+  }
+
+  // Dispara uma vez por chave por dia — o registro fica no /Progresso, então
+  // trocar de aba ou recarregar não faz o aviso repetir.
+  function avisar(chave, titulo, corpo){
+    if(!notificacoesLigadas()) return;
+    if(typeof gamProgresso === 'undefined' || !gamProgresso) return;
+    const hoje = todayStr();
+    if(!gamProgresso.avisos) gamProgresso.avisos = {};
+    const marca = hoje + '_' + chave;
+    if(gamProgresso.avisos[marca]) return;
+    gamProgresso.avisos[marca] = 1;
+    gamAgendarSalvar();
+    try{
+      new Notification(titulo, { body: corpo, icon: 'icon.svg', tag: marca });
+    }catch(e){ console.warn('Falha ao notificar:', e); }
+  }
+
+  async function checarAvisos(){
+    if(!notificacoesLigadas() || !session) return;
+    const agora = new Date();
+    const nowMin = agora.getHours() * 60 + agora.getMinutes();
+    const hoje = todayStr();
+
+    try{
+      // 1) Início de bloco da rotina
+      const janela = await calcularJanelaLivre();
+      janela.blocos.forEach(b => {
+        // Janela de 2 minutos para não perder o disparo entre um tick e outro.
+        if(b.inicio <= nowMin && nowMin < b.inicio + 2){
+          avisar('rotina_' + b.id, b.nome, 'Começa agora, até ' + minutosParaHora(b.fim) + '.');
+        }
+      });
+
+      // 2) Refeição com dose de insulina
+      const [paConfig, planoDia, mealLog] = await Promise.all([
+        dbGet(userPath('/PlanoAlimentarConfig')),
+        dbGet(userPath('/PlanoAlimentar/' + agora.getDay())),
+        dbGet(userPath('/MealLog/' + hoje))
+      ]);
+      const cfg = paConfig || {}, log = mealLog || {};
+      Object.entries((planoDia || {}).refeicoes || {}).forEach(([mid, r]) => {
+        const hm = rotToMinutes(r.horario);
+        if(hm == null || log[mid]) return;
+        if(hm <= nowMin && nowMin < hm + 2){
+          const dose = INSULINA_REFEICOES
+            .filter(x => (r.nome || '').toLowerCase().includes(x.label.toLowerCase().split(' ')[0]))
+            .map(x => Number(cfg['insulina' + x.key + 'Ui']) || 0)
+            .find(v => v > 0);
+          avisar('refeicao_' + mid, r.nome || 'Refeição',
+                 dose ? 'Hora da refeição — dose de ' + dose + ' UI.' : 'Hora da refeição.');
+        }
+      });
+
+      // 3) Sequência em risco às 21h
+      if(nowMin >= 21 * 60 && nowMin < 21 * 60 + 5){
+        const fila = Array.isArray(activities) ? activities.filter(a => !a.skipped) : [];
+        const feitas = fila.filter(a => a.done).length;
+        const pct = fila.length ? (feitas / fila.length) * 100 : 100;
+        const jaFechou = gamProgresso.diasFechados && gamProgresso.diasFechados[hoje];
+        if(!jaFechou && fila.length && pct < 80){
+          avisar('streak', 'Sequência em risco',
+                 'Faltam ' + (fila.length - feitas) + ' itens pra fechar o dia.');
+        }
+      }
+    }catch(err){
+      console.warn('Falha ao checar avisos:', err);
+    }
+  }
+  function minutosParaHora(m){
+    return String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
+  }
+  function iniciarAgendadorDeAvisos(){
+    clearInterval(notifTimer);
+    notifTimer = setInterval(checarAvisos, 60000); // um tick por minuto
+    checarAvisos();
+  }
+
   /* ---------- Navegação principal ---------- */
   const navItems = document.querySelectorAll('.nav-item[data-view]');
 
@@ -3235,6 +3355,34 @@
   // Seletor de tema em Configurações → Aparência
   document.querySelectorAll('.theme-opt').forEach(btn => {
     btn.addEventListener('click', () => escolherTema(btn.getAttribute('data-theme-mode')));
+  });
+
+  // Notificações — Configurações → Aparência
+  const notificacoesBtn = document.getElementById('notificacoesBtn');
+  if(notificacoesBtn){
+    notificacoesBtn.addEventListener('click', async () => {
+      if(notificacoesLigadas()){
+        localStorage.setItem(NOTIF_KEY, 'nao');
+        atualizarBotaoNotificacoes();
+        showAppMessage('Notificações desativadas.', 'info');
+        return;
+      }
+      if(await pedirPermissaoNotificacoes()) iniciarAgendadorDeAvisos();
+    });
+  }
+
+  /* ---------- Fechamento do dia ---------- */
+  document.getElementById('abrirFechamentoBtn')?.addEventListener('click', abrirFechamento);
+  document.getElementById('fechCancelBtn')?.addEventListener('click', () => {
+    document.getElementById('fechamentoModal').classList.remove('active');
+  });
+  document.getElementById('fechOkBtn')?.addEventListener('click', confirmarFechamento);
+  document.querySelectorAll('#fechMoodRow .mood-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#fechMoodRow .mood-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      fechHumor = chip.getAttribute('data-mood');
+    });
   });
 
   /* ---------- INBOX ---------- */
@@ -6592,6 +6740,19 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
     // travado após o boot, independentemente de qualquer erro acima.
     loadingDepth = 0;
     globalLoadingEl.classList.remove('active');
+
+    atualizarBotaoNotificacoes();
+    if(notificacoesLigadas()) iniciarAgendadorDeAvisos();
+
+    // Depois das 21h, o fechamento se oferece uma vez — não fica insistindo.
+    // Abrir sozinho é o que faz o ritual acontecer; esperar você lembrar de
+    // clicar seria o mesmo erro do botão de IA.
+    try{
+      const agora = new Date();
+      if(agora.getHours() >= 21 && !fechDiaJaFechado() && Array.isArray(activities) && activities.length){
+        setTimeout(abrirFechamento, 1200);
+      }
+    }catch(e){ /* fechamento é opcional: nunca deve impedir o boot */ }
   }
 
   (async function init(){
