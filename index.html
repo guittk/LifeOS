@@ -253,7 +253,17 @@
   <div class="confirm-modal-panel">
     <p class="confirm-modal-text" style="margin-bottom:14px;">Nova tarefa</p>
     <label class="modal-field-label">Tarefa</label>
-    <input type="text" id="newTaskNameInput" class="modal-text-input" placeholder="O que precisa ser feito?" autocomplete="off">
+    <input type="text" id="newTaskNameInput" class="modal-text-input" placeholder="ex: amanhã 14h ligar pro dentista" autocomplete="off">
+    <p class="parse-hint" id="newTaskParseHint"></p>
+    <label class="modal-field-label">Repetir</label>
+    <select id="newTaskRecorrenciaSelect" class="modal-text-input">
+      <option value="">Não repete</option>
+      <option value="diaria">Todo dia</option>
+      <option value="uteis">Dias úteis (seg–sex)</option>
+      <option value="semanal">Toda semana</option>
+      <option value="quinzenal">A cada 15 dias</option>
+      <option value="mensal">Todo mês</option>
+    </select>
     <div class="modal-field-row">
       <div>
         <label class="modal-field-label">Prazo</label>

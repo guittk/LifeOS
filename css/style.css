@@ -2102,3 +2102,12 @@
 
   /* O card de missão ganha a frase com mais presença. */
   .hero-motivation{ color:var(--sage); }
+
+  /* Fase 6 — entrada sem esforço */
+  .parse-hint{
+    font-family:var(--mono); font-size:11px; color:var(--cyan);
+    margin:-8px 0 14px; min-height:0; opacity:0; max-height:0; overflow:hidden;
+    transition: opacity var(--t-fast) ease, max-height var(--t-fast) ease, margin var(--t-fast) ease;
+  }
+  .parse-hint.active{ opacity:1; max-height:40px; margin:-8px 0 14px; }
+  .flow-recorrente{ color:var(--blue); background:var(--blue-soft); }

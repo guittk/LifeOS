@@ -696,6 +696,7 @@
             <span class="tag ${meta.cls}">${meta.label}</span>${a.time ? '<span class="queue-time">' + escapeHtml(a.time) + '</span>' : ''}
             ${a.atraso > 0 ? `<span class="tag flow-atraso">${a.atraso === 1 ? '1 dia atrasada' : a.atraso + ' dias atrasada'}</span>` : ''}
             ${a.semData ? '<span class="tag flow-semdata">quando der</span>' : ''}
+            ${a.recorrencia ? `<span class="tag flow-recorrente">↻ ${escapeHtml(TAREFA_RECORRENCIA_LABEL[a.recorrencia] || a.recorrencia)}</span>` : ''}
             ${!a.done ? `<button class="flow-skip-btn" data-skip="${idx}">${a.skipped ? 'desfazer' : 'pular hoje'}</button>` : ''}
           </div>
         </div>
@@ -3237,7 +3238,39 @@
   });
 
   /* ---------- INBOX ---------- */
+  /* ---------- Arquivamento automático ----------
+     Quando a captura já diz para onde vai ("Game Studio:" na primeira linha, ou
+     "[Saúde]"), ela não precisa esperar você organizar — vai direto pra gaveta.
+
+     Deliberadamente conservador: só arquiva quando o título bate EXATAMENTE com
+     o nome de uma gaveta existente. Adivinhar assunto por semelhança colocaria
+     coisa no lugar errado, e um arquivo em que você não confia é pior que um
+     desorganizado. Tudo que não bate continua na Inbox, como antes. */
+  async function tentarArquivarCaptura(texto){
+    const titulo = detectInboxTitle(texto);
+    if(!titulo) return null;
+    const corpo = String(texto).split('\n').slice(1).join('\n').trim();
+    if(!corpo) return null; // só o título, sem conteúdo: não dá pra arquivar
+
+    const gavetas = await dbGet(userPath('/Gavetas')) || {};
+    const alvo = Object.entries(gavetas).find(([, g]) => searchNorm(g.name || '') === searchNorm(titulo));
+    if(!alvo) return null;
+
+    const [gid, g] = alvo;
+    const ordem = Object.values(g.items || {}).reduce((max, it) => Math.max(max, it.order || 0), -1) + 1;
+    await dbPut(userPath('/Gavetas/' + gid + '/items/' + newId()), { text: corpo, order: ordem });
+    return g.name;
+  }
+
   async function addInboxItem(text, source){
+    const gaveta = await tentarArquivarCaptura(text);
+    if(gaveta){
+      await grantXp('captura_organizada', { chave: 'auto_' + newId() });
+      showAppMessage('Arquivado direto em "' + gaveta + '".', 'success');
+      await renderStorage();
+      await renderInbox();
+      return;
+    }
     const id = newId();
     await dbPut(userPath('/Inbox/' + id), { text, source: source || 'inbox', createdAt: new Date().toISOString(), status:'pending' });
     await renderInbox();
@@ -5323,23 +5356,212 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
     if(e.target.id === 'newTaskModal') closeTaskModal();
   });
 
+  /* ---------- Interpretador de texto de tarefa ----------
+     "amanhã 14h ligar pro dentista" deveria virar uma tarefa com data, hora e
+     nome — não três campos para você preencher. Cada padrão reconhecido é
+     removido do nome, então sobra só a ação.
+
+     Deliberadamente conservador: na dúvida, não interpreta. Uma data errada
+     silenciosamente é pior que nenhuma data. */
+  const DIAS_SEMANA_PT = {
+    domingo:0, dom:0, segunda:1, seg:1, 'terça':2, terca:2, ter:2,
+    quarta:3, qua:3, quinta:4, qui:4, sexta:5, sex:5, 'sábado':6, sabado:6, sab:6
+  };
+
+  function dataMaisDias(n){
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+  function proximoDiaDaSemana(alvo){
+    const hoje = new Date().getDay();
+    let delta = (alvo - hoje + 7) % 7;
+    if(delta === 0) delta = 7; // "na segunda" dito numa segunda significa a próxima
+    return dataMaisDias(delta);
+  }
+
+  function interpretarTexto(texto){
+    let nome = String(texto || '').trim();
+    let date = '', horario = '', recorrencia = '';
+    const achados = [];
+    // Remove o trecho reconhecido e registra o que foi entendido.
+    const consumir = (regex, fn) => {
+      const m = nome.match(regex);
+      if(!m) return false;
+      if(fn(m) === false) return false;
+      nome = (nome.slice(0, m.index) + ' ' + nome.slice(m.index + m[0].length)).replace(/\s{2,}/g, ' ').trim();
+      return true;
+    };
+
+    // Atenção com acentos: \b se apoia em \w, e "ã"/"ê"/"á" NÃO são \w. Um
+    // /\bamanhã\b/ nunca casa, porque não existe fronteira entre "ã" e o espaço
+    // seguinte. Por isso os padrões com acento usam (^|\s) e (?=\s|$).
+    const B = '(?:^|\\s)';   // início de palavra tolerante a acento
+    const E = '(?=\\s|$|[,.;])';
+
+    // 1) Recorrência primeiro: "toda segunda" não pode virar data única.
+    consumir(new RegExp(B + '(todo dia|todos os dias|diariamente)' + E, 'i'), () => { recorrencia = 'diaria'; achados.push('todo dia'); });
+    if(!recorrencia) consumir(new RegExp(B + '(dias [úu]teis|todo dia [úu]til)' + E, 'i'), () => { recorrencia = 'uteis'; achados.push('dias úteis'); });
+    if(!recorrencia) consumir(new RegExp(B + 'tod[ao]s?\\s+(?:as\\s+|os\\s+)?(semanas?|segundas?|ter[çc]as?|quartas?|quintas?|sextas?|s[áa]bados?|domingos?)' + E, 'i'), (m) => {
+      recorrencia = 'semanal'; achados.push('toda semana');
+      const dia = m[1].toLowerCase().replace(/s$/, '').replace('ç','c').replace(/[áâ]/g,'a');
+      const chave = Object.keys(DIAS_SEMANA_PT).find(k => k.length > 3 && dia.startsWith(k.slice(0,3)));
+      if(chave) date = proximoDiaDaSemana(DIAS_SEMANA_PT[chave]);
+    });
+    if(!recorrencia) consumir(new RegExp(B + '(todo m[êe]s|mensalmente)' + E, 'i'), () => { recorrencia = 'mensal'; achados.push('todo mês'); });
+
+    // 2) Data
+    if(!date){
+      consumir(new RegExp(B + 'depois de amanh[ãa]' + E, 'i'), () => { date = dataMaisDias(2); achados.push('depois de amanhã'); }) ||
+      consumir(new RegExp(B + 'amanh[ãa]' + E, 'i'),           () => { date = dataMaisDias(1); achados.push('amanhã'); }) ||
+      consumir(new RegExp(B + 'hoje' + E, 'i'),                () => { date = dataMaisDias(0); achados.push('hoje'); }) ||
+      consumir(/\bem (\d{1,2}) dias?\b/i,  (m) => { date = dataMaisDias(parseInt(m[1],10)); achados.push('em ' + m[1] + ' dias'); }) ||
+      consumir(new RegExp(B + '(?:na\\s+|no\\s+)?(domingo|segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado)(?:-feira)?' + E, 'i'), (m) => {
+        const k = m[1].toLowerCase().replace('ç','c').replace(/[áâ]/g,'a');
+        const alvo = DIAS_SEMANA_PT[k] ?? DIAS_SEMANA_PT[k.slice(0,3)];
+        if(alvo == null) return false;
+        date = proximoDiaDaSemana(alvo);
+        achados.push(m[1]);
+      }) ||
+      consumir(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/, (m) => {
+        const dia = parseInt(m[1],10), mes = parseInt(m[2],10);
+        if(dia < 1 || dia > 31 || mes < 1 || mes > 12) return false;
+        let ano = m[3] ? parseInt(m[3],10) : new Date().getFullYear();
+        if(ano < 100) ano += 2000;
+        const iso = ano + '-' + String(mes).padStart(2,'0') + '-' + String(dia).padStart(2,'0');
+        // Sem ano explícito e já passou: assume o ano que vem.
+        date = (!m[3] && iso < todayStr()) ? (ano+1) + iso.slice(4) : iso;
+        achados.push(m[0]);
+      });
+    }
+
+    // 3) Horário — "14h", "14:30", "9h30", "às 9"
+    consumir(/\b(?:[àa]s\s+)?(\d{1,2})[h:](\d{2})\b/i, (m) => {
+      const h = parseInt(m[1],10), min = parseInt(m[2],10);
+      if(h > 23 || min > 59) return false;
+      horario = String(h).padStart(2,'0') + ':' + String(min).padStart(2,'0');
+      achados.push(horario);
+    }) ||
+    consumir(/\b(?:[àa]s\s+)?(\d{1,2})\s?h\b/i, (m) => {
+      const h = parseInt(m[1],10);
+      if(h > 23) return false;
+      horario = String(h).padStart(2,'0') + ':00';
+      achados.push(horario);
+    });
+
+    // Limpa preposições órfãs deixadas pela remoção ("ligar pro dentista às" → sem o "às")
+    nome = nome.replace(/\s+(às|as|de|da|do|em|na|no|pra|para)\s*$/i, '')
+               .replace(/^\s*(às|as|de|da|do|em|na|no)\s+/i, '')
+               .replace(/\s{2,}/g, ' ')
+               .trim();
+
+    return { nome, date, horario, recorrencia, achados };
+  }
+
+  /* Enquanto você digita, mostra o que foi entendido e preenche os campos.
+     O preenchimento é visível e editável: se o palpite estiver errado, dá pra
+     corrigir antes de salvar. */
+  const newTaskNameInput = document.getElementById('newTaskNameInput');
+  const newTaskParseHint = document.getElementById('newTaskParseHint');
+  const newTaskRecorrenciaSelect = document.getElementById('newTaskRecorrenciaSelect');
+  let parseHintTimer = null;
+
+  function atualizarParseHint(){
+    if(!newTaskParseHint) return;
+    const p = interpretarTexto(newTaskNameInput.value);
+    if(!p.achados.length){
+      newTaskParseHint.textContent = '';
+      newTaskParseHint.classList.remove('active');
+      return;
+    }
+    if(p.date){
+      newTaskDateInput.value = p.date;
+      newTaskNoDateToggle.classList.remove('active');
+    }
+    if(p.horario) document.getElementById('newTaskHorarioInput').value = p.horario;
+    if(p.recorrencia) newTaskRecorrenciaSelect.value = p.recorrencia;
+
+    const partes = [];
+    if(p.date) partes.push(fmtShortDate(p.date));
+    if(p.horario) partes.push(p.horario);
+    if(p.recorrencia) partes.push(TAREFA_RECORRENCIA_LABEL[p.recorrencia] || p.recorrencia);
+    newTaskParseHint.textContent = 'Entendi: ' + partes.join(' · ') + ' — "' + (p.nome || '(sem nome)') + '"';
+    newTaskParseHint.classList.add('active');
+  }
+  if(newTaskNameInput){
+    newTaskNameInput.addEventListener('input', () => {
+      clearTimeout(parseHintTimer);
+      parseHintTimer = setTimeout(atualizarParseHint, 220);
+    });
+  }
+
+  const TAREFA_RECORRENCIA_LABEL = {
+    diaria: 'todo dia', uteis: 'dias úteis', semanal: 'toda semana',
+    quinzenal: 'a cada 15 dias', mensal: 'todo mês'
+  };
+
   document.getElementById('newTaskCreateBtn').addEventListener('click', async () => {
-    const name = document.getElementById('newTaskNameInput').value.trim();
-    if(!name) return;
+    const bruto = newTaskNameInput.value.trim();
+    if(!bruto) return;
+    // O nome salvo é o texto já sem os trechos de data/hora reconhecidos.
+    const p = interpretarTexto(bruto);
+    const name = p.nome || bruto;
     const noDate = newTaskNoDateToggle.classList.contains('active');
-    const date = noDate ? '' : newTaskDateInput.value;
+    const date = noDate ? '' : (newTaskDateInput.value || p.date || '');
     const group = document.getElementById('newTaskGroupSelect').value;
-    const horario = document.getElementById('newTaskHorarioInput').value || '';
+    const horario = document.getElementById('newTaskHorarioInput').value || p.horario || '';
+    const recorrencia = newTaskRecorrenciaSelect ? newTaskRecorrenciaSelect.value : '';
     const id = newId();
-    await dbPut(userPath('/Tasks/' + id), { name, date, group, horario, done:false, createdAt: new Date().toISOString() });
+    await dbPut(userPath('/Tasks/' + id), {
+      name, date, group, horario, recorrencia,
+      done:false, createdAt: new Date().toISOString()
+    });
     closeTaskModal();
+    if(newTaskParseHint){ newTaskParseHint.textContent = ''; newTaskParseHint.classList.remove('active'); }
+    if(newTaskRecorrenciaSelect) newTaskRecorrenciaSelect.value = '';
     await renderTasks(); await renderTaskGroups(); await renderHojeQueue();
   });
 
+  /* ---------- Recorrência ----------
+     Uma tarefa que repete não vira várias linhas no banco: ao ser concluída,
+     ela avança para a próxima data e volta a ficar pendente. Isso mantém o
+     histórico enxuto e evita a lista encher de ocorrências futuras. */
+  function proximaDataRecorrencia(dataBase, recorrencia){
+    const base = new Date((dataBase || todayStr()) + 'T00:00:00');
+    if(isNaN(base)) return '';
+    const avancar = (d) => { base.setDate(base.getDate() + d); };
+    switch(recorrencia){
+      case 'diaria':    avancar(1); break;
+      case 'uteis':     do { avancar(1); } while(base.getDay() === 0 || base.getDay() === 6); break;
+      case 'semanal':   avancar(7); break;
+      case 'quinzenal': avancar(14); break;
+      case 'mensal':    base.setMonth(base.getMonth() + 1); break;
+      default: return '';
+    }
+    // Se a tarefa ficou parada por vários ciclos, pula pro próximo à frente de hoje.
+    let guarda = 0;
+    while(base.toISOString().slice(0,10) < todayStr() && guarda++ < 400){
+      if(recorrencia === 'mensal') base.setMonth(base.getMonth() + 1);
+      else if(recorrencia === 'uteis'){ do { avancar(1); } while(base.getDay() === 0 || base.getDay() === 6); }
+      else avancar(recorrencia === 'diaria' ? 1 : recorrencia === 'semanal' ? 7 : 14);
+    }
+    return base.getFullYear() + '-' + String(base.getMonth()+1).padStart(2,'0') + '-' + String(base.getDate()).padStart(2,'0');
+  }
+
   async function toggleTaskDone(id, done){
-    await dbPatch(userPath('/Tasks/' + id), { done });
-    // Mesma chave usada pela fila de Hoje: concluir aqui ou lá paga uma vez só.
-    if(done) await grantXp('tarefa', { chave: 'tarefa_' + id, contador: 'tarefas' });
+    const t = await dbGet(userPath('/Tasks/' + id)) || {};
+    if(done && t.recorrencia){
+      // Mesmo tratamento da fila de Hoje: avança o ciclo em vez de encerrar.
+      const dataFeita = t.date || todayStr();
+      await dbPatch(userPath('/Tasks/' + id), {
+        date: proximaDataRecorrencia(dataFeita, t.recorrencia), done:false, ultimaFeita: dataFeita
+      });
+      await grantXp('tarefa', { chave: 'tarefa_' + id + '_' + dataFeita, contador: 'tarefas' });
+    }else{
+      await dbPatch(userPath('/Tasks/' + id), { done });
+      // Mesma chave usada pela fila de Hoje: concluir aqui ou lá paga uma vez só.
+      if(done) await grantXp('tarefa', { chave: 'tarefa_' + id, contador: 'tarefas' });
+    }
     await renderTaskGroups(); await renderHojeQueue();
   }
   async function deleteTask(id){
@@ -5792,12 +6014,22 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
         const atraso = t.date && t.date < today ? diasEntreDatas(t.date, today) : 0;
         return {
           kind:'tarefa', obj: 'Tarefa', name: t.name, time: t.horario || '', done: !!t.done, skipped: !!skips[key],
-          semData: !t.date, atraso: atraso,
+          semData: !t.date, atraso: atraso, recorrencia: t.recorrencia || '',
           onComplete: async () => {
-            await dbPatch(userPath('/Tasks/' + id), { done:true });
-            // A chave torna o ganho idempotente: desmarcar e remarcar não paga de novo.
-            await grantXp('tarefa', { chave: 'tarefa_' + id, contador: 'tarefas' });
-            if(t.date === today) await grantXp('tarefa_no_prazo', { chave: 'prazo_' + id });
+            const dataFeita = t.date || today;
+            if(t.recorrencia){
+              // Recorrente não "termina": avança para a próxima data e volta a
+              // ficar pendente. Uma linha só no banco, sem ocorrências futuras.
+              const proxima = proximaDataRecorrencia(dataFeita, t.recorrencia);
+              await dbPatch(userPath('/Tasks/' + id), { date: proxima, done:false, ultimaFeita: dataFeita });
+              // Chave com a data: cada ciclo paga uma vez, e só uma.
+              await grantXp('tarefa', { chave: 'tarefa_' + id + '_' + dataFeita, contador: 'tarefas' });
+            }else{
+              await dbPatch(userPath('/Tasks/' + id), { done:true });
+              // Chave sem data nas não-recorrentes: paga uma vez na vida.
+              await grantXp('tarefa', { chave: 'tarefa_' + id, contador: 'tarefas' });
+            }
+            if(t.date === today) await grantXp('tarefa_no_prazo', { chave: 'prazo_' + id + '_' + dataFeita });
           },
           onSkip: async (skipped) => { await dbPatch(userPath('/HojeSkips/' + today), { [key]: skipped ? true : null }); }
         };
