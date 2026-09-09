@@ -11,7 +11,8 @@
       ".claude/**",
       "**/node_modules/**",
       "functions/**",
-      "*.md"
+      "*.md",
+      "database.rules.json"
     ],
     "headers": [
       {
