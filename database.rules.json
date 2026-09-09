@@ -1,0 +1,59 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "users": {
+      "$uid": {
+        ".read":  "auth != null && (auth.uid === $uid || root.child('boards').child($uid).child('members').child(auth.uid).exists())",
+        ".write": "auth != null && (auth.uid === $uid || root.child('boards').child($uid).child('members').child(auth.uid).exists())",
+
+        "Profile": {
+          "Email":       { ".validate": "newData.isString() && newData.val().length <= 320" },
+          "DisplayName": { ".validate": "newData.isString() && newData.val().length <= 80" }
+        },
+
+        "Progresso": {
+          "xp": {
+            "$attr": {
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            }
+          }
+        }
+      }
+    },
+
+    "boards": {
+      "$boardId": {
+        ".read": "auth != null && (auth.uid === $boardId || data.child('members').child(auth.uid).exists())",
+
+        "meta": {
+          ".write": "auth != null && auth.uid === $boardId",
+          "ownerUid":  { ".validate": "newData.val() === $boardId" },
+          "name":      { ".validate": "newData.isString() && newData.val().length <= 120" }
+        },
+
+        "members": {
+          ".write": "auth != null && auth.uid === $boardId",
+          "$memberUid": {
+            "email":       { ".validate": "newData.isString()" },
+            "role":        { ".validate": "newData.val() === 'owner' || newData.val() === 'member'" },
+            "permissions": { "$view": { ".validate": "newData.isBoolean()" } }
+          }
+        }
+      }
+    },
+
+    "boardInvites": {
+      "$emailKey": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    "openAiKey": {
+      ".read":  false,
+      ".write": false
+    }
+  }
+}

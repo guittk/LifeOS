@@ -3371,6 +3371,78 @@
     });
   }
 
+  /* ---------- Proteção contra sobrescrita entre dispositivos ----------
+     Rotina, Academia e Plano Alimentar funcionam por rascunho: você carrega,
+     edita, e o Salvar grava a árvore inteira por cima. Se outro dispositivo
+     (ou a Júlia, num Quadro compartilhado) tiver mexido no intervalo, aquele
+     trabalho sumia em silêncio.
+
+     Aqui a versão remota é lida no momento do Salvar e comparada com a que
+     estava na tela. Divergiu, você decide — não é resolvido automaticamente,
+     porque mesclar rascunhos errado é pior que perguntar. */
+  const versoesCarregadas = new Map();
+
+  function assinaturaDe(valor){
+    try{ return JSON.stringify(valor || {}).length + ':' + JSON.stringify(valor || {}).slice(0, 200); }
+    catch(e){ return ''; }
+  }
+  async function registrarVersaoCarregada(caminho){
+    try{ versoesCarregadas.set(caminho, assinaturaDe(await dbGet(userPath(caminho)))); }
+    catch(e){ versoesCarregadas.delete(caminho); }
+  }
+  function marcarVersaoSalva(caminho){ versoesCarregadas.delete(caminho); }
+
+  async function confirmarSobrescrita(caminho, rotulo){
+    const base = versoesCarregadas.get(caminho);
+    if(base === undefined) return true;   // nunca registrado: nada a comparar
+    let atual;
+    try{ atual = assinaturaDe(await dbGet(userPath(caminho), { fresh: true })); }
+    catch(e){ return true; }              // sem conseguir ler, não trava o salvamento
+    if(atual === base) return true;
+    return await showConfirm(
+      rotulo.charAt(0).toUpperCase() + rotulo.slice(1) +
+      ' foi alterada em outro dispositivo depois que você abriu esta tela. ' +
+      'Salvar agora substitui aquela versão pela sua. Continuar?'
+    );
+  }
+
+  /* ---------- Exportar todos os dados ----------
+     Uma ferramenta que quer ser fonte única da verdade precisa deixar você
+     sair dela. Baixa a subárvore inteira do Quadro ativo, sem passar por
+     servidor nenhum: o JSON é montado no navegador e salvo direto. */
+  document.getElementById('exportarDadosBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('exportarDadosBtn');
+    const textoOriginal = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Preparando...';
+    try{
+      // Uma leitura só na raiz do usuário: traz tudo de uma vez e evita
+      // dezenas de requisições com risco de exportar um estado inconsistente.
+      const dados = await dbGet(userPath(''), { fresh: true });
+      const pacote = {
+        exportadoEm: new Date().toISOString(),
+        quadro: (myBoards[currentBoardId] && myBoards[currentBoardId].name) || currentBoardId,
+        conta: session && session.email,
+        dados: dados || {}
+      };
+      const blob = new Blob([JSON.stringify(pacote, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'lifeos-' + todayStr() + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Revoga depois do clique: revogar antes cancelaria o download.
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      showAppMessage('Exportado.', 'success');
+    }catch(err){
+      console.error('Falha ao exportar:', err);
+      showAppMessage('Não foi possível exportar: ' + err.message, 'error');
+    }finally{
+      btn.disabled = false; btn.textContent = textoOriginal;
+    }
+  });
+
   /* ---------- Fechamento do dia ---------- */
   document.getElementById('abrirFechamentoBtn')?.addEventListener('click', abrirFechamento);
   document.getElementById('fechCancelBtn')?.addEventListener('click', () => {
@@ -4665,6 +4737,7 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
       dbGet(userPath('/AcademiaDias')),
       dbGet(userPath('/AcademiaMetas'))
     ]);
+    registrarVersaoCarregada('/AcademiaDias');
     academiaDraft = cloneAcademia(dias);
     const metasData = metas || {};
     const aguaMetaInput = document.getElementById('academiaAguaMetaInput');
@@ -4898,6 +4971,7 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
 
   async function renderPlanoAlimentar(){
     let planoData = await dbGet(userPath('/PlanoAlimentar'));
+    registrarVersaoCarregada('/PlanoAlimentar');
     if(!planoData){
       planoData = buildDefaultPlanoAlimentar();
       await dbPut(userPath('/PlanoAlimentar'), planoData);
@@ -5138,6 +5212,7 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
 
   async function renderRotina(){
     const saved = await dbGet(userPath('/Rotina')) || {};
+    registrarVersaoCarregada('/Rotina');
     rotinaDraft = cloneRotina(saved);
     renderRotinaGrid();
     setRotinaDirty(false);
@@ -5148,7 +5223,9 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
     Object.values(rotinaDraft).forEach(dia => {
       Object.values((dia && dia.blocos) || {}).forEach(b => { if(typeof b.nome === 'string') b.nome = b.nome.trim(); });
     });
+    if(!await confirmarSobrescrita('/Rotina', 'a Rotina')) return;
     await dbPut(userPath('/Rotina'), rotinaDraft);
+    marcarVersaoSalva('/Rotina');
     setRotinaDirty(false);
     await renderRotinaHoje();
     await renderHojeTimeline();
