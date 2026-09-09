@@ -652,14 +652,10 @@
       <div class="gam-attr-grid" id="gamAtributos"></div>
     </div>
 
-    <div class="panel gam-missoes-panel">
-      <p class="panel-title">Missões de hoje</p>
-      <div id="gamMissoesList"><p class="empty-state">Carregando...</p></div>
-    </div>
-
+    <!-- A resposta: uma coisa para fazer agora, sozinha na abertura da tela. -->
     <div class="hero-card">
       <div class="hero-glow"></div>
-      <p class="hero-label" id="hojeHeroLabel">Missão do dia</p>
+      <p class="hero-label" id="hojeHeroLabel">Agora</p>
       <p class="hero-motivation" id="hojeHeroMotivation">Carregando...</p>
       <h2 class="hero-action" id="hojeActivityName">—</h2>
       <div class="hero-meta">
@@ -669,6 +665,27 @@
       <div class="hero-actions">
         <button class="btn btn-primary" id="comecarAtividadeBtn" disabled>✓ Concluir</button>
       </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:18px;">
+      <p class="panel-title">Depois disso <span class="tag tag-sage" id="seqCountTag">0 hoje</span></p>
+      <div class="flow-list" id="flowList">
+        <p class="empty-state">Carregando...</p>
+      </div>
+    </div>
+
+    <!-- Tudo o mais vive aqui: existe, mas não compete com a resposta. -->
+    <div class="subtabs">
+      <button class="subtab active" data-sub="hoje" data-target="hoje-dia">Dia</button>
+      <button class="subtab" data-sub="hoje" data-target="hoje-corpo">Corpo</button>
+      <button class="subtab" data-sub="hoje" data-target="hoje-mente">Mente &amp; Metas</button>
+    </div>
+
+    <div class="subview active" id="hoje-dia">
+
+    <div class="panel gam-missoes-panel">
+      <p class="panel-title">Missões de hoje</p>
+      <div id="gamMissoesList"><p class="empty-state">Carregando...</p></div>
     </div>
 
     <div class="panel" style="margin-bottom:18px;">
@@ -698,27 +715,28 @@
       <div class="rot-hoje-upcoming" id="rotinaHojeUpcoming"><p class="empty-state">Carregando...</p></div>
     </div>
 
-    <div class="grid-2">
-      <div style="display:flex; flex-direction:column; gap:18px;">
-        <div class="panel">
-          <p class="panel-title">Sequência de execução (tarefas e treino) <span class="tag tag-sage" id="seqCountTag">0 hoje</span></p>
-          <div class="flow-list" id="flowList">
-            <p class="empty-state">Carregando...</p>
-          </div>
-        </div>
+      <div class="panel" style="margin-bottom:18px;">
+        <p class="panel-title">Eventos</p>
+        <div id="hojeAvisosEventosList"><p class="empty-state">Carregando...</p></div>
+      </div>
+    </div><!-- /hoje-dia -->
 
+    <div class="subview" id="hoje-corpo">
+      <div class="grid-2">
         <div class="panel">
-          <p class="panel-title">Objetivos <span class="tag tag-sage" data-view-link="objetivos">ver todos →</span></p>
-          <div id="hojeObjetivosList"><p class="empty-state">Carregando...</p></div>
+          <p class="panel-title">Água &amp; creatina hoje</p>
+          <div id="hojeHidratacaoList"><p class="empty-state">Carregando...</p></div>
         </div>
-
         <div class="panel">
-          <p class="panel-title">Eventos</p>
-          <div id="hojeAvisosEventosList"><p class="empty-state">Carregando...</p></div>
+          <p class="panel-title">Plano alimentar hoje <span class="tag tag-sage" data-view-link="planoalimentar">ver plano →</span></p>
+          <div id="hojePlanoAlimentarList"><p class="empty-state">Carregando...</p></div>
+          <div id="hojeInsulinaList" style="margin-top:14px;"></div>
         </div>
       </div>
+    </div><!-- /hoje-corpo -->
 
-      <div style="display:flex; flex-direction:column; gap:18px;">
+    <div class="subview" id="hoje-mente">
+      <div class="grid-2">
         <div class="panel">
           <div class="fluencia-panel-head">
             <div>
@@ -746,17 +764,11 @@
         </div>
 
         <div class="panel">
-          <p class="panel-title">Água &amp; creatina hoje</p>
-          <div id="hojeHidratacaoList"><p class="empty-state">Carregando...</p></div>
-        </div>
-
-        <div class="panel">
-          <p class="panel-title">Plano alimentar hoje <span class="tag tag-sage" data-view-link="planoalimentar">ver plano →</span></p>
-          <div id="hojePlanoAlimentarList"><p class="empty-state">Carregando...</p></div>
-          <div id="hojeInsulinaList" style="margin-top:14px;"></div>
+          <p class="panel-title">Objetivos <span class="tag tag-sage" data-view-link="objetivos">ver todos →</span></p>
+          <div id="hojeObjetivosList"><p class="empty-state">Carregando...</p></div>
         </div>
       </div>
-    </div>
+    </div><!-- /hoje-mente -->
   </section>
 
   <!-- STORAGE (Inbox + Gavetas unificados) -->

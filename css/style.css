@@ -2080,3 +2080,25 @@
     align-items: center;
   }
   .casa-card-main{ flex: 1; }
+
+  /* ============================================================================
+     FASE 5 — a fila que decide
+     ============================================================================ */
+  /* A frase que explica por que este item está no topo. Só aparece no item
+     "agora": repetida em todos, viraria ruído. */
+  .flow-porque{
+    font-size:12.5px; color:var(--cyan); font-weight:400;
+    margin:3px 0 6px; display:flex; align-items:center; gap:6px;
+  }
+  .flow-porque::before{
+    content:"//"; font-family:var(--mono); font-size:10px; opacity:.7; flex-shrink:0;
+  }
+
+  .flow-atraso{ color:var(--coral); background:var(--coral-soft); }
+  .flow-semdata{ color:var(--text-dim); background:transparent; border-color:var(--line); }
+
+  /* Item atrasado: barra lateral pra ser identificado sem ler o chip. */
+  .flow-item:has(.flow-atraso) .flow-text{ color:var(--coral); }
+
+  /* O card de missão ganha a frase com mais presença. */
+  .hero-motivation{ color:var(--sage); }

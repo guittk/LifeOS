@@ -659,9 +659,12 @@
       return;
     }
     const a = activities[nextIdx];
-    hojeHeroMotivation.textContent = 'Sua próxima ação de hoje.';
+    // A frase de justificativa é o ponto do redesenho: sem ela você reconfere a
+    // lista inteira pra decidir se confia na primeira linha. Com ela, bate o
+    // olho e vai.
+    hojeHeroMotivation.textContent = a.porque || 'Sua próxima ação de hoje.';
     hojeActivityName.textContent = a.kind === 'treino' ? 'Hora de ir pra academia.' : a.name;
-    hojeActivityTime.textContent = a.time || '—';
+    hojeActivityTime.textContent = a.time || (a.semData ? 'sem data' : 'hoje');
     hojeActivityObj.textContent = a.obj || '—';
     comecarAtividadeBtn.disabled = false;
     comecarAtividadeBtn.textContent = '✓ Concluir';
@@ -688,8 +691,11 @@
             ${a.skipped ? '<span class="flow-skipped-tag">pulada hoje</span>' : ''}
           </div>
           <div class="flow-text">${escapeHtml(a.name)}</div>
+          ${idx === nextIdx && a.porque ? `<div class="flow-porque">${escapeHtml(a.porque)}</div>` : ''}
           <div class="flow-meta">
             <span class="tag ${meta.cls}">${meta.label}</span>${a.time ? '<span class="queue-time">' + escapeHtml(a.time) + '</span>' : ''}
+            ${a.atraso > 0 ? `<span class="tag flow-atraso">${a.atraso === 1 ? '1 dia atrasada' : a.atraso + ' dias atrasada'}</span>` : ''}
+            ${a.semData ? '<span class="tag flow-semdata">quando der</span>' : ''}
             ${!a.done ? `<button class="flow-skip-btn" data-skip="${idx}">${a.skipped ? 'desfazer' : 'pular hoje'}</button>` : ''}
           </div>
         </div>
@@ -5043,15 +5049,14 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
     const upcomingEl = document.getElementById('rotinaHojeUpcoming');
 
     const now = new Date();
-    const dow = now.getDay();
-    const nowMin = now.getHours() * 60 + now.getMinutes();
     agoraEl.textContent = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
 
-    const diaData = await dbGet(userPath('/Rotina/' + dow)) || {};
-    const blocos = Object.entries(diaData.blocos || {})
-      .map(([id, b]) => ({ id, nome: (b.nome || '').trim() || 'Sem nome', inicio: rotToMinutes(b.inicio), fim: rotToMinutes(b.fim) }))
-      .filter(b => b.inicio != null && b.fim != null && b.fim > b.inicio)
-      .sort((a,b) => a.inicio - b.inicio);
+    // Mesmo cálculo que a fila de Hoje usa para justificar a escolha — uma
+    // implementação só, pra as duas telas nunca discordarem sobre quantas
+    // horas livres você tem.
+    const janela = await calcularJanelaLivre();
+    const nowMin = janela.nowMin;
+    const blocos = janela.blocos;
 
     if(!blocos.length){
       nowRow.textContent = 'Nenhum horário configurado para hoje ainda — configure na Rotina.';
@@ -5061,24 +5066,12 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
       return;
     }
 
-    let current = null;
-    let totalBusyMin = 0;
-    blocos.forEach(b => {
-      totalBusyMin += (b.fim - b.inicio);
-      if(nowMin >= b.inicio && nowMin < b.fim) current = b;
-    });
-
+    const current = janela.atual;
     const upcoming = blocos.filter(b => b.fim > nowMin);
-    let remainingBusyMin = 0;
-    upcoming.forEach(b => { remainingBusyMin += Math.max(0, b.fim - Math.max(b.inicio, nowMin)); });
-
-    const totalFreeMin = Math.max(0, DAY_END_MIN - totalBusyMin);
-    const remainingDayMin = Math.max(0, DAY_END_MIN - nowMin);
-    const remainingFreeMin = Math.max(0, remainingDayMin - remainingBusyMin);
 
     nowRow.textContent = current ? ('Agora você está em: ' + current.nome) : 'Nenhum bloco da rotina agora — hora livre.';
-    livresTotalEl.textContent = rotFmtHours(totalFreeMin);
-    livresRestanteEl.textContent = rotFmtHours(remainingFreeMin);
+    livresTotalEl.textContent = rotFmtHours(janela.livresTotalMin);
+    livresRestanteEl.textContent = rotFmtHours(janela.livresRestanteMin);
 
     if(!upcoming.length){
       upcomingEl.innerHTML = '<p class="empty-state">Rotina de hoje concluída — nada mais planejado.</p>';
@@ -5778,16 +5771,28 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
     const academiaDias = academiaRaw || {};
     const skips = skipsRaw || {};
 
-    const todaysTasks = Object.entries(tasksData).filter(([id,t]) => t.date === today);
+    // Antes isto era `t.date === today`, e o efeito era grave: uma tarefa
+    // atrasada de ontem — ou sem data nenhuma — sumia da tela Hoje. Ela seguia
+    // existindo no banco e contando nos objetivos, mas desaparecia justo da
+    // tela que deveria ser a única a olhar. Agora entram as três: de hoje,
+    // atrasadas (com rollover pro topo) e sem data (no fim, "quando der").
+    const todaysTasks = Object.entries(tasksData).filter(([id, t]) => {
+      if(t.done) return t.date === today;   // concluídas: só as de hoje, pra registrar o progresso do dia
+      return !t.date || t.date <= today;    // pendentes: hoje, atrasadas e sem data
+    });
     const diaHoje = academiaDias[dow] || {};
     const exerciciosHoje = diaHoje.ativo ? Object.entries(diaHoje.exercicios || {}).sort((a,b) => (a[1].order||0) - (b[1].order||0)) : [];
     const treinoHorario = diaHoje.horario || '';
 
+    const janela = await calcularJanelaLivre();
+
     activities = [
       ...todaysTasks.map(([id,t]) => {
         const key = 'tarefa_' + id;
+        const atraso = t.date && t.date < today ? diasEntreDatas(t.date, today) : 0;
         return {
           kind:'tarefa', obj: 'Tarefa', name: t.name, time: t.horario || '', done: !!t.done, skipped: !!skips[key],
+          semData: !t.date, atraso: atraso,
           onComplete: async () => {
             await dbPatch(userPath('/Tasks/' + id), { done:true });
             // A chave torna o ganho idempotente: desmarcar e remarcar não paga de novo.
@@ -5801,6 +5806,7 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
         const key = 'treino_' + eid;
         return {
           kind:'treino', obj: 'Academia', name: e.nome, time: treinoHorario, done: !!(e.doneDates && e.doneDates[today]), skipped: !!skips[key],
+          semData: false, atraso: 0,
           onComplete: async () => {
             await dbPatch(userPath('/AcademiaDias/' + dow + '/exercicios/' + eid + '/doneDates'), { [today]: true });
             await grantXp('exercicio', { chave: 'ex_' + eid + '_' + today, contador: 'exercicios' });
@@ -5815,15 +5821,93 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
         };
       })
     ];
-    // Ordena pelo horário (quando definido) pra refletir a ordem real do dia;
-    // itens sem horário ficam depois, mantendo a ordem relativa entre eles.
-    activities.sort((a, b) => {
-      if(a.time && b.time) return a.time.localeCompare(b.time);
-      if(a.time && !b.time) return -1;
-      if(!a.time && b.time) return 1;
-      return 0;
-    });
+    // Ordenar só por horário fazia a fila ignorar o que mais importa: o que está
+    // atrasado e o que a janela livre comporta. Agora cada item recebe uma
+    // pontuação de urgência e a razão da escolha, pra você não precisar
+    // reconferir a lista inteira pra confiar na primeira linha.
+    activities.forEach(a => Object.assign(a, pontuarUrgencia(a, janela)));
+    activities.sort((a, b) => b.score - a.score);
+
     updateHeroCard(); updateDayProgress(); updateFlowUI();
+  }
+
+  /* ---------- Janela livre a partir de agora ----------
+     Extraída de renderRotinaHoje pra que a fila também possa usar: é o que
+     permite dizer "você tem 2h15 livres" ao justificar a escolha. */
+  async function calcularJanelaLivre(){
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const diaData = await dbGet(userPath('/Rotina/' + now.getDay())) || {};
+    const blocos = Object.entries(diaData.blocos || {})
+      .map(([id, b]) => ({ id, nome: (b.nome || '').trim() || 'Sem nome', inicio: rotToMinutes(b.inicio), fim: rotToMinutes(b.fim) }))
+      .filter(b => b.inicio != null && b.fim != null && b.fim > b.inicio)
+      .sort((a, b) => a.inicio - b.inicio);
+
+    let atual = null, ocupadoTotal = 0, ocupadoRestante = 0;
+    blocos.forEach(b => {
+      ocupadoTotal += (b.fim - b.inicio);
+      if(nowMin >= b.inicio && nowMin < b.fim) atual = b;
+      if(b.fim > nowMin) ocupadoRestante += Math.max(0, b.fim - Math.max(b.inicio, nowMin));
+    });
+    const restanteDia = Math.max(0, DAY_END_MIN - nowMin);
+    return {
+      nowMin, blocos, atual,
+      livresTotalMin: Math.max(0, DAY_END_MIN - ocupadoTotal),
+      livresRestanteMin: Math.max(0, restanteDia - ocupadoRestante),
+      temRotina: blocos.length > 0
+    };
+  }
+
+  function diasEntreDatas(de, ate){
+    const a = new Date(de + 'T00:00:00'), b = new Date(ate + 'T00:00:00');
+    if(isNaN(a) || isNaN(b)) return 0;
+    return Math.max(0, Math.round((b - a) / 86400000));
+  }
+
+  /* Pontuação de urgência + a frase que explica a escolha.
+     Os pesos são deliberados: atraso domina tudo, horário vencido vem em
+     seguida, e "sem data" é empurrado pro fim sem nunca sumir da tela. */
+  function pontuarUrgencia(a, janela){
+    const nowMin = janela.nowMin;
+    const horaMin = a.time ? rotToMinutes(a.time) : null;
+    let score = 0;
+    let porque = '';
+
+    if(a.atraso > 0){
+      score += 1000 + a.atraso * 40;
+      porque = a.atraso === 1 ? 'Ficou de ontem.' : 'Está ' + a.atraso + ' dias atrasada.';
+    }
+
+    if(horaMin != null){
+      if(horaMin <= nowMin){
+        score += 600 + Math.min(240, nowMin - horaMin);
+        if(!porque) porque = 'Era para as ' + a.time + ' e já passou.';
+      }else{
+        const faltam = horaMin - nowMin;
+        // Quanto mais perto do horário, mais urgente.
+        score += 400 - Math.min(390, faltam);
+        if(!porque){
+          porque = faltam <= 60
+            ? 'Começa às ' + a.time + ', daqui a pouco.'
+            : 'Marcada para as ' + a.time + '.';
+        }
+      }
+    }
+
+    if(a.semData){
+      score -= 900;
+      porque = 'Sem data — quando sobrar tempo.';
+    }else if(!porque){
+      score += 200;
+      porque = janela.temRotina && janela.livresRestanteMin > 0
+        ? 'É de hoje e você tem ' + rotFmtHours(janela.livresRestanteMin) + ' livres.'
+        : 'É de hoje.';
+    }
+
+    if(a.kind === 'treino') score += 50; // bloco físico: não dá pra empurrar indefinidamente
+    if(a.done || a.skipped) score -= 5000; // saem do topo sem sumir da lista
+
+    return { score, porque };
   }
 
   /* ---------- HOJE — painel "Água & creatina" ---------- */
