@@ -3,3 +3,8 @@
 functions/node_modules/
 firebase-debug.log
 firebase-debug.*.log
+
+# Chaves de serviço e utilitários locais — NUNCA versionar
+scripts/serviceAccount.json
+scripts/node_modules/
+**/serviceAccount*.json

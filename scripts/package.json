@@ -1,0 +1,8 @@
+{
+  "name": "lifeos-scripts",
+  "description": "Utilitários locais de administração — não fazem parte do app",
+  "private": true,
+  "dependencies": {
+    "firebase-admin": "^12.6.0"
+  }
+}
