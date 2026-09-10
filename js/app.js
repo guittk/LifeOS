@@ -3226,19 +3226,34 @@
     if(!email){ authError.textContent = 'Digite seu e-mail.'; authError.classList.add('active'); return; }
     authSubmitBtn.disabled = true;
     try{
-      if(authMode === 'login'){
-        if(!password){ throw new Error('Digite sua senha.'); }
-        const data = await identityRequest('signInWithPassword', email, password);
-        await afterLoginSuccess(data);
-      } else if(authMode === 'signup'){
-        if(!password){ throw new Error('Crie uma senha.'); }
-        const data = await identityRequest('signUp', email, password);
-        // Define a sessão ANTES de gravar no Firebase — buildUrl() depende de
-        // session.idToken para autenticar a escrita. Gravar antes fazia essa
-        // primeira escrita ir sem token, sendo rejeitada por regras de segurança.
-        session = { idToken: data.idToken, uid: data.localId, email, expiresAt: Date.now() + 3600000 };
-        await dbPut(('/users/' + data.localId + '/Profile'), { Email: email, CreatedAt: new Date().toISOString(), LastLogin: new Date().toISOString() });
-        await afterLoginSuccess(data);
+      if(authMode === 'login' || authMode === 'signup'){
+        if(!password){ throw new Error(authMode === 'signup' ? 'Crie uma senha.' : 'Digite sua senha.'); }
+        // Fase de AUTENTICAÇÃO: falha aqui é credencial errada.
+        const kind = authMode === 'signup' ? 'signUp' : 'signInWithPassword';
+        const data = await identityRequest(kind, email, password);
+
+        if(authMode === 'signup'){
+          // Define a sessão ANTES de gravar no Firebase — buildUrl() depende de
+          // session.idToken para autenticar a escrita.
+          session = { idToken: data.idToken, refreshToken: data.refreshToken, uid: data.localId, email, expiresAt: Date.now() + 3600000 };
+        }
+
+        // Fase de INÍCIO DE SESSÃO: a credencial já está certa. Uma falha daqui
+        // pra frente (rede, regras do banco, boot) NÃO é "e-mail ou senha
+        // incorretos" — mostrar isso mandaria você trocar a senha à toa.
+        try{
+          if(authMode === 'signup'){
+            await dbPut(('/users/' + data.localId + '/Profile'), { Email: email, CreatedAt: new Date().toISOString(), LastLogin: new Date().toISOString() });
+          }
+          await afterLoginSuccess(data);
+        }catch(bootErr){
+          console.error('Autenticou, mas falhou ao abrir a sessão:', bootErr);
+          // A sessão já foi salva por afterLoginSuccess/aqui — dá pra recarregar.
+          authError.textContent = 'Você entrou, mas algo falhou ao carregar seus dados: ' +
+            (bootErr && bootErr.message || 'erro desconhecido') + '. Recarregue a página.';
+          authError.classList.add('active');
+          return;
+        }
       } else if(authMode === 'reset'){
         showLoading('Enviando...');
         try{
