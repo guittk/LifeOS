@@ -1328,6 +1328,16 @@
     padding:10px 12px; color:var(--text); font-size:13.5px; font-family:var(--sans); outline:none; box-sizing:border-box;
   }
   .login-field input:focus{ border-color:var(--sage-line); }
+  .login-pass-wrap{ position:relative; }
+  .login-pass-wrap input{ padding-right:66px; }
+  .login-pass-toggle{
+    position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    background:transparent; border:none; cursor:pointer;
+    font-family:var(--mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--text-dim); padding:6px 8px; border-radius:6px;
+  }
+  .login-pass-toggle:hover{ color:var(--sage); }
+  .login-pass-toggle:focus-visible{ outline:2px solid var(--sage-line); }
   .login-error{ background:var(--coral-soft); border:1px solid rgba(180,106,92,0.4); color:#e2a89c; font-size:12px; padding:9px 12px; border-radius:9px; margin-bottom:12px; display:none; line-height:1.4; }
   .login-error.active{ display:block; }
   .login-note{ background:var(--sage-soft); border:1px solid var(--sage-line); color:var(--sage); font-size:12px; padding:9px 12px; border-radius:9px; margin-bottom:12px; display:none; line-height:1.4; }

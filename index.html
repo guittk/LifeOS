@@ -39,7 +39,10 @@
     </div>
     <div class="login-field" id="authPasswordField">
       <label>Senha</label>
-      <input type="password" id="authPassword" autocomplete="current-password" placeholder="••••••••">
+      <div class="login-pass-wrap">
+        <input type="password" id="authPassword" autocomplete="current-password" placeholder="••••••••">
+        <button type="button" id="authPassToggle" class="login-pass-toggle" aria-label="Mostrar senha" aria-pressed="false">mostrar</button>
+      </div>
     </div>
 
     <div class="login-actions">

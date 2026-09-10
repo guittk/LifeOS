@@ -3131,13 +3131,16 @@
   }
   function friendlyAuthError(msg){
     const map = {
-      'EMAIL_NOT_FOUND':'E-mail não encontrado.',
+      'EMAIL_NOT_FOUND':'Não existe conta com esse e-mail.',
       'INVALID_PASSWORD':'Senha incorreta.',
-      'INVALID_LOGIN_CREDENTIALS':'E-mail ou senha incorretos.',
+      'INVALID_LOGIN_CREDENTIALS':'E-mail ou senha incorretos — o Firebase usa a mesma mensagem para os dois. Confira o e-mail (dígito por dígito) e a senha.',
       'EMAIL_EXISTS':'Já existe uma conta com esse e-mail.',
       'WEAK_PASSWORD : Password should be at least 6 characters':'A senha deve ter ao menos 6 caracteres.',
       'MISSING_PASSWORD':'Digite uma senha.',
       'INVALID_EMAIL':'E-mail inválido.',
+      'USER_DISABLED':'Esta conta foi desativada no Firebase.',
+      'TOO_MANY_ATTEMPTS_TRY_LATER':'Muitas tentativas seguidas. O Firebase bloqueou o login temporariamente — espere ~30 minutos e tente uma vez só.',
+      'OPERATION_NOT_ALLOWED':'Login por e-mail/senha está desativado no projeto Firebase.',
     };
     for(const k in map){ if(msg && msg.indexOf(k) !== -1) return map[k]; }
     return msg || 'Não foi possível concluir. Tente novamente.';
@@ -3200,6 +3203,19 @@
 
   authForgotBtn.addEventListener('click', () => setAuthMode('reset'));
 
+  // Mostrar / ocultar senha
+  const authPassToggle = document.getElementById('authPassToggle');
+  if(authPassToggle){
+    authPassToggle.addEventListener('click', () => {
+      const revelar = authPassword.type === 'password';
+      authPassword.type = revelar ? 'text' : 'password';
+      authPassToggle.textContent = revelar ? 'ocultar' : 'mostrar';
+      authPassToggle.setAttribute('aria-label', revelar ? 'Ocultar senha' : 'Mostrar senha');
+      authPassToggle.setAttribute('aria-pressed', revelar ? 'true' : 'false');
+      authPassword.focus();
+    });
+  }
+
   // Enter no campo de senha já tenta logar. Enter no campo de e-mail: se a senha
   // já estiver visível e ainda vazia, foca o campo de senha em vez de tentar
   // enviar o formulário incompleto; caso contrário (senha já preenchida, ou
@@ -3258,10 +3274,17 @@
         showLoading('Enviando...');
         try{
           const url = 'https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=' + FIREBASE_API_KEY;
-          const res = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ requestType:'PASSWORD_RESET', email }) });
+          const res = await fetch(url, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            // continueUrl faz o link de redefinição voltar para este domínio.
+            body: JSON.stringify({ requestType:'PASSWORD_RESET', email, continueUrl: location.origin + '/index.html' })
+          });
           const data = await res.json();
           if(!res.ok) throw new Error((data.error && data.error.message) || 'Erro ao enviar e-mail.');
-          authNote.textContent = 'Link enviado! Verifique seu e-mail.'; authNote.classList.add('active');
+          // O Firebase responde 200 mesmo quando a conta não existe (proteção
+          // contra enumeração) — então "enviado" aqui não garante que chegou.
+          authNote.textContent = 'Se existir uma conta com esse e-mail, o link chega em alguns minutos. Verifique também o spam.';
+          authNote.classList.add('active');
         } finally { hideLoading(); }
       }
     }catch(err){
