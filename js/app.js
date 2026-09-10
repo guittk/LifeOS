@@ -900,8 +900,13 @@
      FIREBASE — camada de dados real (a IA vive no proxy, em functions/)
      ======================================================================= */
 
-  const FIREBASE_API_KEY = "AIzaSyAkNtMewsDzOQZLSLq4_x4yx_QXu3sPagg";
-  const FIREBASE_DB_URL  = "https://basehub-135f5-default-rtdb.firebaseio.com";
+  // Projeto Firebase: anki-71f4f (nomeado "LifeOS" no console). É onde vivem as
+  // contas de verdade (guittkk@, guittk@, julialealdecamargo@, lucas.caramanti@)
+  // e todos os dados. O app tinha sido apontado por engano para basehub-135f5
+  // ("Hube"), onde essas contas não existem — por isso o login falhava com
+  // qualquer senha, mesmo recém-definida.
+  const FIREBASE_API_KEY = "AIzaSyAQqB__M-gKZWHS4zQ1eIA-X6rGqzVtr0I";
+  const FIREBASE_DB_URL  = "https://anki-71f4f-default-rtdb.firebaseio.com";
   const SESSION_KEY = "lifeos_v5_session";
 
   let session = null;      // { idToken, uid, email, expiresAt }
@@ -1218,11 +1223,13 @@
 
      Preencha IA_PROXY_URL com a URL que `firebase deploy --only functions`
      imprime (instruções completas no topo de functions/index.js). */
-  // Pré-preenchido a partir do projeto (basehub-135f5) e da região da function.
-  // CONFIRA contra a URL que `firebase deploy --only functions` imprime: funções
-  // de 2ª geração às vezes recebem um domínio .run.app em vez deste alias.
-  // Deixe vazio ('') para desligar a IA de propósito.
-  const IA_PROXY_URL = 'https://southamerica-east1-basehub-135f5.cloudfunctions.net/iaProxy';
+  // Vazio = features de IA desligadas (avisam por toast). Quando publicar a
+  // function, cole aqui a URL que
+  //   firebase deploy --only functions --project anki-71f4f
+  // imprime — deve ser algo como
+  //   https://southamerica-east1-anki-71f4f.cloudfunctions.net/iaProxy
+  // (funções de 2ª geração às vezes recebem um domínio .run.app).
+  const IA_PROXY_URL = '';
 
   /* system: as instruções (papel, regras, formato de saída)
      prompt: o que se pede nesta chamada
