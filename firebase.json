@@ -11,8 +11,10 @@
       ".claude/**",
       "**/node_modules/**",
       "functions/**",
+      "scripts/**",
       "*.md",
-      "database.rules.json"
+      "database.rules.json",
+      "**/serviceAccount*.json"
     ],
     "headers": [
       {
