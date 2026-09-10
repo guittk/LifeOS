@@ -3,8 +3,12 @@
 
    Duas estratégias, por natureza do recurso:
 
-   1. Shell do app (html/css/js/ícones): cache-first com revalidação em segundo
-      plano. Abre instantâneo e continua funcionando sem rede.
+   1. Shell do app (html/css/js/ícones): NETWORK-FIRST. Tenta a rede, guarda o
+      resultado, e só cai no cache quando está offline. Assim todo deploy é
+      pego no próximo carregamento, sem depender de lembrar de subir a versão.
+      (A estratégia antiga era cache-first: servia o app.js velho e só atualizava
+      pro carregamento seguinte — foi o que fez o login continuar batendo no
+      projeto Firebase errado depois da correção.)
    2. Leituras do Firebase: network-first com fallback pro cache. Online você vê
       sempre o dado atual; offline você vê o último estado conhecido em vez de
       uma tela de erro.
@@ -12,10 +16,11 @@
    Escritas (PUT/PATCH/DELETE) e chamadas de auth/IA NUNCA passam por cache —
    sem rede elas falham, e o app já trata esse erro.
 
-   Bump o CACHE_VERSION a cada deploy pra invalidar o shell antigo.
+   CACHE_VERSION só precisa mudar quando o formato do que é cacheado muda —
+   com network-first, deploys normais não exigem bump.
    ============================================================================= */
 
-const CACHE_VERSION = 'lifeos-v1';
+const CACHE_VERSION = 'lifeos-v2';
 const SHELL_CACHE = CACHE_VERSION + '-shell';
 const DATA_CACHE  = CACHE_VERSION + '-dados';
 
@@ -96,19 +101,18 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (ehShell(request, url)) {
+    // Network-first: a rede vence sempre que existe; o cache é só a rede de
+    // segurança pra quando está offline.
     event.respondWith(
-      caches.match(request).then((hit) => {
-        const rede = fetch(request)
-          .then((res) => {
-            if (res && res.status === 200) {
-              const copia = res.clone();
-              caches.open(SHELL_CACHE).then((c) => c.put(request, copia));
-            }
-            return res;
-          })
-          .catch(() => hit);
-        return hit || rede;
-      })
+      fetch(request)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const copia = res.clone();
+            caches.open(SHELL_CACHE).then((c) => c.put(request, copia));
+          }
+          return res;
+        })
+        .catch(() => caches.match(request))
     );
   }
 });
