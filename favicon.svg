@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Life OS">
+  <!-- Marca reduzida ao essencial pra ler a 16px: quadrado violeta com
+       contorno grosso (linguagem cartoon) e um "L" pesado. -->
+  <defs>
+    <linearGradient id="lf" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9b8bf0"/>
+      <stop offset="1" stop-color="#60519b"/>
+    </linearGradient>
+  </defs>
+  <rect x="3" y="3" width="58" height="58" rx="14" fill="url(#lf)" stroke="#1e202c" stroke-width="5"/>
+  <path d="M23 16v26h20" fill="none" stroke="#14121f" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
