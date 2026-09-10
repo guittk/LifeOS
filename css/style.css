@@ -78,15 +78,18 @@
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
       color-scheme: dark;
-      --bg: #15161f;
-      --bg-deep: #0e0f17;
-      --surface: #232533;
-      --surface-hi: #2b2d3d;
-      --outline: #4a4c66;
-      --shadow: #05060a;
-      --line: rgba(191,192,209,0.14);
-      --line-strong: rgba(191,192,209,0.26);
-      --hover: rgba(232,232,244,0.06);
+      --bg: #14141e;
+      --bg-deep: #0c0c14;
+      --surface: #24243a;
+      --surface-hi: #2e2f47;
+      /* No escuro o contorno cartoon é uma LINHA CLARA — como traço de nanquim
+         num quadrinho de fundo preto. O #4a4c66 antigo era quase da cor da
+         superfície e a borda sumia. */
+      --outline: #9a9cc6;
+      --shadow: #000000;
+      --line: rgba(180,178,228,0.16);
+      --line-strong: rgba(180,178,228,0.34);
+      --hover: rgba(232,232,244,0.07);
       --text: #e8e8f4;
       --text-mut: #a3a4bd;
       --text-dim: #8b8da8;
@@ -107,22 +110,25 @@
       --acid: #b8f34a;
       --acid-soft: rgba(184,243,74,0.13);
       --glow: 0 0 22px -6px currentColor;
-      --scrim: rgba(6,7,12,0.62);
-      --page-glow: radial-gradient(1200px 800px at 15% -10%, #1d1f2e 0%, var(--bg) 55%);
+      --scrim: rgba(4,4,10,0.66);
+      --page-glow: radial-gradient(1200px 800px at 15% -10%, #201f38 0%, var(--bg) 58%);
     }
   }
 
   :root[data-theme="dark"]{
     color-scheme: dark;
-    --bg: #15161f;
-    --bg-deep: #0e0f17;
-    --surface: #232533;
-    --surface-hi: #2b2d3d;
-    --outline: #4a4c66;
-    --shadow: #05060a;
-    --line: rgba(191,192,209,0.14);
-    --line-strong: rgba(191,192,209,0.26);
-    --hover: rgba(232,232,244,0.06);
+    --bg: #14141e;
+    --bg-deep: #0c0c14;
+    --surface: #24243a;
+    --surface-hi: #2e2f47;
+    /* No escuro o contorno cartoon é uma LINHA CLARA — como traço de nanquim
+       num quadrinho de fundo preto. O #4a4c66 antigo era quase da cor da
+       superfície e a borda sumia. */
+    --outline: #9a9cc6;
+    --shadow: #000000;
+    --line: rgba(180,178,228,0.16);
+    --line-strong: rgba(180,178,228,0.34);
+    --hover: rgba(232,232,244,0.07);
     --text: #e8e8f4;
     --text-mut: #a3a4bd;
     --text-dim: #8b8da8;
@@ -143,8 +149,8 @@
     --acid: #b8f34a;
     --acid-soft: rgba(184,243,74,0.13);
     --glow: 0 0 22px -6px currentColor;
-    --scrim: rgba(6,7,12,0.62);
-    --page-glow: radial-gradient(1200px 800px at 15% -10%, #1d1f2e 0%, var(--bg) 55%);
+    --scrim: rgba(4,4,10,0.66);
+    --page-glow: radial-gradient(1200px 800px at 15% -10%, #201f38 0%, var(--bg) 58%);
   }
 
   *{ box-sizing:border-box; }
