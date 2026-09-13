@@ -81,17 +81,17 @@
     <div class="nav-level-label">Organizar</div>
     <div class="nav-item" data-view="storage"><span class="dot"></span> Arquivo <span class="badge" id="navInboxBadge">0</span></div>
     <div class="nav-item" data-view="tarefas"><span class="dot"></span> Tarefas</div>
-    <div class="nav-item" data-view="monday"><span class="dot"></span> Monday</div>
     <div class="nav-item" data-view="agenda"><span class="dot"></span> Agenda</div>
     <div class="nav-item" data-view="rotina"><span class="dot"></span> Rotina</div>
     <div class="nav-item" data-view="casa"><span class="dot"></span> Casa</div>
-    <div class="nav-item" data-view="financas"><span class="dot"></span> Finanças</div>
   </nav>
+  <!-- Monday, Finanças e Bateria saíram da sidebar por pedido — telas ficam
+       menos carregadas, mas as três continuam abertas e funcionando: acesse
+       pelo Ctrl+K digitando o nome ("ir para monday", etc). -->
 
   <nav class="nav-level">
     <div class="nav-level-label">Evoluir</div>
     <div class="nav-item" data-view="fluencia"><span class="dot"></span> Fluência</div>
-    <div class="nav-item" data-view="bateria"><span class="dot"></span> Bateria</div>
     <div class="nav-item" data-view="academia"><span class="dot"></span> Academia</div>
     <div class="nav-item" data-view="diario"><span class="dot"></span> Diário</div>
     <div class="nav-item" data-view="planoalimentar"><span class="dot"></span> Plano Alimentar</div>
@@ -614,42 +614,6 @@
   </div>
 </div>
 
-<!-- MODAL — FECHAMENTO DO DIA -->
-<div class="confirm-modal" id="fechamentoModal">
-  <div class="confirm-modal-panel confirm-modal-panel-wide">
-    <p class="fech-kicker">// fechamento do dia</p>
-    <h2 class="fech-titulo" id="fechTitulo">Como foi hoje?</h2>
-
-    <div class="fech-resumo" id="fechResumo"></div>
-
-    <div class="fech-cols">
-      <div>
-        <p class="fech-col-label">Feito hoje</p>
-        <div class="fech-lista" id="fechFeitas"></div>
-      </div>
-      <div>
-        <p class="fech-col-label">Rola para amanhã</p>
-        <div class="fech-lista" id="fechPendentes"></div>
-      </div>
-    </div>
-
-    <p class="fech-col-label" style="margin-top:16px;">Uma linha sobre o dia — vai pro Diário</p>
-    <div class="mood-row" id="fechMoodRow">
-      <div class="mood-chip" data-mood="😞">😞</div>
-      <div class="mood-chip" data-mood="😕">😕</div>
-      <div class="mood-chip active" data-mood="🙂">🙂</div>
-      <div class="mood-chip" data-mood="😄">😄</div>
-      <div class="mood-chip" data-mood="🤩">🤩</div>
-    </div>
-    <textarea id="fechTexto" class="modal-text-input" rows="2" placeholder="Opcional — o que marcou o dia?" style="resize:vertical;"></textarea>
-
-    <div class="confirm-modal-actions">
-      <button class="btn btn-ghost btn-sm" id="fechCancelBtn">Agora não</button>
-      <button class="btn btn-primary btn-sm" id="fechOkBtn">Fechar o dia</button>
-    </div>
-  </div>
-</div>
-
 <!-- MODAL — CONVITES PENDENTES (ao logar) -->
 <div class="confirm-modal" id="boardInvitesPendingModal">
   <div class="confirm-modal-panel">
@@ -681,28 +645,6 @@
     </div>
 
     <!-- HUD DE PROGRESSO — nível, XP do dia, sequência e os 4 atributos -->
-    <div class="gam-hud" id="gamHud">
-      <div class="gam-hud-main">
-        <div class="gam-nivel-bloco">
-          <span class="gam-nivel-label">NÍVEL</span>
-          <span class="gam-nivel-num" id="gamNivel">1</span>
-        </div>
-        <div class="gam-xp-bloco">
-          <div class="gam-xp-top">
-            <span class="gam-xp-texto" id="gamXpTexto">0 / 100 XP</span>
-            <span class="gam-hoje-xp" id="gamHojeXp">+0 hoje</span>
-          </div>
-          <div class="gam-xp-track"><i class="gam-xp-fill" id="gamXpBarra" style="width:0%"></i></div>
-        </div>
-        <div class="gam-streak-bloco">
-          <span class="gam-streak-flama">🔥</span>
-          <span class="gam-streak-txt" id="gamStreak">0 dias</span>
-        </div>
-        <button type="button" class="btn btn-ghost btn-sm" id="abrirFechamentoBtn">Fechar o dia</button>
-      </div>
-      <div class="gam-attr-grid" id="gamAtributos"></div>
-    </div>
-
     <!-- A resposta: uma coisa para fazer agora, sozinha na abertura da tela. -->
     <div class="hero-card">
       <div class="hero-glow"></div>
@@ -733,11 +675,6 @@
     </div>
 
     <div class="subview active" id="hoje-dia">
-
-    <div class="panel gam-missoes-panel">
-      <p class="panel-title">Missões de hoje</p>
-      <div id="gamMissoesList"><p class="empty-state">Carregando...</p></div>
-    </div>
 
     <div class="panel" style="margin-bottom:18px;">
       <p class="panel-title">Minha rotina hoje <span class="tag tag-sage" data-view-link="rotina">configurar →</span></p>
@@ -1044,11 +981,6 @@
         <p class="view-desc">Onde você quer chegar — e os pontos menores que você vai conquistando pelo caminho até lá.</p>
       </div>
       <button class="btn btn-primary btn-sm" id="objAddBtn">+ Novo objetivo</button>
-    </div>
-
-    <div class="panel trofeus-panel">
-      <p class="panel-title">Salão de troféus <span class="tag tag-gold" id="trofeusCount">0 / 0</span></p>
-      <div class="trofeus-grid" id="trofeusGrid"></div>
     </div>
 
     <div class="obj-detail-list" id="objetivosList">
@@ -1440,14 +1372,6 @@
 
 <div class="timeline-hover-tip" id="timelineHoverTip"><span class="tip-name"></span><span class="tip-time"></span></div>
 
-<!-- Captura rápida: presente em qualquer tela, some quando a gaveta mobile abre -->
-<button type="button" class="captura-fab" id="capturaFab" title="Captura rápida (C)" aria-label="Captura rápida">＋</button>
-
-<!-- Camada de feedback da gamificação: XP subindo e o cartão de level up -->
-<div class="gam-xp-pops" id="gamXpPops" aria-live="polite"></div>
-<div class="gam-levelup" id="gamLevelUp" aria-live="polite"></div>
-
-<script src="js/gamification.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

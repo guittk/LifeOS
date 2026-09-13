@@ -44,7 +44,8 @@
   const COR_PRINCIPAL_PRESETS = [
     '#60519b', '#7a68c4', '#4f6fd1', '#0f9fb8', '#12a594', '#4f8f0c',
     '#8a9a3f', '#a86a00', '#d1745f', '#c62b4a', '#d1327c', '#9b3fb0',
-    '#5a4da8', '#3f7d9e', '#6a91b4', '#7d6f5c'
+    '#5a4da8', '#3f7d9e', '#6a91b4', '#7d6f5c',
+    '#ff5ea8', '#34d9f0', '#b8f34a', '#ffb020'
   ];
   function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
 
@@ -198,7 +199,7 @@
   }
 
   /* ---------- Notificações ----------
-     O app esperava você lembrar dele. Três avisos, e só três — mais que isso
+     O app esperava você lembrar dele. Dois avisos, e só dois — mais que isso
      vira ruído e a pessoa desliga tudo.
 
      LIMITE HONESTO: sem servidor de push, estes avisos só disparam com o app
@@ -241,17 +242,19 @@
     btn.disabled = bloqueado;
   }
 
-  // Dispara uma vez por chave por dia — o registro fica no /Progresso, então
+  // Dispara uma vez por chave por dia — o registro fica no localStorage, então
   // trocar de aba ou recarregar não faz o aviso repetir.
   function avisar(chave, titulo, corpo){
     if(!notificacoesLigadas()) return;
-    if(typeof gamProgresso === 'undefined' || !gamProgresso) return;
     const hoje = todayStr();
-    if(!gamProgresso.avisos) gamProgresso.avisos = {};
     const marca = hoje + '_' + chave;
-    if(gamProgresso.avisos[marca]) return;
-    gamProgresso.avisos[marca] = 1;
-    gamAgendarSalvar();
+    let disparados = {};
+    try{ disparados = JSON.parse(localStorage.getItem('lifeosAvisosDisparados') || '{}'); }catch(e){ /* ignore */ }
+    if(disparados[marca]) return;
+    // Limpa marcas de dias anteriores pra não acumular pra sempre.
+    Object.keys(disparados).forEach(k => { if(!k.startsWith(hoje)) delete disparados[k]; });
+    disparados[marca] = 1;
+    localStorage.setItem('lifeosAvisosDisparados', JSON.stringify(disparados));
     try{
       new Notification(titulo, { body: corpo, icon: 'icon.svg', tag: marca });
     }catch(e){ console.warn('Falha ao notificar:', e); }
@@ -292,18 +295,6 @@
                  dose ? 'Hora da refeição — dose de ' + dose + ' UI.' : 'Hora da refeição.');
         }
       });
-
-      // 3) Sequência em risco às 21h
-      if(nowMin >= 21 * 60 && nowMin < 21 * 60 + 5){
-        const fila = Array.isArray(activities) ? activities.filter(a => !a.skipped) : [];
-        const feitas = fila.filter(a => a.done).length;
-        const pct = fila.length ? (feitas / fila.length) * 100 : 100;
-        const jaFechou = gamProgresso.diasFechados && gamProgresso.diasFechados[hoje];
-        if(!jaFechou && fila.length && pct < 80){
-          avisar('streak', 'Sequência em risco',
-                 'Faltam ' + (fila.length - feitas) + ' itens pra fechar o dia.');
-        }
-      }
     }catch(err){
       console.warn('Falha ao checar avisos:', err);
     }
@@ -680,9 +671,9 @@
   }
 
   /* ---------- Captura rápida global ----------
-     Antes, capturar exigia ir até Arquivo → Capturas → + Nova captura. Fricção
-     em cima do gesto que precisa ter menos fricção de todos. */
-  const capturaFab = document.getElementById('capturaFab');
+     Antes, capturar exigia ir até Arquivo → Capturas → + Nova captura. A tecla
+     "C" continua abrindo direto de qualquer tela — só o botão flutuante saiu,
+     por ser um elemento a mais competindo com o resto da interface. */
   function abrirCapturaRapida(){
     const modal = document.getElementById('newCaptureModal');
     if(!modal) return;
@@ -693,7 +684,6 @@
       if(inp){ inp.value = ''; inp.focus(); }
     }, 30);
   }
-  if(capturaFab) capturaFab.addEventListener('click', abrirCapturaRapida);
   document.addEventListener('keydown', (e) => {
     // "C" abre a captura — só quando o foco não está num campo de texto.
     if(e.key !== 'c' && e.key !== 'C') return;
@@ -747,15 +737,6 @@
     dayProgressLabel.textContent = done + ' de ' + total + ' concluídas (' + pct + '%)';
     dayProgressFill.style.width = pct + '%';
     seqCountTag.textContent = total + ' hoje';
-    // 80% da fila fecha o dia e mantém a sequência viva. gamFecharDia() só conta
-    // uma vez por dia, então pode ser chamada a cada atualização sem risco.
-    // gamProgresso só existe depois do gamInit() no boot. Sem esta guarda,
-    // a chamada que updateFlowUI() faz durante a montagem do app dispararia
-    // userPath() antes de activeDataUid ser inicializado (erro de TDZ).
-    if(typeof gamProgresso !== 'undefined' && gamProgresso){
-      if(total > 0 && pct >= 80) gamFecharDia();
-      gamRenderMissoes();
-    }
   }
 
   function updateHeroCard(){
@@ -891,7 +872,6 @@
     const mood = activeChip ? activeChip.getAttribute('data-mood') : '🙂';
     const id = newId();
     await dbPut(userPath('/DiarioEntradas/' + id), { mood, text, createdAt: new Date().toISOString() });
-    await grantXp('diario', { chave: 'diario_' + id, contador: 'diario' });
     textEl.value = '';
     await renderDiario();
   });
@@ -1637,9 +1617,6 @@
       if(st.pendente){
         const hoje = todayStr();
         await dbPatch(userPath('/casa/atividades/' + id), { feitaEm: hoje });
-        // A chave inclui a data: a mesma tarefa paga de novo no próximo ciclo,
-        // mas marcar e desmarcar no mesmo dia não rende XP repetido.
-        await grantXp('casa_atividade', { chave: 'casa_' + id + '_' + hoje });
       }else{
         await dbPatch(userPath('/casa/atividades/' + id), { feitaEm: null });
       }
@@ -1927,53 +1904,11 @@
       });
     });
   }
-  /* Paga XP por ponto e por objetivo concluído. Roda a cada render dos
-     Objetivos; as chaves impedem pagar duas vezes o mesmo ponto. */
-  async function premiarObjetivosConcluidos(data){
-    if(typeof gamProgresso === 'undefined' || !gamProgresso) return;
-    for(const [oid, o] of Object.entries(data || {})){
-      const pontos = Object.entries(o.pontos || {});
-      for(const [pid, p] of pontos){
-        if(pontoProgresso(p) >= 100){
-          await grantXp('ponto_objetivo', { chave: 'ponto_' + oid + '_' + pid });
-        }
-      }
-      const pct = pontos.length
-        ? Math.round(pontos.reduce((s, [, p]) => s + pontoProgresso(p), 0) / pontos.length)
-        : 0;
-      if(pontos.length && pct >= 100){
-        await grantXp('objetivo', { chave: 'obj_' + oid, contador: 'objetivos' });
-      }
-    }
-  }
-
-  /* ---------- Objetivos como boss fights ----------
-     A barra de vida é o que FALTA (100 − progresso), então ela desce conforme
-     você avança. O prazo é o cronômetro: a menos de 7 dias entra em alerta. */
-  function bossHud(o, pct, hojeStr){
-    if(!o.prazo) return '';
-    const dias = Math.round((new Date(o.prazo + 'T00:00:00') - new Date(hojeStr + 'T00:00:00')) / 86400000);
-    const vida = Math.max(0, 100 - pct);
-    let estado = 'boss-ok', rotulo = dias + (dias === 1 ? ' dia restante' : ' dias restantes');
-    if(pct >= 100){ estado = 'boss-vencido'; rotulo = 'DERROTADO'; }
-    else if(dias < 0){ estado = 'boss-atrasado'; rotulo = Math.abs(dias) + (dias === -1 ? ' dia de atraso' : ' dias de atraso'); }
-    else if(dias <= 7){ estado = 'boss-urgente'; }
-    return `
-      <div class="boss-hud ${estado}">
-        <div class="boss-hud-top">
-          <span class="boss-hud-label">${pct >= 100 ? '☠ boss' : '❤ vida do boss'}</span>
-          <span class="boss-hud-timer">${rotulo}</span>
-        </div>
-        <div class="boss-vida-track"><i style="width:${vida}%"></i></div>
-      </div>`;
-  }
-
   async function renderObjetivos(){
     const el = document.getElementById('objetivosList');
     const data = await dbGet(userPath('/objetivos')) || {};
     const counts = await fetchAutoActionCounts();
     aplicarAutoProgresso(data, counts);
-    await premiarObjetivosConcluidos(data);
     const entries = Object.entries(data).sort((a,b) => {
       const pa = OBJ_PRIORIDADE_ORDER[a[1].prioridade] ?? 1;
       const pb = OBJ_PRIORIDADE_ORDER[b[1].prioridade] ?? 1;
@@ -2010,7 +1945,6 @@
           ${o.prazo ? `<span class="prazo-pill ${prazoOverdue ? 'prazo-futuro' : 'prazo-datado'}" style="${prazoOverdue ? 'color:var(--coral);border-color:rgba(180,106,92,0.4);' : ''}">${prazoOverdue ? 'atrasado · ' : 'até '}${fmtShortDate(o.prazo)}</span>` : ''}
         </div>
         <div class="obj-bar-track"><div class="obj-bar-fill" style="width:${pct}%; background:linear-gradient(90deg, var(--obj-cat-color, var(--sage)), var(--obj-cat-color, var(--sage)));"></div></div>
-        ${bossHud(o, pct, hojeStr)}
         <div class="obj-foot" style="margin-bottom:0;">
           <span>${total ? total + ' ponto' + (total === 1 ? '' : 's') + ' · progresso médio' : 'sem pontos ainda'}</span>
           <span>${pct}%</span>
@@ -2913,7 +2847,6 @@
     } else {
       const novaDecId = newId();
       await dbPut(userPath('/Decisoes/' + novaDecId), { titulo, categoria, importancia, status, data, contexto, criterios, criadoEm: new Date().toISOString() });
-      await grantXp('decisao', { chave: 'dec_' + novaDecId, contador: 'decisoes' });
     }
     document.getElementById('decisaoModal').classList.remove('active');
     await renderDecisoes();
@@ -2991,9 +2924,6 @@
     await dbPatch(userPath('/Decisoes/' + decRevisaoEditingId), {
       revisao: { valeu, faria, consequencias, data: todayStr() }
     });
-    // Voltar numa decisão meses depois é o hábito mais difícil da Central —
-    // por isso paga mais que registrar a decisão original.
-    await grantXp('decisao_revisao', { chave: 'decrev_' + decRevisaoEditingId });
     document.getElementById('decisaoRevisaoModal').classList.remove('active');
     await renderDecisoes();
   });
@@ -3329,42 +3259,14 @@
     localStorage.setItem('corPrincipal', hex);
     dbPatchSilent(userPath('/Config'), { corPrincipal: hex }).catch(err => console.error('Erro ao salvar cor principal', err));
   }
-  /* Cores extras destravadas por conquista.
-     São ADICIONAIS às 16 livres — nenhuma cor que já existia foi trancada.
-     Recompensa tem que somar; tirar algo que a pessoa já usava seria punição. */
-  const COR_PRINCIPAL_RECOMPENSAS = [
-    { hex:'#ff5ea8', nome:'Magenta Neon',  conquista:'maquina',          comoGanhar:'30 dias seguidos de sequência' },
-    { hex:'#34d9f0', nome:'Ciano Neon',    conquista:'poliglota',        comoGanhar:'1.000 cards de Fluência' },
-    { hex:'#b8f34a', nome:'Ácido',         conquista:'centuriao',        comoGanhar:'100 tarefas concluídas' },
-    { hex:'#ffb020', nome:'Âmbar',         conquista:'arquiteto',        comoGanhar:'Primeiro objetivo em 100%' },
-    { hex:'#e8e8f4', nome:'Osso',          conquista:'nivel10',          comoGanhar:'Nível 10 em qualquer atributo' }
-  ];
-  function corDesbloqueada(id){
-    return !!(typeof gamProgresso !== 'undefined' && gamProgresso &&
-              gamProgresso.conquistas && gamProgresso.conquistas[id]);
-  }
-
   function renderCorPrincipalPopover(){
     const pop = document.getElementById('corPrincipalPopover');
-    if(!pop) return;
-    // Re-renderiza sempre: uma conquista pode ter caído desde a última abertura.
-    const livres = COR_PRINCIPAL_PRESETS.map(hex =>
+    if(!pop || pop.children.length) return;
+    pop.innerHTML = COR_PRINCIPAL_PRESETS.map(hex =>
       `<button type="button" class="cor-swatch-option" data-cor="${hex}" style="background:${hex};" aria-label="${hex}"></button>`).join('');
-    const recompensas = COR_PRINCIPAL_RECOMPENSAS.map(c => {
-      const ok = corDesbloqueada(c.conquista);
-      return `<button type="button" class="cor-swatch-option ${ok ? '' : 'cor-swatch-locked'}"
-        ${ok ? `data-cor="${c.hex}"` : `data-cor-locked="${escapeHtml(c.comoGanhar)}"`}
-        style="background:${c.hex};" title="${escapeHtml(ok ? c.nome : c.nome + ' — ' + c.comoGanhar)}"
-        aria-label="${escapeHtml(ok ? c.nome : c.nome + ', bloqueada: ' + c.comoGanhar)}">${ok ? '' : '🔒'}</button>`;
-    }).join('');
-    pop.innerHTML = livres + `<div class="cor-swatch-sep">recompensas</div>` + recompensas;
-
     pop.querySelectorAll('[data-cor]').forEach(btn => btn.addEventListener('click', () => {
       escolherCorPrincipal(btn.getAttribute('data-cor'));
       pop.classList.remove('active');
-    }));
-    pop.querySelectorAll('[data-cor-locked]').forEach(btn => btn.addEventListener('click', () => {
-      showAppMessage('Cor bloqueada — destrava com: ' + btn.getAttribute('data-cor-locked'), 'info');
     }));
   }
   document.getElementById('corPrincipalSwatchBtn').addEventListener('click', (e) => {
@@ -3488,20 +3390,6 @@
     }
   });
 
-  /* ---------- Fechamento do dia ---------- */
-  document.getElementById('abrirFechamentoBtn')?.addEventListener('click', abrirFechamento);
-  document.getElementById('fechCancelBtn')?.addEventListener('click', () => {
-    document.getElementById('fechamentoModal').classList.remove('active');
-  });
-  document.getElementById('fechOkBtn')?.addEventListener('click', confirmarFechamento);
-  document.querySelectorAll('#fechMoodRow .mood-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      document.querySelectorAll('#fechMoodRow .mood-chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      fechHumor = chip.getAttribute('data-mood');
-    });
-  });
-
   /* ---------- INBOX ---------- */
   /* ---------- Arquivamento automático ----------
      Quando a captura já diz para onde vai ("Game Studio:" na primeira linha, ou
@@ -3530,7 +3418,6 @@
   async function addInboxItem(text, source){
     const gaveta = await tentarArquivarCaptura(text);
     if(gaveta){
-      await grantXp('captura_organizada', { chave: 'auto_' + newId() });
       showAppMessage('Arquivado direto em "' + gaveta + '".', 'success');
       await renderStorage();
       await renderInbox();
@@ -4599,7 +4486,6 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
   async function confirmMealHoje(mid, status){
     const today = todayStr();
     await dbPut(userPath('/MealLog/' + today + '/' + mid), { status, at: new Date().toISOString() });
-    if(status === 'done') await grantXp('refeicao', { chave: 'ref_' + today + '_' + mid });
     await renderHojePlanoAlimentar();
   }
 
@@ -5826,11 +5712,8 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
       await dbPatch(userPath('/Tasks/' + id), {
         date: proximaDataRecorrencia(dataFeita, t.recorrencia), done:false, ultimaFeita: dataFeita
       });
-      await grantXp('tarefa', { chave: 'tarefa_' + id + '_' + dataFeita, contador: 'tarefas' });
     }else{
       await dbPatch(userPath('/Tasks/' + id), { done });
-      // Mesma chave usada pela fila de Hoje: concluir aqui ou lá paga uma vez só.
-      if(done) await grantXp('tarefa', { chave: 'tarefa_' + id, contador: 'tarefas' });
     }
     await renderTaskGroups(); await renderHojeQueue();
   }
@@ -6125,7 +6008,6 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
       const id = pill.getAttribute('data-pick-status-for');
       openStatusDropdown(pill, async (status) => {
         await dbPatchSilent(userPath('/MondayTasks/' + id), { status });
-        if(status === 'done') await grantXp('tarefa', { chave: 'monday_' + id, contador: 'tarefas' });
         await renderMondayTasks();
       });
     }));
@@ -6292,14 +6174,9 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
               // ficar pendente. Uma linha só no banco, sem ocorrências futuras.
               const proxima = proximaDataRecorrencia(dataFeita, t.recorrencia);
               await dbPatch(userPath('/Tasks/' + id), { date: proxima, done:false, ultimaFeita: dataFeita });
-              // Chave com a data: cada ciclo paga uma vez, e só uma.
-              await grantXp('tarefa', { chave: 'tarefa_' + id + '_' + dataFeita, contador: 'tarefas' });
             }else{
               await dbPatch(userPath('/Tasks/' + id), { done:true });
-              // Chave sem data nas não-recorrentes: paga uma vez na vida.
-              await grantXp('tarefa', { chave: 'tarefa_' + id, contador: 'tarefas' });
             }
-            if(t.date === today) await grantXp('tarefa_no_prazo', { chave: 'prazo_' + id + '_' + dataFeita });
           },
           onSkip: async (skipped) => { await dbPatch(userPath('/HojeSkips/' + today), { [key]: skipped ? true : null }); }
         };
@@ -6311,13 +6188,6 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
           semData: false, atraso: 0,
           onComplete: async () => {
             await dbPatch(userPath('/AcademiaDias/' + dow + '/exercicios/' + eid + '/doneDates'), { [today]: true });
-            await grantXp('exercicio', { chave: 'ex_' + eid + '_' + today, contador: 'exercicios' });
-            // Bônus quando o último exercício do dia fecha o treino inteiro.
-            const restantes = exerciciosHoje.filter(([oid, oe]) =>
-              oid !== eid && !(oe.doneDates && oe.doneDates[today]));
-            if(!restantes.length){
-              await grantXp('treino_completo', { chave: 'treino_' + dow + '_' + today, contador: 'treinos' });
-            }
           },
           onSkip: async (skipped) => { await dbPatch(userPath('/HojeSkips/' + today), { [key]: skipped ? true : null }); }
         };
@@ -6471,10 +6341,6 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
       const add = Number(btn.getAttribute('data-add-agua'));
       const novoTotal = aguaAtual + add;
       await dbPatch(userPath('/AcademiaConsumo/' + today), { aguaMl: novoTotal });
-      // Paga uma vez, no momento em que a meta do dia é atingida.
-      if(aguaMeta > 0 && novoTotal >= aguaMeta && aguaAtual < aguaMeta){
-        await grantXp('agua_meta', { chave: 'agua_' + today });
-      }
       await renderHojeHidratacao();
     }));
     el.querySelectorAll('[data-reset-agua]').forEach(btn => btn.addEventListener('click', async () => {
@@ -6855,7 +6721,6 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
     // o badge de contagem na sidebar, visível de qualquer tela.
     await Promise.allSettled([
       guardRender(renderInbox, 'a Inbox', 'inboxList'),
-      guardRender(gamInit, 'o seu progresso', 'gamMissoesList'),
       renderView('hoje')
     ]);
     // Trava de segurança: garante que o overlay global de loading nunca fique
@@ -6865,16 +6730,6 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
 
     atualizarBotaoNotificacoes();
     if(notificacoesLigadas()) iniciarAgendadorDeAvisos();
-
-    // Depois das 21h, o fechamento se oferece uma vez — não fica insistindo.
-    // Abrir sozinho é o que faz o ritual acontecer; esperar você lembrar de
-    // clicar seria o mesmo erro do botão de IA.
-    try{
-      const agora = new Date();
-      if(agora.getHours() >= 21 && !fechDiaJaFechado() && Array.isArray(activities) && activities.length){
-        setTimeout(abrirFechamento, 1200);
-      }
-    }catch(e){ /* fechamento é opcional: nunca deve impedir o boot */ }
   }
 
   (async function init(){
