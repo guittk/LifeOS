@@ -84,9 +84,11 @@
       --surface-hi: #2e2f47;
       /* No escuro o contorno cartoon é uma LINHA CLARA — como traço de nanquim
          num quadrinho de fundo preto. O #4a4c66 antigo era quase da cor da
-         superfície e a borda sumia. */
+         superfície e a borda sumia. Sombra = mesma cor do contorno, igual o
+         claro já faz (lá os dois são #1e202c) — bloco lê como um objeto só,
+         com contorno e sombra do mesmo traço. */
       --outline: #9a9cc6;
-      --shadow: #000000;
+      --shadow: #9a9cc6;
       --line: rgba(180,178,228,0.16);
       --line-strong: rgba(180,178,228,0.34);
       --hover: rgba(232,232,244,0.07);
@@ -123,9 +125,11 @@
     --surface-hi: #2e2f47;
     /* No escuro o contorno cartoon é uma LINHA CLARA — como traço de nanquim
        num quadrinho de fundo preto. O #4a4c66 antigo era quase da cor da
-       superfície e a borda sumia. */
+       superfície e a borda sumia. Sombra = mesma cor do contorno, igual o
+       claro já faz (lá os dois são #1e202c) — bloco lê como um objeto só,
+       com contorno e sombra do mesmo traço. */
     --outline: #9a9cc6;
-    --shadow: #000000;
+    --shadow: #9a9cc6;
     --line: rgba(180,178,228,0.16);
     --line-strong: rgba(180,178,228,0.34);
     --hover: rgba(232,232,244,0.07);
