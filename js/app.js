@@ -2334,8 +2334,10 @@
       return;
     }
     // o board cresce conforme a quantidade de fotos, em vez de um tamanho fixo
-    // grande demais que deixa vão sobrando quando tem poucas imagens.
-    el.style.minHeight = Math.min(920, Math.max(320, 110 + entries.length * 95)) + 'px';
+    // grande demais que deixa vão sobrando quando tem poucas imagens. O piso
+    // subiu de 320 pra 460: com só 1-3 fotos a lousa ficava baixa demais,
+    // espremendo o colagem em vez de dar respiro ao redor.
+    el.style.minHeight = Math.min(1100, Math.max(460, 160 + entries.length * 130)) + 'px';
     el.classList.toggle('layers-mode', visionLayersOpen());
     const visibleEntries = entries.filter(([, v]) => !v.hidden);
     const handlesHtml = visionLayersOpen() ? `
@@ -2636,7 +2638,7 @@
     '<circle cx="255" cy="188" r="8" fill="#fff"/>' +
     '</svg>'
   );
-  function detectarVisionVideo(url){
+  async function detectarVisionVideo(url){
     const yt = url.match(VISION_YOUTUBE_RE);
     if(yt){
       return {
@@ -2648,10 +2650,15 @@
     const ig = url.match(VISION_INSTAGRAM_RE);
     if(ig){
       const tipo = ig[1].toLowerCase() === 'reels' ? 'reel' : ig[1].toLowerCase(); // embed só aceita a forma singular
+      // Endpoint não-oficial, mas público (sem login/token): redireciona pra
+      // imagem de capa de verdade do post. Se um dia parar de funcionar (o
+      // Instagram pode bloquear a qualquer momento), cai pro placeholder.
+      const thumbReal = 'https://www.instagram.com/' + tipo + '/' + ig[2] + '/media/?size=l';
+      const thumb = (await testarUrlImagem(thumbReal)) ? thumbReal : VISION_INSTAGRAM_PLACEHOLDER;
       return {
         tipoVideo: 'instagram',
         embedSrc: 'https://www.instagram.com/' + tipo + '/' + ig[2] + '/embed',
-        thumb: VISION_INSTAGRAM_PLACEHOLDER
+        thumb
       };
     }
     return null;
@@ -2767,11 +2774,11 @@
     const avisos = [];
     const novosItens = [];
     const urlsParaTestar = [];
-    urlsDigitadas.forEach(url => {
-      const video = detectarVisionVideo(url);
+    for(const url of urlsDigitadas){
+      const video = await detectarVisionVideo(url);
       if(video) novosItens.push({ src: video.thumb, tipoVideo: video.tipoVideo, embedSrc: video.embedSrc });
       else urlsParaTestar.push(url);
-    });
+    }
     if(urlsParaTestar.length){
       const testesUrl = await Promise.all(urlsParaTestar.map(async (url) => ({ url, ok: await testarUrlImagem(url) })));
       testesUrl.filter(t => t.ok).forEach(t => novosItens.push({ src: t.url, tipoVideo: null, embedSrc: null }));

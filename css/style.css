@@ -1040,7 +1040,7 @@
   .status-dropdown button:hover{ background:var(--surface); }
   .status-dropdown-dot{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
   .vision-board{
-    position:relative; width:100%; min-height:320px; border:6px solid #6b4a30; border-radius:var(--radius); overflow:hidden;
+    position:relative; width:100%; min-height:460px; border:6px solid #6b4a30; border-radius:var(--radius); overflow:hidden;
     background-color:#b98a5c;
     background-image:
       radial-gradient(rgba(0,0,0,0.14) 1px, transparent 1.3px),
