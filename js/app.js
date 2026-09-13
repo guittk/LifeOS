@@ -2345,8 +2345,18 @@
     el.innerHTML = visibleEntries.map(([id, v]) => `
       <div class="vision-item${id === visionManualSelectedId ? ' selected' : ''}" data-vision-id="${id}" style="left:${v.left}%; top:${v.top}%; width:${v.widthPct}%; --v-rot:${v.rotate}deg; z-index:${v.z || 1};">
         <img src="${escapeHtml(v.src)}" alt="" loading="lazy" draggable="false">
+        ${v.tipoVideo ? `<button type="button" class="vision-play-btn" data-vision-play="${id}" title="Assistir vídeo">▶</button>` : ''}
         ${id === visionManualSelectedId ? handlesHtml : ''}
       </div>`).join('');
+    el.querySelectorAll('[data-vision-play]').forEach(btn => {
+      btn.addEventListener('pointerdown', (e) => e.stopPropagation());
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-vision-play');
+        const v = visionData[id];
+        if(v && v.embedSrc) abrirVisionVideo(v.embedSrc);
+      });
+    });
     // Alças de escalar (cantos) e girar (topo), no estilo Canva — só aparecem na foto selecionada.
     el.querySelectorAll('.vision-item.selected .vision-handle').forEach(handle => {
       handle.addEventListener('pointerdown', (e) => {
@@ -2603,6 +2613,58 @@
     });
   }
 
+  /* Vídeo do YouTube/Instagram no Vision Board: mostra só a thumb no card, com um
+     botão de play que abre o vídeo de verdade num lightbox — sem baixar/hospedar
+     nada, só embutindo o player oficial de cada plataforma. */
+  const VISION_YOUTUBE_RE = /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{6,})/i;
+  const VISION_INSTAGRAM_RE = /instagram\.com\/(p|reel|tv)\/([a-zA-Z0-9_-]+)/i;
+  // Instagram não tem uma API pública de thumbnail sem token — em vez de tentar
+  // buscar e falhar silenciosamente, usa um cartão-placeholder identificável (o
+  // play visível já deixa claro que é um vídeo a abrir).
+  const VISION_INSTAGRAM_PLACEHOLDER = 'data:image/svg+xml,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500">' +
+    '<defs><linearGradient id="ig" x1="0" y1="0" x2="1" y2="1">' +
+    '<stop offset="0" stop-color="#4f5bd5"/><stop offset="0.5" stop-color="#c13584"/><stop offset="1" stop-color="#f77737"/>' +
+    '</linearGradient></defs>' +
+    '<rect width="400" height="500" fill="url(#ig)"/>' +
+    '<rect x="120" y="160" width="160" height="160" rx="36" fill="none" stroke="#fff" stroke-width="10"/>' +
+    '<circle cx="200" cy="240" r="42" fill="none" stroke="#fff" stroke-width="10"/>' +
+    '<circle cx="255" cy="188" r="8" fill="#fff"/>' +
+    '</svg>'
+  );
+  function detectarVisionVideo(url){
+    const yt = url.match(VISION_YOUTUBE_RE);
+    if(yt){
+      return {
+        tipoVideo: 'youtube',
+        embedSrc: 'https://www.youtube.com/embed/' + yt[1] + '?autoplay=1',
+        thumb: 'https://img.youtube.com/vi/' + yt[1] + '/hqdefault.jpg'
+      };
+    }
+    const ig = url.match(VISION_INSTAGRAM_RE);
+    if(ig){
+      return {
+        tipoVideo: 'instagram',
+        embedSrc: 'https://www.instagram.com/' + ig[1] + '/' + ig[2] + '/embed',
+        thumb: VISION_INSTAGRAM_PLACEHOLDER
+      };
+    }
+    return null;
+  }
+  function abrirVisionVideo(embedSrc){
+    document.getElementById('visionVideoFrame').innerHTML =
+      '<iframe src="' + escapeHtml(embedSrc) + '" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen frameborder="0"></iframe>';
+    document.getElementById('visionVideoModal').classList.add('active');
+  }
+  function fecharVisionVideo(){
+    document.getElementById('visionVideoModal').classList.remove('active');
+    document.getElementById('visionVideoFrame').innerHTML = ''; // limpa o iframe pra parar o vídeo
+  }
+  document.getElementById('visionVideoCloseBtn').addEventListener('click', fecharVisionVideo);
+  document.getElementById('visionVideoModal').addEventListener('click', (e) => {
+    if(e.target.id === 'visionVideoModal') fecharVisionVideo();
+  });
+
   /* Modal "Gerenciar imagens": lista tudo que já está no board (com seleção múltipla pra
      excluir em lote) e permite adicionar várias imagens de uma vez, por link ou upload. */
   const visionManageSelecionadas = new Set();
@@ -2629,6 +2691,7 @@
       <div class="vision-manage-item${visionManageSelecionadas.has(id) ? ' selected' : ''}" data-manage-id="${id}">
         <input type="checkbox" class="vision-manage-check" data-check-vision="${id}"${visionManageSelecionadas.has(id) ? ' checked' : ''}>
         <img src="${escapeHtml(v.src)}" alt="" loading="lazy">
+        ${v.tipoVideo ? '<span class="vision-manage-play">▶</span>' : ''}
         <button type="button" data-del-vision="${id}" title="Remover">×</button>
       </div>`).join('');
     wrap.querySelectorAll('img').forEach(img => {
@@ -2691,38 +2754,48 @@
       errorEl.style.display = 'block';
       return;
     }
-    // Testa cada link ANTES de gravar: um link de página (ex: post do Instagram/Pinterest,
-    // em vez do arquivo da imagem) não carrega como <img> — sem esse teste, a entrada era
-    // criada mesmo assim e a foto simplesmente nunca aparecia no board, sem aviso nenhum.
-    const testesUrl = await Promise.all(urlsDigitadas.map(async (url) => ({ url, ok: await testarUrlImagem(url) })));
-    const urls = testesUrl.filter(t => t.ok).map(t => t.url);
-    const urlsInvalidas = testesUrl.filter(t => !t.ok).map(t => t.url);
+    // Links de vídeo (YouTube/Instagram) usam a thumb oficial direto, sem passar
+    // pelo teste de <img> — só o resto (link de imagem de verdade) precisa provar
+    // que carrega antes de entrar, porque um link de página (ex: post do
+    // Instagram/Pinterest em vez do arquivo) não carrega como <img> e a foto
+    // nunca aparecia no board, sem aviso nenhum.
     const avisos = [];
-    if(urlsInvalidas.length){
-      avisos.push(`${urlsInvalidas.length} link(s) não carregaram como imagem e foram ignorados — confira se é o link direto do ARQUIVO da imagem, não da página onde ela aparece (ex: no Instagram, abra a foto e use "Copiar endereço da imagem", não o link do post).`);
+    const novosItens = [];
+    const urlsParaTestar = [];
+    urlsDigitadas.forEach(url => {
+      const video = detectarVisionVideo(url);
+      if(video) novosItens.push({ src: video.thumb, tipoVideo: video.tipoVideo, embedSrc: video.embedSrc });
+      else urlsParaTestar.push(url);
+    });
+    if(urlsParaTestar.length){
+      const testesUrl = await Promise.all(urlsParaTestar.map(async (url) => ({ url, ok: await testarUrlImagem(url) })));
+      testesUrl.filter(t => t.ok).forEach(t => novosItens.push({ src: t.url, tipoVideo: null, embedSrc: null }));
+      const urlsInvalidas = testesUrl.filter(t => !t.ok).map(t => t.url);
+      if(urlsInvalidas.length){
+        avisos.push(`${urlsInvalidas.length} link(s) não carregaram como imagem e foram ignorados — confira se é o link direto do ARQUIVO da imagem, não da página onde ela aparece (ex: no Instagram, abra a foto e use "Copiar endereço da imagem", não o link do post), ou um link de vídeo do YouTube/Instagram.`);
+      }
     }
-    const novasSrcs = [...urls];
     for(const file of files){
       try{
-        novasSrcs.push(await resizeImageDataUrl(file, 900));
+        novosItens.push({ src: await resizeImageDataUrl(file, 900), tipoVideo: null, embedSrc: null });
       } catch(err){
         avisos.push('Não consegui ler um dos arquivos enviados. Os demais foram adicionados.');
       }
     }
-    if(!novasSrcs.length){
+    if(!novosItens.length){
       errorEl.textContent = avisos.join(' ') || 'Nenhuma imagem válida pra adicionar.';
       errorEl.style.display = 'block';
       return;
     }
     const data = await dbGet(userPath('/VisionBoard')) || {};
     const existingEntries = Object.entries(data).sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
-    const allSrcs = existingEntries.map(([, v]) => v.src).concat(novasSrcs);
+    const allSrcs = existingEntries.map(([, v]) => v.src).concat(novosItens.map(it => it.src));
     const layout = await visionBoardAutoLayout(allSrcs);
     const updates = {};
     existingEntries.forEach(([id], i) => { updates[id] = { ...data[id], ...layout[i] }; });
-    const novasEntries = novasSrcs.map((src, i) => {
+    const novasEntries = novosItens.map((it, i) => {
       const pos = layout[existingEntries.length + i];
-      return [newId(), { src, order: existingEntries.length + i, criadoEm: new Date().toISOString(), ...pos }];
+      return [newId(), { ...it, order: existingEntries.length + i, criadoEm: new Date().toISOString(), ...pos }];
     });
     novasEntries.forEach(([id, v]) => { updates[id] = v; });
     await Promise.all(Object.entries(updates).map(([id, v]) => dbPutSilent(userPath('/VisionBoard/' + id), v)));

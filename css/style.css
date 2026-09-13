@@ -1129,7 +1129,7 @@
     .vision-layers-panel.open{ width:100%; height:320px; margin-left:0; margin-top:14px; }
   }
   .vision-manage-bar{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
-  .vision-manage-selectall{ display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--text-mut); cursor:pointer; }
+  .vision-manage-selectall{ display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text-mut); cursor:pointer; }
   .vision-manage-list{ display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:10px; margin-bottom:16px; max-height:340px; overflow-y:auto; }
   .vision-manage-item{ position:relative; border-radius:6px; overflow:hidden; background:var(--surface); border:1px solid var(--line); }
   .vision-manage-item img{ display:block; width:100%; height:96px; object-fit:cover; }
@@ -1143,10 +1143,52 @@
     color:#fff; border:none; cursor:pointer; font-size:12px; line-height:1; display:flex; align-items:center; justify-content:center;
   }
   .vision-manage-item button:hover{ background:var(--coral); }
-  .vision-manage-item .vision-manage-check{
-    position:absolute; top:4px; left:4px; width:18px; height:18px; cursor:pointer; z-index:1;
-  }
   .vision-manage-item.selected{ outline:2px solid var(--sage); outline-offset:-2px; }
+
+  /* Checkbox cartoon (2px de contorno + sombra dura, igual ao resto do app) —
+     substitui a caixinha nativa do navegador, que destoava do resto do visual. */
+  .vision-manage-check, .vision-manage-selectall input[type="checkbox"]{
+    appearance:none; -webkit-appearance:none; margin:0; flex:none; cursor:pointer;
+    width:18px; height:18px; border-radius:5px; border:var(--bw) solid var(--outline);
+    background:var(--surface); box-shadow:2px 2px 0 var(--shadow); position:relative;
+    transition: background var(--t-fast) ease, border-color var(--t-fast) ease;
+  }
+  .vision-manage-check:hover, .vision-manage-selectall input[type="checkbox"]:hover{ border-color:var(--sage); }
+  .vision-manage-check:checked, .vision-manage-selectall input[type="checkbox"]:checked{ background:var(--sage); border-color:var(--sage); }
+  .vision-manage-check:checked::after, .vision-manage-selectall input[type="checkbox"]:checked::after{
+    content:''; position:absolute; left:5px; top:1px; width:5px; height:9px;
+    border:solid var(--on-accent); border-width:0 2px 2px 0; transform:rotate(45deg);
+  }
+  .vision-manage-item .vision-manage-check{ position:absolute; top:4px; left:4px; z-index:1; }
+  .vision-manage-play{
+    position:absolute; bottom:4px; left:4px; width:20px; height:20px; border-radius:50%;
+    background:rgba(20,23,28,0.75); color:#fff; font-size:9px; display:flex; align-items:center; justify-content:center;
+  }
+
+  /* Botão de play sobreposto num item de vídeo do Vision Board */
+  .vision-play-btn{
+    position:absolute; bottom:8%; right:8%; width:38px; height:38px; border-radius:50%;
+    background:rgba(20,23,28,0.72); border:var(--bw) solid #fff; color:#fff; font-size:14px;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0 0 0 2px;
+    box-shadow:2px 2px 0 rgba(0,0,0,0.4); transition: transform var(--t-fast) ease, background var(--t-fast) ease;
+  }
+  .vision-play-btn:hover{ background:var(--sage); transform:scale(1.08); }
+
+  /* Lightbox de vídeo (YouTube/Instagram embutido) */
+  #visionVideoModal .confirm-modal-panel, .vision-video-panel{
+    background:transparent; border:none; box-shadow:none; padding:0; max-width:min(92vw, 780px); width:100%;
+    position:relative;
+  }
+  .vision-video-close{
+    position:absolute; top:-40px; right:0; width:34px; height:34px; border-radius:50%;
+    background:var(--surface); border:var(--bw) solid var(--outline); color:var(--text); font-size:18px;
+    cursor:pointer; box-shadow:2px 2px 0 var(--shadow);
+  }
+  .vision-video-frame{
+    width:100%; aspect-ratio:16/9; border-radius:var(--radius); overflow:hidden;
+    border:var(--bw) solid var(--outline); box-shadow:4px 4px 0 var(--shadow); background:#000;
+  }
+  .vision-video-frame iframe{ width:100%; height:100%; border:none; display:block; }
   .monday-sessions-head{ display:grid; grid-template-columns:1fr 1fr 32px; gap:8px; font-size:10.5px; text-transform:uppercase; letter-spacing:0.6px; color:var(--text-dim); margin-bottom:6px; }
   .monday-session-row{ display:grid; grid-template-columns:1fr 1fr 32px; gap:8px; align-items:center; margin-bottom:8px; }
   .monday-session-row input[type="datetime-local"]{

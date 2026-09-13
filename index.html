@@ -587,8 +587,8 @@
       <button type="button" class="btn btn-ghost btn-sm" id="visionManageDeleteBtn" disabled>Excluir selecionadas (<span id="visionManageSelectedCount">0</span>)</button>
     </div>
     <div class="vision-manage-list" id="visionManageList"></div>
-    <label class="modal-field-label">Colar links de imagens (um por linha, pode colar vários)</label>
-    <textarea id="visionUrlInput" class="modal-text-input" rows="3" placeholder="https://...&#10;https://..."></textarea>
+    <label class="modal-field-label">Colar links de imagens ou de vídeo do YouTube/Instagram (um por linha, pode colar vários)</label>
+    <textarea id="visionUrlInput" class="modal-text-input" rows="3" placeholder="https://...&#10;https://youtube.com/watch?v=...&#10;https://instagram.com/reel/..."></textarea>
     <label class="modal-field-label">Ou enviar do computador (pode escolher vários arquivos)</label>
     <input type="file" id="visionUploadInput" class="modal-text-input" accept="image/*" multiple>
     <p class="empty-state" id="visionAddError" style="display:none; margin:-6px 0 12px; color:var(--coral);"></p>
@@ -596,6 +596,14 @@
       <button class="btn btn-ghost btn-sm" id="visionAddCancelBtn">Fechar</button>
       <button class="btn btn-primary btn-sm" id="visionAddOkBtn">Adicionar ao board</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL — VÍDEO DO VISION BOARD (lightbox) -->
+<div class="confirm-modal" id="visionVideoModal">
+  <div class="vision-video-panel">
+    <button type="button" class="vision-video-close" id="visionVideoCloseBtn" title="Fechar">×</button>
+    <div class="vision-video-frame" id="visionVideoFrame"></div>
   </div>
 </div>
 
