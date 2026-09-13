@@ -2592,32 +2592,89 @@
     if(document.getElementById('visionLayersPanel').classList.contains('open')) renderVisionLayers();
   });
 
-  /* Modal "Gerenciar imagens": lista tudo que já está no board (com opção de excluir) e permite
-     adicionar várias imagens de uma vez, tanto por link quanto por upload. */
+  // Testa se um link realmente carrega como imagem (link de página, não do arquivo,
+  // é o motivo mais comum de "colei o link e não apareceu nada").
+  function testarUrlImagem(url){
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(true);
+      img.onerror = () => resolve(false);
+      img.src = url;
+    });
+  }
+
+  /* Modal "Gerenciar imagens": lista tudo que já está no board (com seleção múltipla pra
+     excluir em lote) e permite adicionar várias imagens de uma vez, por link ou upload. */
+  const visionManageSelecionadas = new Set();
+  function renderVisionManageBar(){
+    const bar = document.getElementById('visionManageBar');
+    const total = document.getElementById('visionManageList').querySelectorAll('.vision-manage-item').length;
+    bar.style.display = total ? 'flex' : 'none';
+    document.getElementById('visionManageSelectedCount').textContent = visionManageSelecionadas.size;
+    document.getElementById('visionManageDeleteBtn').disabled = !visionManageSelecionadas.size;
+    document.getElementById('visionManageSelectAll').checked = total > 0 && visionManageSelecionadas.size === total;
+  }
   async function renderVisionManageList(){
     const wrap = document.getElementById('visionManageList');
     const data = await dbGet(userPath('/VisionBoard')) || {};
     const entries = Object.entries(data).sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
+    const idsValidos = new Set(entries.map(([id]) => id));
+    Array.from(visionManageSelecionadas).forEach(id => { if(!idsValidos.has(id)) visionManageSelecionadas.delete(id); });
     if(!entries.length){
       wrap.innerHTML = '<p class="empty-state" style="margin:0 0 8px;">Nenhuma imagem ainda.</p>';
+      renderVisionManageBar();
       return;
     }
     wrap.innerHTML = entries.map(([id, v]) => `
-      <div class="vision-manage-item" data-manage-id="${id}">
+      <div class="vision-manage-item${visionManageSelecionadas.has(id) ? ' selected' : ''}" data-manage-id="${id}">
+        <input type="checkbox" class="vision-manage-check" data-check-vision="${id}"${visionManageSelecionadas.has(id) ? ' checked' : ''}>
         <img src="${escapeHtml(v.src)}" alt="" loading="lazy">
         <button type="button" data-del-vision="${id}" title="Remover">×</button>
       </div>`).join('');
+    wrap.querySelectorAll('img').forEach(img => {
+      img.addEventListener('error', () => img.closest('.vision-manage-item').classList.add('broken'), { once: true });
+    });
+    wrap.querySelectorAll('[data-check-vision]').forEach(chk => chk.addEventListener('change', () => {
+      const id = chk.getAttribute('data-check-vision');
+      if(chk.checked) visionManageSelecionadas.add(id); else visionManageSelecionadas.delete(id);
+      chk.closest('.vision-manage-item').classList.toggle('selected', chk.checked);
+      renderVisionManageBar();
+    }));
     wrap.querySelectorAll('[data-del-vision]').forEach(btn => btn.addEventListener('click', async () => {
-      await dbDeleteSilent(userPath('/VisionBoard/' + btn.getAttribute('data-del-vision')));
+      const id = btn.getAttribute('data-del-vision');
+      visionManageSelecionadas.delete(id);
+      await dbDeleteSilent(userPath('/VisionBoard/' + id));
       await renderVisionManageList();
       await renderVisionBoard();
     }));
+    renderVisionManageBar();
   }
+  document.getElementById('visionManageSelectAll').addEventListener('change', (e) => {
+    const ids = Array.from(document.querySelectorAll('#visionManageList [data-manage-id]')).map(el => el.getAttribute('data-manage-id'));
+    if(e.target.checked) ids.forEach(id => visionManageSelecionadas.add(id));
+    else visionManageSelecionadas.clear();
+    document.querySelectorAll('#visionManageList .vision-manage-item').forEach(el => {
+      const sel = visionManageSelecionadas.has(el.getAttribute('data-manage-id'));
+      el.classList.toggle('selected', sel);
+      el.querySelector('[data-check-vision]').checked = sel;
+    });
+    renderVisionManageBar();
+  });
+  document.getElementById('visionManageDeleteBtn').addEventListener('click', async () => {
+    const ids = Array.from(visionManageSelecionadas);
+    if(!ids.length) return;
+    if(!await showConfirm(`Excluir ${ids.length} foto(s) do Vision Board? Essa ação não pode ser desfeita.`)) return;
+    await Promise.all(ids.map(id => dbDeleteSilent(userPath('/VisionBoard/' + id))));
+    visionManageSelecionadas.clear();
+    await renderVisionManageList();
+    await renderVisionBoard();
+  });
   document.getElementById('visionShuffleBtn').addEventListener('click', shuffleVisionBoard);
   document.getElementById('visionAddOpenBtn').addEventListener('click', async () => {
     document.getElementById('visionUrlInput').value = '';
     document.getElementById('visionUploadInput').value = '';
     document.getElementById('visionAddError').style.display = 'none';
+    visionManageSelecionadas.clear();
     await renderVisionManageList();
     document.getElementById('visionAddModal').classList.add('active');
   });
@@ -2627,21 +2684,35 @@
   document.getElementById('visionAddOkBtn').addEventListener('click', async () => {
     const errorEl = document.getElementById('visionAddError');
     errorEl.style.display = 'none';
-    const urls = document.getElementById('visionUrlInput').value.split('\n').map(s => s.trim()).filter(Boolean);
+    const urlsDigitadas = document.getElementById('visionUrlInput').value.split('\n').map(s => s.trim()).filter(Boolean);
     const files = Array.from(document.getElementById('visionUploadInput').files || []);
-    if(!urls.length && !files.length){
+    if(!urlsDigitadas.length && !files.length){
       errorEl.textContent = 'Cole ao menos um link ou escolha ao menos um arquivo de imagem.';
       errorEl.style.display = 'block';
       return;
+    }
+    // Testa cada link ANTES de gravar: um link de página (ex: post do Instagram/Pinterest,
+    // em vez do arquivo da imagem) não carrega como <img> — sem esse teste, a entrada era
+    // criada mesmo assim e a foto simplesmente nunca aparecia no board, sem aviso nenhum.
+    const testesUrl = await Promise.all(urlsDigitadas.map(async (url) => ({ url, ok: await testarUrlImagem(url) })));
+    const urls = testesUrl.filter(t => t.ok).map(t => t.url);
+    const urlsInvalidas = testesUrl.filter(t => !t.ok).map(t => t.url);
+    const avisos = [];
+    if(urlsInvalidas.length){
+      avisos.push(`${urlsInvalidas.length} link(s) não carregaram como imagem e foram ignorados — confira se é o link direto do ARQUIVO da imagem, não da página onde ela aparece (ex: no Instagram, abra a foto e use "Copiar endereço da imagem", não o link do post).`);
     }
     const novasSrcs = [...urls];
     for(const file of files){
       try{
         novasSrcs.push(await resizeImageDataUrl(file, 900));
       } catch(err){
-        errorEl.textContent = 'Não consegui ler uma das imagens enviadas. As demais foram adicionadas.';
-        errorEl.style.display = 'block';
+        avisos.push('Não consegui ler um dos arquivos enviados. Os demais foram adicionados.');
       }
+    }
+    if(!novasSrcs.length){
+      errorEl.textContent = avisos.join(' ') || 'Nenhuma imagem válida pra adicionar.';
+      errorEl.style.display = 'block';
+      return;
     }
     const data = await dbGet(userPath('/VisionBoard')) || {};
     const existingEntries = Object.entries(data).sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
@@ -2657,6 +2728,10 @@
     await Promise.all(Object.entries(updates).map(([id, v]) => dbPutSilent(userPath('/VisionBoard/' + id), v)));
     document.getElementById('visionUrlInput').value = '';
     document.getElementById('visionUploadInput').value = '';
+    if(avisos.length){
+      errorEl.textContent = avisos.join(' ');
+      errorEl.style.display = 'block';
+    }
     await renderVisionManageList();
     await renderVisionBoard();
   });

@@ -247,16 +247,21 @@
     box-shadow: 2px 2px 0 var(--shadow);
     transform:none;
   }
-  .nav-item .dot{
-    width:6px;height:6px;border-radius:50%; background:var(--text-dim); flex-shrink:0;
+  .nav-item .nav-icon{
+    width:18px; text-align:center; flex-shrink:0; font-size:13.5px; line-height:1;
+    filter: grayscale(1) opacity(0.75);
   }
-  .nav-item.active .dot{ background: var(--sage); box-shadow:0 0 0 3px var(--sage-soft); }
+  .nav-item.active .nav-icon, .nav-item:hover .nav-icon{ filter:none; }
   .nav-item .badge{
     margin-left:auto; font-family:var(--mono); font-size:9.5px; color:var(--text-dim);
     background: var(--hover); padding:2px 6px; border-radius:20px;
   }
   .nav-item.locked{ opacity:0.55; cursor:default; }
   .nav-item.locked:hover{ background:transparent; color:var(--text-mut); }
+  /* Telas de uso ocasional: acessíveis igual às outras, só com menos peso visual
+     pra não competir por atenção com o que se usa todo dia. */
+  .nav-item-dim{ opacity:0.5; }
+  .nav-item-dim:hover{ opacity:0.9; }
 
   .nav-divider{ height:1px; background:var(--line); margin:8px 10px; }
 
@@ -1123,14 +1128,25 @@
     .vision-layers-panel{ width:100%; height:0; }
     .vision-layers-panel.open{ width:100%; height:320px; margin-left:0; margin-top:14px; }
   }
+  .vision-manage-bar{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  .vision-manage-selectall{ display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--text-mut); cursor:pointer; }
   .vision-manage-list{ display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:10px; margin-bottom:16px; max-height:340px; overflow-y:auto; }
   .vision-manage-item{ position:relative; border-radius:6px; overflow:hidden; background:var(--surface); border:1px solid var(--line); }
   .vision-manage-item img{ display:block; width:100%; height:96px; object-fit:cover; }
+  .vision-manage-item.broken img{ opacity:0; }
+  .vision-manage-item.broken::before{
+    content:'imagem indisponível'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    text-align:center; font-size:9.5px; color:var(--text-dim); padding:6px; line-height:1.3;
+  }
   .vision-manage-item button{
     position:absolute; top:4px; right:4px; width:20px; height:20px; border-radius:50%; background:rgba(20,23,28,0.8);
     color:#fff; border:none; cursor:pointer; font-size:12px; line-height:1; display:flex; align-items:center; justify-content:center;
   }
   .vision-manage-item button:hover{ background:var(--coral); }
+  .vision-manage-item .vision-manage-check{
+    position:absolute; top:4px; left:4px; width:18px; height:18px; cursor:pointer; z-index:1;
+  }
+  .vision-manage-item.selected{ outline:2px solid var(--sage); outline-offset:-2px; }
   .monday-sessions-head{ display:grid; grid-template-columns:1fr 1fr 32px; gap:8px; font-size:10.5px; text-transform:uppercase; letter-spacing:0.6px; color:var(--text-dim); margin-bottom:6px; }
   .monday-session-row{ display:grid; grid-template-columns:1fr 1fr 32px; gap:8px; align-items:center; margin-bottom:8px; }
   .monday-session-row input[type="datetime-local"]{

@@ -73,37 +73,42 @@
   <nav class="nav-level">
     <div class="nav-level-label">Executar</div>
     <div class="nav-item active" data-view="hoje">
-      <span class="dot"></span> Hoje
+      <span class="nav-icon">☀️</span> Hoje
     </div>
   </nav>
 
   <nav class="nav-level">
     <div class="nav-level-label">Organizar</div>
-    <div class="nav-item" data-view="storage"><span class="dot"></span> Arquivo <span class="badge" id="navInboxBadge">0</span></div>
-    <div class="nav-item" data-view="tarefas"><span class="dot"></span> Tarefas</div>
-    <div class="nav-item" data-view="agenda"><span class="dot"></span> Agenda</div>
-    <div class="nav-item" data-view="rotina"><span class="dot"></span> Rotina</div>
-    <div class="nav-item" data-view="casa"><span class="dot"></span> Casa</div>
+    <div class="nav-item" data-view="storage"><span class="nav-icon">🗂️</span> Arquivo <span class="badge" id="navInboxBadge">0</span></div>
+    <div class="nav-item" data-view="tarefas"><span class="nav-icon">✅</span> Tarefas</div>
+    <div class="nav-item" data-view="agenda"><span class="nav-icon">📅</span> Agenda</div>
+    <div class="nav-item" data-view="rotina"><span class="nav-icon">🔁</span> Rotina</div>
+    <div class="nav-item" data-view="casa"><span class="nav-icon">🏡</span> Casa</div>
   </nav>
-  <!-- Monday, Finanças e Bateria saíram da sidebar por pedido — telas ficam
-       menos carregadas, mas as três continuam abertas e funcionando: acesse
-       pelo Ctrl+K digitando o nome ("ir para monday", etc). -->
 
   <nav class="nav-level">
     <div class="nav-level-label">Evoluir</div>
-    <div class="nav-item" data-view="fluencia"><span class="dot"></span> Fluência</div>
-    <div class="nav-item" data-view="academia"><span class="dot"></span> Academia</div>
-    <div class="nav-item" data-view="diario"><span class="dot"></span> Diário</div>
-    <div class="nav-item" data-view="planoalimentar"><span class="dot"></span> Plano Alimentar</div>
-    <div class="nav-item" data-view="objetivos"><span class="dot"></span> Objetivos</div>
-    <div class="nav-item" data-view="decisoes"><span class="dot"></span> Decisões</div>
-    <div class="nav-item" data-view="busca"><span class="dot"></span> Perguntar</div>
-    <div class="nav-item" data-view="visionboard"><span class="dot"></span> Vision Board</div>
+    <div class="nav-item" data-view="fluencia"><span class="nav-icon">🗣️</span> Fluência</div>
+    <div class="nav-item" data-view="academia"><span class="nav-icon">🏋️</span> Academia</div>
+    <div class="nav-item" data-view="diario"><span class="nav-icon">📓</span> Diário</div>
+    <div class="nav-item" data-view="planoalimentar"><span class="nav-icon">🍽️</span> Plano Alimentar</div>
+    <div class="nav-item" data-view="objetivos"><span class="nav-icon">🎯</span> Objetivos</div>
+    <div class="nav-item" data-view="decisoes"><span class="nav-icon">🧭</span> Decisões</div>
+    <div class="nav-item" data-view="busca"><span class="nav-icon">💬</span> Perguntar</div>
+    <div class="nav-item" data-view="visionboard"><span class="nav-icon">🖼️</span> Vision Board</div>
+  </nav>
+
+  <!-- Telas de uso ocasional: continuam funcionando 100%, só ficam visualmente
+       apagadas e no fim da lista pra não competir com o resto da sidebar. -->
+  <nav class="nav-level">
+    <div class="nav-item nav-item-dim" data-view="monday"><span class="nav-icon">📋</span> Monday</div>
+    <div class="nav-item nav-item-dim" data-view="financas"><span class="nav-icon">💰</span> Finanças</div>
+    <div class="nav-item nav-item-dim" data-view="bateria"><span class="nav-icon">🔋</span> Bateria</div>
   </nav>
 
   <div class="sidebar-foot">
-    <div class="nav-item" data-view="config"><span class="dot"></span> Configurações</div>
-    <div class="nav-item" id="logoutBtn"><span class="dot"></span> Sair</div>
+    <div class="nav-item" data-view="config"><span class="nav-icon">⚙️</span> Configurações</div>
+    <div class="nav-item" id="logoutBtn"><span class="nav-icon">🚪</span> Sair</div>
   </div>
 </aside>
 
@@ -601,6 +606,13 @@
 <div class="confirm-modal" id="visionAddModal">
   <div class="confirm-modal-panel" style="max-width:560px;">
     <p class="confirm-modal-text" style="margin-bottom:12px;">Gerenciar imagens do Vision Board</p>
+    <div class="vision-manage-bar" id="visionManageBar" style="display:none;">
+      <label class="vision-manage-selectall">
+        <input type="checkbox" id="visionManageSelectAll">
+        Selecionar todas
+      </label>
+      <button type="button" class="btn btn-ghost btn-sm" id="visionManageDeleteBtn" disabled>Excluir selecionadas (<span id="visionManageSelectedCount">0</span>)</button>
+    </div>
     <div class="vision-manage-list" id="visionManageList"></div>
     <label class="modal-field-label">Colar links de imagens (um por linha, pode colar vários)</label>
     <textarea id="visionUrlInput" class="modal-text-input" rows="3" placeholder="https://...&#10;https://..."></textarea>
