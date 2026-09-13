@@ -2806,6 +2806,36 @@
     await renderVisionManageList();
     await renderVisionBoard();
   });
+  // Fotos de Instagram adicionadas ANTES do fix de thumbnail real ficaram com
+  // o placeholder genérico gravado pra sempre no banco — esse botão tenta de
+  // novo só as que ainda estão presas no placeholder, sem precisar excluir e
+  // colar tudo de novo. Reconstrói o link original a partir do embedSrc
+  // salvo (tira o "/embed" do fim).
+  document.getElementById('visionRefreshThumbsBtn').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const data = await dbGet(userPath('/VisionBoard'), { fresh:true }) || {};
+    const pendentes = Object.entries(data).filter(([, v]) => v.tipoVideo === 'instagram' && v.src === VISION_INSTAGRAM_PLACEHOLDER && v.embedSrc);
+    if(!pendentes.length){ showAppMessage('Nenhuma foto do Instagram presa no placeholder.', 'info'); return; }
+    const textoOriginal = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = `Atualizando 0/${pendentes.length}...`;
+    let atualizadas = 0;
+    for(let i = 0; i < pendentes.length; i++){
+      const [id, v] = pendentes[i];
+      const urlOriginal = v.embedSrc.replace(/\/embed$/, '/');
+      const novoThumb = await buscarThumbInstagram(urlOriginal);
+      if(novoThumb && novoThumb !== VISION_INSTAGRAM_PLACEHOLDER){
+        await dbPatchSilent(userPath('/VisionBoard/' + id), { src: novoThumb });
+        atualizadas++;
+      }
+      btn.textContent = `Atualizando ${i + 1}/${pendentes.length}...`;
+    }
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+    showAppMessage(`${atualizadas} de ${pendentes.length} thumbnail(s) atualizada(s).`, atualizadas ? 'success' : 'info');
+    await renderVisionManageList();
+    await renderVisionBoard();
+  });
   document.getElementById('visionShuffleBtn').addEventListener('click', shuffleVisionBoard);
   document.getElementById('visionAddOpenBtn').addEventListener('click', async () => {
     document.getElementById('visionUrlInput').value = '';
