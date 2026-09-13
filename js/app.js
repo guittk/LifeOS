@@ -4480,6 +4480,77 @@
   document.getElementById('notasSelecionarBtn').addEventListener('click', () => notasAlternarSelecao());
   document.getElementById('notasNovaBtn').addEventListener('click', () => notasNovaNota());
 
+  /* ---------- Exportar/Importar (pra levar dados entre este app e o Organizer,
+     que usa o mesmo formato de nota/área — foi de lá que este board foi
+     portado) ---------- */
+  function notasExportarJson(){
+    const payload = {
+      formato: 'lifeos-notas-v1',
+      exportadoEm: new Date().toISOString(),
+      areas: notasState.areas,
+      notas: notasState.notas
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'notas-' + todayStr() + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function notasImportarJson(file){
+    let payload;
+    try{ payload = JSON.parse(await file.text()); }
+    catch(e){ showAppMessage('Arquivo inválido: não é um JSON legível.', 'error'); return; }
+    const areasImportadas = payload.areas || {};
+    const notasImportadas = payload.notas || {};
+    const totalNotas = Object.keys(notasImportadas).length;
+    const totalAreas = Object.keys(areasImportadas).length;
+    if(!totalNotas && !totalAreas){
+      showAppMessage('Nenhuma categoria ou nota encontrada nesse arquivo.', 'error');
+      return;
+    }
+    if(!await showConfirm(`Importar ${totalNotas} nota(s) e ${totalAreas} categoria(s)? Elas são ADICIONADAS às que você já tem — nada existente é substituído ou removido.`)) return;
+    if(!notasState.loaded) await notasCarregarEstado();
+    // IDs são regenerados pra nunca colidir com o que já existe aqui — o mapa
+    // guarda old→novo só pra recolocar cada nota na categoria certa.
+    const mapaAreaId = {};
+    for(const [oldId, a] of Object.entries(areasImportadas)){
+      const nova = await notasCreateArea(a.nome || 'Categoria importada', a.cor);
+      mapaAreaId[oldId] = nova.id;
+    }
+    let importadas = 0;
+    for(const n of Object.values(notasImportadas)){
+      const novoId = newId();
+      const now = new Date().toISOString();
+      const itensRemapeados = {};
+      Object.values(n.itens || {}).forEach((item, i) => {
+        const itemId = newId();
+        itensRemapeados[itemId] = { ...item, id:itemId, ordem: item.ordem != null ? item.ordem : i };
+      });
+      const novaNota = {
+        id:novoId, areaId: n.areaId && mapaAreaId[n.areaId] ? mapaAreaId[n.areaId] : null,
+        titulo: n.titulo || '', itens: itensRemapeados, fixada: !!n.fixada,
+        criadoEm: n.criadoEm || now, atualizadoEm: now, ordemManual: Date.now() + importadas
+      };
+      notasState.notas[novoId] = novaNota;
+      await dbPutSilent(userPath('/Notas/' + novoId), novaNota);
+      importadas++;
+    }
+    showAppMessage(`${importadas} nota(s) e ${Object.keys(mapaAreaId).length} categoria(s) importadas.`, 'success');
+    notasRenderChips();
+    if(notasContainerEl) notasRender();
+  }
+  document.getElementById('notasExportarBtn').addEventListener('click', () => notasExportarJson());
+  document.getElementById('notasImportarBtn').addEventListener('click', () => document.getElementById('notasImportarInput').click());
+  document.getElementById('notasImportarInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if(file) await notasImportarJson(file);
+  });
+
   /* ---------- Barra de captura (sem IA por enquanto: cria direto, ou divide por parágrafo) ---------- */
   const notasCapturaInput = document.getElementById('notasCapturaInput');
   notasCapturaInput.addEventListener('input', () => notasAutoGrow(notasCapturaInput));
