@@ -180,7 +180,7 @@
       visionLayersCloseBtn: 'Fechar o painel de camadas',
       corPrincipalSwatchBtn: 'Escolher a cor principal',
       importIcsBtn: 'Importar eventos de um arquivo .ics',
-      gavetasTextViewBtn: 'Ver todas as gavetas como texto'
+      notasCategoriasBtn: 'Gerenciar categorias do Arquivo'
     };
     Object.entries(rotulos).forEach(([id, rotulo]) => {
       const el = document.getElementById(id);
@@ -412,16 +412,16 @@
   const searchScopesEl = document.getElementById('searchScopes');
 
   const SEARCH_KIND_LABEL = {
-    tarefa:'Tarefa', nota:'Nota', gaveta:'Gaveta', objetivo:'Objetivo',
+    tarefa:'Tarefa', nota:'Nota', area:'Categoria', objetivo:'Objetivo',
     ponto:'Ponto', diario:'Diário', evento:'Agenda', decisao:'Decisão', monday:'Monday'
   };
   const SEARCH_KIND_VIEW = {
-    tarefa:'tarefas', nota:'storage', gaveta:'storage', objetivo:'objetivos',
+    tarefa:'tarefas', nota:'storage', area:'storage', objetivo:'objetivos',
     ponto:'objetivos', diario:'diario', evento:'agenda', decisao:'decisoes', monday:'monday'
   };
   // Agrupa os tipos sob o filtro que aparece na barra de escopos.
   const SEARCH_SCOPE_OF = {
-    tarefa:'tarefa', monday:'tarefa', nota:'nota', gaveta:'nota',
+    tarefa:'tarefa', monday:'tarefa', nota:'nota', area:'nota',
     objetivo:'objetivo', ponto:'objetivo', diario:'diario', evento:'evento', decisao:'decisao'
   };
 
@@ -435,7 +435,7 @@
      palavras-chave próprias pra ser encontrado por sinônimo (quem digita
      "anotar" quer capturar). */
   const SEARCH_COMANDOS = [
-    { rotulo:'Nova captura',       chaves:'capturar anotar ideia inbox nota',  run: () => abrirCapturaRapida() },
+    { rotulo:'Nova captura',       chaves:'capturar anotar ideia arquivo nota',run: () => abrirCapturaRapida() },
     { rotulo:'Nova tarefa',        chaves:'tarefa todo fazer',                 run: () => { goToView('tarefas'); document.getElementById('addTaskOpenBtn').click(); } },
     { rotulo:'Novo evento',        chaves:'evento agenda compromisso',         run: () => { goToView('agenda'); document.getElementById('addEventOpenBtn').click(); } },
     { rotulo:'Novo objetivo',      chaves:'objetivo meta',                     run: () => { goToView('objetivos'); document.getElementById('objAddBtn').click(); } },
@@ -473,8 +473,8 @@
   }
 
   async function buildSearchIndex(){
-    const [tasks, inbox, gavetas, objetivos, diario, events, decisoes, monday] = await Promise.all([
-      dbGet(userPath('/Tasks')), dbGet(userPath('/Inbox')), dbGet(userPath('/Gavetas')),
+    const [tasks, notasAreas, notas, objetivos, diario, events, decisoes, monday] = await Promise.all([
+      dbGet(userPath('/Tasks')), dbGet(userPath('/NotasAreas')), dbGet(userPath('/Notas')),
       dbGet(userPath('/objetivos')), dbGet(userPath('/DiarioEntradas')), dbGet(userPath('/Events')),
       dbGet(userPath('/Decisoes')), dbGet(userPath('/MondayTasks'))
     ]);
@@ -485,12 +485,10 @@
     Object.values(monday || {}).forEach(t => {
       searchPush(list, 'monday', t.nome || t.name, [t.responsavel, t.status].filter(Boolean).join(' · '));
     });
-    Object.values(inbox || {}).forEach(i => {
-      if(i.status !== 'processed') searchPush(list, 'nota', i.text, 'captura');
-    });
-    Object.values(gavetas || {}).forEach(g => {
-      searchPush(list, 'gaveta', g.name, 'gaveta');
-      Object.values(g.items || {}).forEach(it => searchPush(list, 'nota', it.text, 'em ' + (g.name || 'gaveta')));
+    Object.values(notasAreas || {}).forEach(a => searchPush(list, 'area', a.nome, 'categoria do Arquivo'));
+    Object.values(notas || {}).forEach(n => {
+      const area = n.areaId && notasAreas ? notasAreas[n.areaId] : null;
+      searchPush(list, 'nota', n.titulo, 'nota' + (area ? ' · ' + area.nome : ''));
     });
     Object.values(objetivos || {}).forEach(o => {
       searchPush(list, 'objetivo', o.nome, o.descricao);
@@ -671,17 +669,14 @@
   }
 
   /* ---------- Captura rápida global ----------
-     Antes, capturar exigia ir até Arquivo → Capturas → + Nova captura. A tecla
-     "C" continua abrindo direto de qualquer tela — só o botão flutuante saiu,
-     por ser um elemento a mais competindo com o resto da interface. */
+     A tecla "C" (e o comando "Nova captura" do Ctrl+K) levam direto pra barra de
+     captura do Arquivo, de qualquer tela — sem precisar navegar manualmente. */
   function abrirCapturaRapida(){
-    const modal = document.getElementById('newCaptureModal');
-    if(!modal) return;
     closeSearch();
-    modal.classList.add('active');
+    goToView('storage');
     setTimeout(() => {
-      const inp = document.getElementById('newCaptureModalInput');
-      if(inp){ inp.value = ''; inp.focus(); }
+      const inp = document.getElementById('notasCapturaInput');
+      if(inp) inp.focus();
     }, 30);
   }
   document.addEventListener('keydown', (e) => {
@@ -1235,6 +1230,11 @@
     catch(e){ throw new Error('A IA devolveu uma resposta ilegível.'); }
     if(!res.ok) throw new Error(data.error || 'A IA não respondeu.');
     return data.text;
+  }
+  // A IA às vezes cerca a resposta com ```json ... ``` mesmo quando pedimos JSON puro.
+  function extractJson(text){
+    const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+    return JSON.parse(cleaned);
   }
 
   /* ---------- Quadros (Grupos/Famílias) ----------
@@ -3035,22 +3035,22 @@
   });
 
   /* ---------- Busca Semântica (Perguntar ao LifeOS) ---------- */
-  const BUSCA_TIPO_VIEW = { tarefas: 'tarefas', inbox: 'storage', storage: 'storage', objetivos: 'objetivos', diario: 'diario', agenda: 'agenda', decisoes: 'decisoes' };
-  const BUSCA_TIPO_LABEL = { tarefas: 'Tarefa', inbox: 'Captura', storage: 'Gaveta', objetivos: 'Objetivo', diario: 'Diário', agenda: 'Agenda', decisoes: 'Decisão' };
+  const BUSCA_TIPO_VIEW = { tarefas: 'tarefas', storage: 'storage', objetivos: 'objetivos', diario: 'diario', agenda: 'agenda', decisoes: 'decisoes' };
+  const BUSCA_TIPO_LABEL = { tarefas: 'Tarefa', storage: 'Nota', objetivos: 'Objetivo', diario: 'Diário', agenda: 'Agenda', decisoes: 'Decisão' };
 
   function buscaTruncate(s, n){ s = String(s || ''); return s.length > n ? s.slice(0, n) + '…' : s; }
 
   async function buscaColetarContexto(){
-    const [tasks, inbox, gavetas, objetivos, diario, events, decisoes] = await Promise.all([
-      dbGet(userPath('/Tasks')), dbGet(userPath('/Inbox')), dbGet(userPath('/Gavetas')),
+    const [tasks, notasAreas, notas, objetivos, diario, events, decisoes] = await Promise.all([
+      dbGet(userPath('/Tasks')), dbGet(userPath('/NotasAreas')), dbGet(userPath('/Notas')),
       dbGet(userPath('/objetivos')), dbGet(userPath('/DiarioEntradas')), dbGet(userPath('/Events')),
       dbGet(userPath('/Decisoes'))
     ]);
     const ctx = {};
     ctx.tarefas = Object.values(tasks || {}).slice(-80).map(t => ({ nome: t.name, data: t.date, feita: !!t.done }));
-    ctx.capturas = Object.values(inbox || {}).slice(-80).map(i => buscaTruncate(i.text, 160));
-    ctx.gavetas = Object.entries(gavetas || {}).map(([, g]) => ({
-      nome: g.name, itens: Object.values(g.items || {}).slice(-40).map(it => buscaTruncate(it.text, 160))
+    ctx.notasDoArquivo = Object.values(notas || {}).slice(-120).map(n => ({
+      titulo: n.titulo, categoria: n.areaId && notasAreas ? (notasAreas[n.areaId] || {}).nome : null,
+      conteudo: buscaTruncate(notasParaMarkdown(n), 300)
     }));
     ctx.objetivos = Object.values(objetivos || {}).map(o => ({
       nome: o.nome, descricao: o.descricao, categoria: o.categoria,
@@ -3093,9 +3093,9 @@
 
     try{
       const ctx = await buscaColetarContexto();
-      const systemPrompt = 'Você é um assistente que responde perguntas em português sobre a vida pessoal de um usuário do LifeOS, usando apenas os dados fornecidos abaixo (tarefas, capturas, gavetas/projetos, objetivos, diário, agenda e decisões). ' +
+      const systemPrompt = 'Você é um assistente que responde perguntas em português sobre a vida pessoal de um usuário do LifeOS, usando apenas os dados fornecidos abaixo (tarefas, notas do Arquivo, objetivos, diário, agenda e decisões). ' +
         'Seja direto e específico, citando datas e nomes quando existirem. Se não houver informação suficiente, diga isso claramente em vez de inventar. ' +
-        'Responda APENAS com um objeto JSON, sem markdown, no formato exato: {"resposta": "texto da resposta em português", "referencias": [{"tipo": "tarefas|capturas|storage|objetivos|diario|agenda|decisoes", "texto": "trecho curto de referência"}]}. ' +
+        'Responda APENAS com um objeto JSON, sem markdown, no formato exato: {"resposta": "texto da resposta em português", "referencias": [{"tipo": "tarefas|storage|objetivos|diario|agenda|decisoes", "texto": "trecho curto de referência"}]}. ' +
         'Inclua no máximo 6 referências, só das fontes realmente usadas na resposta.\n\nDados do usuário (JSON): ' + JSON.stringify(ctx);
 
       const parsed = extractJson(await chamarIA(systemPrompt, pergunta));
@@ -3105,7 +3105,7 @@
       loadingEl.classList.remove('loading');
       loadingEl.innerHTML = escapeHtml(resposta) +
         (refs.length ? '<div class="busca-refs">' + refs.map(r => {
-          const tipoKey = String(r.tipo || '').toLowerCase().replace('capturas','inbox');
+          const tipoKey = String(r.tipo || '').toLowerCase();
           const view = BUSCA_TIPO_VIEW[tipoKey] || BUSCA_TIPO_VIEW[r.tipo] || 'busca';
           const label = BUSCA_TIPO_LABEL[tipoKey] || BUSCA_TIPO_LABEL[r.tipo] || r.tipo || '';
           return `<span class="busca-ref-chip" data-view-link="${view}" title="${escapeHtml(r.texto || '')}">${escapeHtml(label)} → abrir</span>`;
@@ -3465,958 +3465,844 @@
     }
   });
 
-  /* ---------- INBOX ---------- */
-  /* ---------- Arquivamento automático ----------
-     Quando a captura já diz para onde vai ("Game Studio:" na primeira linha, ou
-     "[Saúde]"), ela não precisa esperar você organizar — vai direto pra gaveta.
+  /* ---------- NOTAS (Arquivo — mural de notas, portado do projeto Organizer) ----------
+     Substitui Inbox + Gavetas + Revisão IA: um mural de cards, cada um com itens
+     tipados (seção, texto, marcador, tarefa, passo, link, divisor) escritos como um
+     texto solto por card — sem tela separada por nota. A triagem automática por IA
+     fica pra depois (ver conversa) — por ora a captura cria a nota direto, ou divide
+     por parágrafo em várias de uma vez ("Dividir em várias", sem IA nenhuma). */
 
-     Deliberadamente conservador: só arquiva quando o título bate EXATAMENTE com
-     o nome de uma gaveta existente. Adivinhar assunto por semelhança colocaria
-     coisa no lugar errado, e um arquivo em que você não confia é pior que um
-     desorganizado. Tudo que não bate continua na Inbox, como antes. */
-  async function tentarArquivarCaptura(texto){
-    const titulo = detectInboxTitle(texto);
-    if(!titulo) return null;
-    const corpo = String(texto).split('\n').slice(1).join('\n').trim();
-    if(!corpo) return null; // só o título, sem conteúdo: não dá pra arquivar
-
-    const gavetas = await dbGet(userPath('/Gavetas')) || {};
-    const alvo = Object.entries(gavetas).find(([, g]) => searchNorm(g.name || '') === searchNorm(titulo));
-    if(!alvo) return null;
-
-    const [gid, g] = alvo;
-    const ordem = Object.values(g.items || {}).reduce((max, it) => Math.max(max, it.order || 0), -1) + 1;
-    await dbPut(userPath('/Gavetas/' + gid + '/items/' + newId()), { text: corpo, order: ordem });
-    return g.name;
+  const NOTAS_URL_RE = /^https?:\/\/[^\s]+$/i;
+  const NOTAS_BARE_DOMAIN_RE = /^(www\.)?[a-z0-9-]+\.[a-z]{2,}([/?#][^\s]*)?$/i;
+  function notasIsUrlOnly(text){
+    const t = String(text || '').trim();
+    if(!t || /\s/.test(t)) return false;
+    return NOTAS_URL_RE.test(t) || NOTAS_BARE_DOMAIN_RE.test(t);
   }
-
-  async function addInboxItem(text, source){
-    const gaveta = await tentarArquivarCaptura(text);
-    if(gaveta){
-      showAppMessage('Arquivado direto em "' + gaveta + '".', 'success');
-      await renderStorage();
-      await renderInbox();
-      return;
-    }
-    const id = newId();
-    await dbPut(userPath('/Inbox/' + id), { text, source: source || 'inbox', createdAt: new Date().toISOString(), status:'pending' });
-    await renderInbox();
+  function notasNormalizeUrl(raw){
+    let t = String(raw || '').trim();
+    if(!t) return null;
+    if(/^(javascript|data):/i.test(t)) return null;
+    if(!/^https?:\/\//i.test(t)) t = 'https://' + t;
+    try{ new URL(t); }catch(e){ return null; }
+    return t;
   }
-  document.getElementById('newCaptureOpenBtn').addEventListener('click', () => {
-    document.getElementById('newCaptureModal').classList.add('active');
-    setTimeout(() => document.getElementById('newCaptureModalInput').focus(), 30);
-  });
-  function closeCaptureModal(){
-    document.getElementById('newCaptureModal').classList.remove('active');
-    document.getElementById('newCaptureModalInput').value = '';
+  function notasDomainFromUrl(url){
+    try{ return new URL(url).hostname.replace(/^www\./, ''); }
+    catch(e){ return url; }
   }
-  document.getElementById('newCaptureModalCancelBtn').addEventListener('click', closeCaptureModal);
-  document.getElementById('newCaptureModal').addEventListener('click', (e) => {
-    if(e.target.id === 'newCaptureModal') closeCaptureModal();
-  });
-  // Palavras/expressões que costumam indicar um relato pessoal (diário) em vez de
-  // uma nota de tarefa/ideia — heurística simples, sem IA, só pra sugerir o desvio.
-  const DIARIO_CAPTURE_HINTS = [
-    'hoje eu', 'hoje foi', 'hoje eh', 'meu dia', 'minha dia', 'me senti', 'estou me sentindo',
-    'to me sentindo', 'estou feliz', 'estou triste', 'estou cansad', 'to feliz', 'to triste',
-    'to cansad', 'sinto que', 'sinto-me', 'senti que', 'foi um dia', 'querido diário',
-    'querido diario', 'diário hoje', 'diario hoje'
-  ];
-  function pareceEntradaDeDiario(text){
-    const lower = text.toLowerCase();
-    return DIARIO_CAPTURE_HINTS.some(h => lower.includes(h));
-  }
-  function enviarTextoParaDiario(text){
-    goToView('diario');
-    const textarea = document.getElementById('diarioTextInput');
-    if(textarea){
-      textarea.value = textarea.value ? (textarea.value + '\n' + text) : text;
-      textarea.focus();
-    }
-  }
-  document.getElementById('newCaptureModalOkBtn').addEventListener('click', async () => {
-    const input = document.getElementById('newCaptureModalInput');
-    const text = input.value.trim();
-    if(!text) return;
-    document.getElementById('newCaptureModal').classList.remove('active');
-    input.value = '';
-    if(pareceEntradaDeDiario(text)){
-      const irParaDiario = await showConfirm('Isso parece um relato do seu dia — quer enviar direto pro Diário em vez do Arquivo?');
-      if(irParaDiario){
-        enviarTextoParaDiario(text);
-        return;
-      }
-    }
-    await addInboxItem(text, 'inbox');
-  });
-  document.getElementById('newCaptureModalInput').addEventListener('keydown', (e) => {
-    if(e.key === 'Enter' && !e.shiftKey){
-      e.preventDefault();
-      document.getElementById('newCaptureModalOkBtn').click();
-    }
-    // Shift+Enter: comportamento padrão do textarea (quebra de linha)
-  });
-
-  async function renderInbox(){
-    const el = document.getElementById('inboxList');
-    const data = await dbGet(userPath('/Inbox')) || {};
-    const items = Object.entries(data).filter(([id,it]) => it.status !== 'processed');
-    document.getElementById('navInboxBadge').textContent = items.length;
-    document.getElementById('inboxCountTab').textContent = items.length ? '(' + items.length + ')' : '';
-    const mobileBadge = document.getElementById('mobileInboxBadge');
-    if(mobileBadge) mobileBadge.textContent = items.length ? String(items.length) : '';
-    const aiOrganizeBtn = document.getElementById('runAiOrganizeBtn');
-    // Só mostra o botão de organizar com IA se houver itens ainda não enviados para revisão
-    const organizable = items.filter(([id,it]) => it.status !== 'awaiting_review');
-    if(aiOrganizeBtn){ aiOrganizeBtn.style.display = organizable.length ? '' : 'none'; }
-    if(!items.length){ el.innerHTML = '<p class="empty-state">Nenhuma captura ainda. Clique em "+ Nova captura" acima.</p>'; return; }
-    el.innerHTML = items.sort((a,b) => (b[1].createdAt||'').localeCompare(a[1].createdAt||'')).map(([id, it]) => {
-      const titulo = detectInboxTitle(it.text);
-      return `
-      <div class="inbox-item">
-        <div class="inbox-icon">${it.text && it.text.startsWith('http') ? '🔗' : '📝'}</div>
-        <div class="inbox-text">${escapeHtml(it.text)}</div>
-        <div class="item-meta">${it.status === 'awaiting_review' ? '<span class="tag tag-gold">aguardando revisão</span> ' : ''}${titulo ? '<span class="tag tag-gold">gaveta: ' + escapeHtml(titulo) + '</span> ' : ''}${escapeHtml(it.source||'')}</div>
-        <button class="btn btn-reject btn-sm" data-del-inbox="${id}">remover</button>
-      </div>
-    `;
-    }).join('');
-    el.querySelectorAll('[data-del-inbox]').forEach(btn => {
-      btn.addEventListener('click', async () => { await dbDelete(userPath('/Inbox/' + btn.getAttribute('data-del-inbox'))); await renderInbox(); });
-    });
-  }
-
-  /* ---------- REVISÃO IA (organização via Claude, modelo Pull Request) ---------- */
-  function extractJson(text){
-    const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-    return JSON.parse(cleaned);
-  }
-
-  // Detecta um "título" no início do texto capturado na Inbox, em formatos como
-  // [Título], *Título* / **Título**, "Título:" ou TÍTULO EM CAIXA ALTA na primeira
-  // linha. Esse título tende a indicar o nome da gaveta ideal para o item.
-  function detectInboxTitle(text){
-    if(!text) return null;
-    const firstLine = String(text).split('\n')[0].trim();
-    if(!firstLine) return null;
-    let m = firstLine.match(/^\[(.+?)\]\s*$/);
-    if(m) return m[1].trim();
-    m = firstLine.match(/^\*{1,2}(.+?)\*{1,2}\s*$/);
-    if(m) return m[1].trim();
-    m = firstLine.match(/^([^\n:]{2,40}):\s*$/);
-    if(m) return m[1].trim();
-    if(firstLine.length >= 2 && firstLine.length <= 40 &&
-       firstLine === firstLine.toUpperCase() && firstLine !== firstLine.toLowerCase() &&
-       /[A-ZÀ-Ú]/.test(firstLine)){
-      return firstLine.trim();
+  // Reconhece o marcador de uma linha já sem indentação; null = texto solto (vira
+  // continuação do item anterior — ver notasMarkdownParaItens).
+  function notasDetectLineTipo(trimmed){
+    let m;
+    if((m = trimmed.match(/^#{1,3}\s+(.*)$/))) return { tipo:'secao', texto:m[1].trim() };
+    if((m = trimmed.match(/^\[([ xX])\]\s+(.*)$/))) return { tipo:'tarefa', texto:m[2].trim(), feito:/x/i.test(m[1]) };
+    if((m = trimmed.match(/^[•\-\*]\s+(.*)$/))) return { tipo:'bullet', texto:m[1].trim() };
+    if((m = trimmed.match(/^\d+[.)]\s+(.*)$/))) return { tipo:'passo', texto:m[1].trim() };
+    if(/^-{3,}$|^—{2,}$/.test(trimmed)) return { tipo:'divisor', texto:'' };
+    if(notasIsUrlOnly(trimmed)){
+      const url = notasNormalizeUrl(trimmed);
+      if(url) return { tipo:'link', texto:url, url };
     }
     return null;
   }
-
-  // Filosofia de organização (resumida do prompt do usuário): a estrutura nasce
-  // dos dados (nunca um template fixo), poucas áreas bem organizadas, no máximo
-  // ~3 níveis (Gaveta = área → item → detalhe dentro do texto do item), agrupar
-  // por significado (não por palavra-chave), preservar contexto e links junto do
-  // assunto, eliminar duplicação, e sempre otimizar pra "qual é a forma mais fácil
-  // de encontrar isso daqui a 6 meses". Em vez de propor mudanças item a item, a
-  // IA reescreve TUDO (Gavetas + Capturas novas) como um único documento, e a
-  // pessoa compara lado a lado com a versão atual antes de aprovar.
-  const ORGANIZER_SYSTEM_PROMPT = `Você é o organizador do Arquivo (Gavetas) de um sistema pessoal de produtividade chamado Life OS. Seu objetivo não é só arrumar texto — é reduzir a carga mental da pessoa, organizando pra que ela encontre qualquer informação no futuro sem precisar lembrar onde guardou. A pergunta que sempre guia a decisão: "qual é a forma mais simples e natural de encontrar essa informação daqui a seis meses?"
-
-Princípios que você segue sempre:
-1. A estrutura nasce dos dados: nunca use um template fixo de áreas. Olhe o conjunto inteiro (o que já existe + o que é novo) e descubra as áreas naturais daquele conteúdo. Só crie uma área nova quando isso realmente simplificar a busca futura; se uma área não faz mais sentido, reorganize-a.
-2. Poucas áreas, bem organizadas: prefira poucas áreas grandes e coerentes a muitas pequenas. Nunca force uma informação numa área que não combina só pra evitar criar uma nova.
-3. Pouca profundidade: no máximo 3 níveis — Área → item → detalhe dentro do próprio texto do item (ex: um item pode começar com "Projeto X:" pra dar contexto, mas isso não é um nível novo de hierarquia).
-4. Organize pelo significado, não pela palavra: entenda o contexto antes de decidir a área. "Lucas comentou sobre abrir empresa" é sobre o Lucas E sobre a empresa — escolha o lugar que fará mais sentido dali a 6 meses.
-5. Detecte padrões: se um assunto está crescendo, transforme-o numa área própria; se uma área ficou grande e heterogênea demais, separe-a.
-6. Elimine duplicações: uma informação repetida ou uma nova captura que já existe em outro item deve virar uma coisa só — uma junto da outra, sem repetir. Nunca perca detalhes importantes ao unir.
-7. Preserve contexto: nunca generalize um item a ponto de perder informação. Se o texto conecta duas ideias (ex: "estudar Firebase pro projeto Life OS"), mantenha essa relação — nunca invente relações que não estão explícitas.
-8. Links ficam junto do assunto: nunca separe um link do contexto que o acompanha; se um link parecer incompleto, mantenha-o como está (não invente).
-9. NUNCA descarte uma informação que já existia só porque não achou lugar óbvio pra ela — encontre a área mais adequada (ou crie uma) em vez de apagar. Preservar tudo que já existe é mais importante que deixar a estrutura "bonita".
-10. Preserve o texto de itens que já existiam EXATAMENTE como estava — mesmas palavras, mesma pontuação, mesma capitalização — mesmo que o item mude de área ou de posição dentro do documento. Só reescreva o texto de um item quando isso for necessário de verdade (unir duplicatas, corrigir um erro óbvio, ou incorporar uma nova captura nele). Nunca reformule um item só por estilo ou preferência de fraseado: quem revisa o resultado compara o documento antigo com o novo linha a linha, e uma reformulação desnecessária aparece como uma mudança onde não houve nenhuma.
-11. Uma ÚNICA captura pode trazer VÁRIOS temas diferentes de uma vez — a pessoa às vezes despeja tudo que está pensando de uma vez só, e separa os temas por uma linha em branco dentro do mesmo texto (às vezes cada bloco começa com um título curto, tipo o nome de uma pessoa, projeto ou ideia, seguido de linhas com • ou *). Cada um desses blocos separados por linha em branco é uma peça de informação INDEPENDENTE: identifique cada tema e distribua cada um pra área correta (que pode ser uma área diferente pra cada bloco). NUNCA trate a captura inteira como se fosse um só assunto, e NUNCA aproveite só o primeiro bloco e ignore o resto — isso é perda de informação, exatamente o que o princípio 9 proíbe.
-12. NUNCA crie uma área com o mesmo nome (ou nome muito parecido/sinônimo) de uma área que já existe no "Documento atual". Antes de decidir o nome de qualquer área do documento final, confira se ela já existe — se existir (mesmo com capitalização diferente ou uma leve variação de palavra), incorpore o conteúdo novo DENTRO dela, juntando com itens parecidos conforme o princípio 6, em vez de criar uma segunda área. O documento final nunca deve ter duas áreas com "# " de nome igual ou quase igual.
-
-Formato de saída — isto é OBRIGATÓRIO, porque o texto é interpretado por um programa:
-- Cada área começa numa linha própria com "# " seguido do nome da área.
-- Cada informação/item dentro da área começa numa linha própria com "• " (marcador bullet).
-- Se um item precisar de mais de uma linha, as linhas seguintes de continuação NÃO começam com "#" nem "•".
-- Deixe uma linha em branco entre uma área e outra.
-- Responda APENAS com o documento nesse formato — sem markdown extra (sem \`\`\`), sem comentários, sem título, sem numerar as áreas, sem texto antes ou depois do documento.`;
-
-  // Serializa o estado atual das Gavetas no mesmo formato de texto que a IA usa
-  // (ex: "# Nome da área" seguido de linhas "• item"), pra comparar com a versão
-  // que a IA devolver e pra dar contexto completo do que já existe.
-  function serializeGavetasToDoc(gavetas){
-    const entries = Object.entries(gavetas || {}).sort((a,b) => (a[1].order||0) - (b[1].order||0));
-    return entries.map(([, g]) => {
-      const items = Object.entries(g.items || {}).sort((a,b) => (a[1].order||0) - (b[1].order||0));
-      const itemLines = items.map(([, it]) => {
-        const lines = String(it.text || '').split('\n');
-        return lines.map((l, idx) => idx === 0 ? '• ' + l.replace(/^[•\-\*]\s*/, '') : l).join('\n');
-      }).join('\n');
-      return `# ${g.name}` + (itemLines ? '\n' + itemLines : '');
-    }).join('\n\n');
-  }
-
-  // Interpreta de volta um documento no formato "# área / • item" pra uma lista
-  // de { name, items: [texto,...] }, na ordem em que aparecem no documento.
-  function parseDocToGavetas(text){
-    const lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
-    const gavetas = [];
+  // Texto colado/digitado → lista de itens (sem id/ordem — quem grava atribui).
+  // Indentação de 2 espaços (ou 1 tab) vira nível, até 3. Linhas contíguas sem
+  // marcador se juntam ao item anterior.
+  function notasMarkdownParaItens(rawText){
+    const lines = String(rawText || '').replace(/\r\n?/g, '\n').split('\n');
+    const itens = [];
     let current = null;
-    let currentItemLines = null;
-    function flushItem(){
-      if(current && currentItemLines){
-        const joined = currentItemLines.join('\n').trim();
-        if(joined) current.items.push(joined);
-      }
-      currentItemLines = null;
-    }
-    lines.forEach(line => {
-      const headingMatch = /^#\s*(.+?)\s*$/.exec(line);
-      const itemMatch = /^[•\-\*]\s?(.*)$/.exec(line);
-      if(headingMatch){
-        flushItem();
-        current = { name: headingMatch[1], items: [] };
-        gavetas.push(current);
-      } else if(itemMatch && current){
-        flushItem();
-        currentItemLines = [itemMatch[1]];
-      } else if(current && currentItemLines && line.trim() !== ''){
-        currentItemLines.push(line);
-      } else if(currentItemLines && line.trim() === ''){
-        flushItem();
-      }
-    });
-    flushItem();
-    return gavetas.filter(g => g.name);
-  }
-
-  // Rede de segurança: mesmo com o princípio 12 pedindo pra IA nunca duplicar uma
-  // área, ela pode falhar (foi o que aconteceu). Antes de mostrar o documento pra
-  // revisão, junta automaticamente áreas com o mesmo nome (ignorando maiúsculas/
-  // minúsculas e espaços nas pontas) em vez de deixar duas áreas iguais passarem.
-  function mergeDuplicateAreas(text){
-    const gavetas = parseDocToGavetas(text);
-    const merged = [];
-    const byKey = new Map();
-    gavetas.forEach(g => {
-      const key = g.name.trim().toLowerCase();
-      const existing = byKey.get(key);
-      if(existing){
-        existing.items.push(...g.items);
+    let linhaVaziaPendente = false;
+    function flush(){ if(current && current.texto.trim()) itens.push(current); current = null; }
+    lines.forEach((line) => {
+      if(!line.trim()){ flush(); if(itens.length) linhaVaziaPendente = true; return; }
+      const indentLen = (line.match(/^(\s*)/)[1]).replace(/\t/g, '  ').length;
+      const nivel = Math.min(3, Math.floor(indentLen / 2));
+      const trimmed = line.trim();
+      const parsed = notasDetectLineTipo(trimmed);
+      if(parsed){
+        flush();
+        current = { tipo:parsed.tipo, texto:parsed.texto, nivel, feito:!!parsed.feito, url:parsed.url || null, linhaVaziaAntes:linhaVaziaPendente };
+        linhaVaziaPendente = false;
+      } else if(current){
+        current.texto += '\n' + trimmed;
       } else {
-        const entry = { name: g.name, items: [...g.items] };
-        byKey.set(key, entry);
-        merged.push(entry);
+        current = { tipo:'texto', texto:trimmed, nivel, feito:false, url:null, linhaVaziaAntes:linhaVaziaPendente };
+        linhaVaziaPendente = false;
       }
     });
-    return merged.map(g => {
-      const itemLines = g.items.map(itemText => itemText.split('\n').map((l, idx) => idx === 0 ? '• ' + l.replace(/^[•\-\*]\s*/, '') : l).join('\n')).join('\n');
-      return `# ${g.name}` + (itemLines ? '\n' + itemLines : '');
-    }).join('\n\n');
+    flush();
+    return itens;
+  }
+  function notasLinePrefix(item){
+    switch(item.tipo){
+      case 'secao': return '# ';
+      case 'tarefa': return '[' + (item.feito ? 'x' : ' ') + '] ';
+      case 'bullet': return '• ';
+      case 'passo': return '1. ';
+      default: return '';
+    }
+  }
+  function notasItemParaLinhas(item){
+    if(item.tipo === 'divisor') return ['---'];
+    const indent = '  '.repeat(item.nivel || 0);
+    const linhas = String(item.texto || '').split('\n');
+    const prefix = notasLinePrefix(item);
+    return linhas.map((l, i) => indent + (i === 0 ? prefix : ' '.repeat(prefix.length)) + l);
+  }
+  function notasOrdenados(itensObj){
+    return Object.values(itensObj || {}).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  }
+  function notasParaMarkdown(nota){
+    return notasOrdenados(nota.itens).flatMap((item, i) => {
+      const linhas = notasItemParaLinhas(item);
+      return item.linhaVaziaAntes && i > 0 ? [''].concat(linhas) : linhas;
+    }).join('\n');
+  }
+  // Divide um texto cru em blocos por linha em branco — usado por "Dividir em
+  // várias" na barra de captura: cada bloco vira uma nota própria.
+  function notasSplitEmBlocos(rawText){
+    return String(rawText || '')
+      .replace(/\r\n?/g, '\n')
+      .split(/\n\s*\n+/)
+      .map((b) => b.trim())
+      .filter(Boolean);
+  }
+  function notasTituloAutomatico(linha){
+    const t = String(linha || '').replace(/^[•\-\*]\s*/, '').replace(/^\[[ xX]\]\s*/, '').trim();
+    if(t.length <= 42) return t || 'Sem título';
+    const cut = t.slice(0, 42);
+    const lastSpace = cut.lastIndexOf(' ');
+    return (lastSpace > 20 ? cut.slice(0, lastSpace) : cut) + '…';
   }
 
-  // Rede de segurança contra perda de conteúdo: confere se cada linha de cada
-  // captura original tem um correspondente na versão que a IA devolveu (mesma
-  // lógica usada pra pintar a coluna "Capturas originais" na tela — ver
-  // captureMatchKey/findCaptureLineMatch). Qualquer linha sem correspondente é
-  // anexada numa área de reserva no fim do documento, em vez de simplesmente
-  // desaparecer — o princípio 9/11 pede isso da IA, mas depender só da IA
-  // acertar não é garantia nenhuma; isso aqui garante de verdade.
-  function reconcileMissingCaptures(newDoc, capturasText){
-    const newLineKeys = newDoc.split('\n').map(captureMatchKey);
-    const missing = [];
-    capturasText.split(/\n\n---\n\n/).forEach(block => {
-      block.split('\n').map(l => l.trim()).filter(Boolean).forEach(line => {
-        const idx = findCaptureLineMatch(captureMatchKey(line), newLineKeys);
-        if(idx === -1) missing.push(line.replace(/^[•\-\*]\s*/, ''));
-      });
+  /* ---------- Estado + persistência (RTDB: /Notas e /NotasAreas) ---------- */
+  const NOTAS_MODO_KEY = 'lifeosNotasModo';
+  const NOTAS_COLUNAS_KEY = 'lifeosNotasColunas';
+  const NOTAS_PALETA = ['#60519b','#0a7386','#4f8f0c','#a86a00','#c62b4a','#8b5cf6','#1f5c8b','#b0537a'];
+  let notasState = { areas:{}, notas:{}, loaded:false };
+
+  async function notasCarregarEstado(){
+    const [areas, notas] = await Promise.all([dbGet(userPath('/NotasAreas')), dbGet(userPath('/Notas'))]);
+    notasState = { areas: areas || {}, notas: notas || {}, loaded:true };
+    return notasState;
+  }
+  function notasNaArea(areaId){
+    return Object.values(notasState.notas).filter(n => (n.areaId || null) === areaId);
+  }
+  function notasOrdemManualDe(n){ return n.ordemManual || new Date(n.criadoEm || 0).getTime(); }
+  function notasSortedList(){
+    return Object.values(notasState.notas)
+      .sort((a, b) => { if(!!a.fixada !== !!b.fixada) return a.fixada ? -1 : 1; return notasOrdemManualDe(a) - notasOrdemManualDe(b); });
+  }
+  async function notasCreateArea(nome, cor){
+    const areas = Object.values(notasState.areas);
+    const area = { id:newId(), nome: nome || 'Nova categoria', cor: cor || NOTAS_PALETA[areas.length % NOTAS_PALETA.length], ordem: areas.length };
+    notasState.areas[area.id] = area;
+    await dbPutSilent(userPath('/NotasAreas/' + area.id), area);
+    return area;
+  }
+  async function notasUpdateArea(id, patch){
+    if(!notasState.areas[id]) return;
+    notasState.areas[id] = { ...notasState.areas[id], ...patch };
+    await dbPatchSilent(userPath('/NotasAreas/' + id), patch);
+  }
+  async function notasDeleteArea(id){
+    delete notasState.areas[id];
+    await dbDeleteSilent(userPath('/NotasAreas/' + id));
+  }
+  async function notasCreateNota(areaId, titulo){
+    const now = new Date().toISOString();
+    const nota = { id:newId(), areaId: areaId || null, titulo: titulo || '', itens:{}, fixada:false, criadoEm:now, atualizadoEm:now, ordemManual: Date.now() };
+    notasState.notas[nota.id] = nota;
+    await dbPutSilent(userPath('/Notas/' + nota.id), nota);
+    return nota;
+  }
+  async function notasCreateNotaComTexto(areaId, textoBruto){
+    const itensArr = notasMarkdownParaItens(textoBruto);
+    const now = new Date().toISOString();
+    const itens = {};
+    itensArr.forEach((it, i) => { const id = newId(); itens[id] = { id, ordem:i, criadoEm:now, ...it }; });
+    const primeiraLinha = String(textoBruto || '').split('\n').find(l => l.trim()) || '';
+    const nota = { id:newId(), areaId: areaId || null, titulo: notasTituloAutomatico(primeiraLinha), itens, fixada:false, criadoEm:now, atualizadoEm:now, ordemManual: Date.now() };
+    notasState.notas[nota.id] = nota;
+    await dbPutSilent(userPath('/Notas/' + nota.id), nota);
+    return nota;
+  }
+  async function notasUpdateNota(id, patch){
+    if(!notasState.notas[id]) return;
+    const atualizadoEm = new Date().toISOString();
+    notasState.notas[id] = { ...notasState.notas[id], ...patch, atualizadoEm };
+    await dbPatchSilent(userPath('/Notas/' + id), { ...patch, atualizadoEm });
+  }
+  async function notasSubstituirItens(id, textoBruto){
+    const nota = notasState.notas[id];
+    if(!nota) return;
+    const itensArr = notasMarkdownParaItens(textoBruto);
+    const now = new Date().toISOString();
+    const itens = {};
+    itensArr.forEach((it, i) => { const itemId = newId(); itens[itemId] = { id:itemId, ordem:i, criadoEm:now, ...it }; });
+    nota.itens = itens;
+    nota.atualizadoEm = now;
+    await dbPutSilent(userPath('/Notas/' + id), nota);
+  }
+  async function notasUpdateItem(notaId, itemId, patch){
+    const nota = notasState.notas[notaId];
+    if(!nota || !nota.itens[itemId]) return;
+    nota.itens[itemId] = { ...nota.itens[itemId], ...patch };
+    await dbPatchSilent(userPath('/Notas/' + notaId + '/itens/' + itemId), patch);
+  }
+  async function notasDeleteNota(id){
+    delete notasState.notas[id];
+    await dbDeleteSilent(userPath('/Notas/' + id));
+  }
+  async function notasReordenarNota(idArrastado, idAlvo){
+    const lista = notasSortedList().filter(n => n.id !== idArrastado);
+    const idxAlvo = idAlvo ? lista.findIndex(n => n.id === idAlvo) : lista.length;
+    const antes = idxAlvo > 0 ? lista[idxAlvo - 1] : null;
+    const depois = idxAlvo >= 0 && idxAlvo < lista.length ? lista[idxAlvo] : null;
+    const ordemAntes = antes ? notasOrdemManualDe(antes) : Date.now() - 1e10;
+    const ordemDepois = depois ? notasOrdemManualDe(depois) : Date.now();
+    await notasUpdateNota(idArrastado, { ordemManual: (ordemAntes + ordemDepois) / 2 });
+  }
+
+  /* ---------- Board (mural de cards) ---------- */
+  let notasContainerEl = null;
+  let notasModoEdicao = localStorage.getItem(NOTAS_MODO_KEY) === 'edicao';
+  let notasFiltroAreaIds = new Set();
+  let notasModoSelecao = false;
+  let notasSelecionados = new Set();
+  let notasIsolando = false;
+  let notasFocarId = null;
+  let notasMaxColunas = Math.min(4, Math.max(2, parseInt(localStorage.getItem(NOTAS_COLUNAS_KEY), 10) || 3));
+  let notasCardFocadoId = null;
+  let notasItemSelecionadoId = null;
+
+  function notasAutoGrow(ta){ ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+  function notasAlgumOutroModalAberto(){
+    return (searchModal && searchModal.classList.contains('active')) || !!document.querySelector('.confirm-modal.active');
+  }
+  function notasAplicarFiltroArea(v, comShift){
+    if(comShift && v){
+      if(notasFiltroAreaIds.has(v)) notasFiltroAreaIds.delete(v); else notasFiltroAreaIds.add(v);
+    } else {
+      notasFiltroAreaIds = new Set(v ? [v] : []);
+    }
+    notasIsolando = false;
+  }
+  function notasFiltradas(){
+    let lista = notasSortedList();
+    if(notasIsolando) lista = lista.filter(n => notasSelecionados.has(n.id));
+    else if(notasFiltroAreaIds.size) lista = lista.filter(n => notasFiltroAreaIds.has(n.areaId || '__sem__'));
+    return lista;
+  }
+  function notasPeso(nota){
+    const itens = Object.values(nota.itens || {});
+    let peso = 1.5;
+    itens.forEach(item => { peso += 1 + Math.floor((item.texto || '').length / 40); });
+    return peso;
+  }
+  function notasDistribuirEmColunas(lista, n){
+    const colunas = Array.from({ length:n }, () => []);
+    const pesos = new Array(n).fill(0);
+    lista.forEach(item => {
+      let idx = 0;
+      for(let i = 1; i < n; i++) if(pesos[i] < pesos[idx]) idx = i;
+      colunas[idx].push(item);
+      pesos[idx] += notasPeso(item);
     });
-    if(!missing.length) return newDoc;
-    const fallbackArea = '# Não organizado pela IA (revisar)\n' + missing.map(l => '• ' + l).join('\n');
-    return mergeDuplicateAreas(newDoc + '\n\n' + fallbackArea);
+    return colunas;
   }
-
-  // Chave de comparação de uma linha pro diff: ignora espaços a mais no início/fim
-  // e no meio. A IA reescreve o documento inteiro a cada rodada, então um item que
-  // não mudou de verdade às vezes volta com um espaço a mais ou a menos — sem essa
-  // normalização, isso já bastava pra linha inteira parecer "diferente" no diff.
-  function diffLineKey(line){
-    return String(line || '').trim().replace(/\s+/g, ' ');
-  }
-
-  // Diff por linha (LCS clássico) — devolve UMA lista de operações em ordem
-  // (equal/removed/added), igual a uma comparação de versões em merge: uma
-  // linha removida abre uma lacuna do lado novo, uma linha adicionada abre
-  // uma lacuna do lado antigo, e uma linha igual aparece nos dois lados na
-  // mesma posição. É essa lista única que mantém as duas colunas alinhadas
-  // linha a linha ao renderizar (ver renderRevisao).
-  function computeLineDiff(oldLines, newLines){
-    const oldKeys = oldLines.map(diffLineKey);
-    const newKeys = newLines.map(diffLineKey);
-    const n = oldLines.length, m = newLines.length;
-    const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
-    for(let i = n - 1; i >= 0; i--){
-      for(let j = m - 1; j >= 0; j--){
-        dp[i][j] = oldKeys[i] === newKeys[j] ? dp[i+1][j+1] + 1 : Math.max(dp[i+1][j], dp[i][j+1]);
+  function notasLinhaTexto(texto){ return escapeHtml(texto).replace(/\n/g, '<br>'); }
+  function notasCorpoVisualizacaoHtml(nota){
+    const itens = notasOrdenados(nota.itens);
+    if(!itens.length) return '<div class="l-vazio">Nota vazia — mude pra "Editar" pra escrever.</div>';
+    let passoN = 0;
+    return itens.map(item => {
+      const nivel = ' style="margin-left:' + (item.nivel || 0) * 14 + 'px"';
+      const base = (extra) => 'class="l-item' + (item.linhaVaziaAntes ? ' espaco-antes' : '') + (extra ? ' ' + extra : '') + '" data-item-id="' + item.id + '"' + nivel;
+      if(item.tipo === 'secao') return '<div ' + base('l-secao') + '>' + notasLinhaTexto(item.texto) + '</div>';
+      if(item.tipo === 'divisor') return '<div ' + base('l-divisor') + '></div>';
+      if(item.tipo === 'tarefa'){
+        return '<label ' + base('l-tarefa' + (item.feito ? ' feito' : '')) + '>' +
+          '<input type="checkbox" ' + (item.feito ? 'checked' : '') + ' data-toggle-tarefa="' + item.id + '">' +
+          '<span>' + notasLinhaTexto(item.texto) + '</span></label>';
       }
-    }
-    const ops = [];
-    let i = 0, j = 0;
-    while(i < n && j < m){
-      if(oldKeys[i] === newKeys[j]){
-        ops.push({ type:'equal', oldText: oldLines[i], newText: newLines[j] });
-        i++; j++;
-      } else if(dp[i+1][j] >= dp[i][j+1]){
-        ops.push({ type:'removed', oldText: oldLines[i] });
-        i++;
-      } else {
-        ops.push({ type:'added', newText: newLines[j] });
-        j++;
+      if(item.tipo === 'link'){
+        const dom = notasDomainFromUrl(item.texto);
+        return '<div ' + base('') + '><a class="l-link" href="' + escapeHtml(item.texto) + '" target="_blank" rel="noopener">' +
+          notasLinhaTexto(item.texto) + '</a> <span style="opacity:.5">' + escapeHtml(dom) + '</span></div>';
       }
+      if(item.tipo === 'passo'){ passoN++; return '<div ' + base('l-passo') + '><span class="marca">' + passoN + '.</span><span>' + notasLinhaTexto(item.texto) + '</span></div>'; }
+      if(item.tipo === 'bullet') return '<div ' + base('l-bullet') + '><span class="marca">•</span><span>' + notasLinhaTexto(item.texto) + '</span></div>';
+      return '<div ' + base('') + '>' + notasLinhaTexto(item.texto) + '</div>';
+    }).join('');
+  }
+  function notasProgressoHtml(nota){
+    const tarefas = notasOrdenados(nota.itens).filter(i => i.tipo === 'tarefa');
+    if(!tarefas.length) return '';
+    const feitas = tarefas.filter(t => t.feito).length;
+    const totalDots = Math.min(tarefas.length, 12);
+    const razao = feitas / tarefas.length;
+    const dots = Array.from({ length: totalDots }).map((_, i) => (
+      '<span class="dot' + ((i + 1) / totalDots <= razao + 0.0001 ? ' feito' : '') + '"></span>'
+    )).join('');
+    return '<div class="board-card-progresso"><div class="dots">' + dots + '</div><span class="pct">' + feitas + '/' + tarefas.length + '</span></div>';
+  }
+  function notasCardHtml(nota){
+    const area = nota.areaId ? notasState.areas[nota.areaId] : null;
+    const cor = area ? area.cor : null;
+    const tocada = nota.atualizadoEm && Date.now() - new Date(nota.atualizadoEm).getTime() < 6000;
+    const sel = notasSelecionados.has(nota.id);
+    const totalItens = Object.keys(nota.itens || {}).length;
+    return (
+      '<div class="board-card' + (tocada ? ' flash-new' : '') + (notasModoSelecao ? ' modo-selecao' : '') + (sel ? ' selecionado' : '') +
+      (nota.id === notasCardFocadoId ? ' card-focado' : '') +
+      '" style="--card-cor:' + (cor || 'var(--text-dim)') + '" data-nota-id="' + nota.id + '" draggable="' + (!notasModoSelecao) + '">' +
+      (area ? '<span class="board-card-cat-badge">' + escapeHtml(area.nome) + '</span>' : '') +
+      (totalItens ? '<span class="board-card-count-badge">' + totalItens + (totalItens === 1 ? ' item' : ' itens') + '</span>' : '') +
+      '<div class="board-card-top">' +
+      '<span class="board-card-icon-check" data-select="1"></span>' +
+      '<button type="button" class="board-card-pin-btn' + (nota.fixada ? ' on' : '') + '" data-pin="1" title="' + (nota.fixada ? 'Desfixar' : 'Fixar') + '">📌</button>' +
+      '<button type="button" class="board-card-menu-btn" data-menu="1" title="Mais">⋯</button>' +
+      '</div>' +
+      (notasModoEdicao
+        ? '<input class="board-card-titulo-input" data-titulo="1" placeholder="Sem título" value="' + escapeHtml(nota.titulo || '') + '">'
+        : '<div class="board-card-titulo-texto">' + escapeHtml(nota.titulo || 'Sem título') + '</div>') +
+      (notasModoEdicao
+        ? '<textarea class="board-card-textarea" data-corpo="1" rows="1">' + escapeHtml(notasParaMarkdown(nota)) + '</textarea>'
+        : '<div class="board-card-corpo">' + notasCorpoVisualizacaoHtml(nota) + '</div>') +
+      notasProgressoHtml(nota) +
+      '</div>'
+    );
+  }
+  function notasConverterBulletAoDigitar(textarea){
+    if(textarea.selectionStart !== textarea.selectionEnd) return;
+    const pos = textarea.selectionStart;
+    const value = textarea.value;
+    const inicioLinha = value.lastIndexOf('\n', pos - 1) + 1;
+    const linhaAteCursor = value.slice(inicioLinha, pos);
+    if(!/^[*-] $/.test(linhaAteCursor)) return;
+    textarea.value = value.slice(0, inicioLinha) + '• ' + value.slice(pos);
+    const novaPos = inicioLinha + 2;
+    textarea.setSelectionRange(novaPos, novaPos);
+  }
+  function notasLimitesDoBloco(value, selStart, selEnd){
+    const inicio = value.lastIndexOf('\n', selStart - 1) + 1;
+    let fimBusca = selEnd;
+    if(selEnd > selStart && value[selEnd - 1] === '\n') fimBusca = selEnd - 1;
+    let fim = value.indexOf('\n', fimBusca);
+    if(fim === -1) fim = value.length;
+    return { inicio, fim };
+  }
+  function notasIndentarSelecao(textarea, indentar){
+    const value = textarea.value;
+    const selStart = textarea.selectionStart;
+    const selEnd = textarea.selectionEnd;
+    const { inicio, fim } = notasLimitesDoBloco(value, selStart, selEnd);
+    const trecho = value.slice(inicio, fim);
+    const linhas = trecho.split('\n');
+    let deltaPrimeira = 0;
+    const novasLinhas = linhas.map((linha, i) => {
+      if(indentar){ if(i === 0) deltaPrimeira = 2; return '  ' + linha; }
+      let remover = 0;
+      if(linha.startsWith('  ')) remover = 2;
+      else if(linha.startsWith('\t') || linha.startsWith(' ')) remover = 1;
+      if(i === 0) deltaPrimeira = -remover;
+      return linha.slice(remover);
+    });
+    const novoTrecho = novasLinhas.join('\n');
+    const deltaTotal = novoTrecho.length - trecho.length;
+    textarea.value = value.slice(0, inicio) + novoTrecho + value.slice(fim);
+    const novoSelStart = Math.max(inicio, selStart + deltaPrimeira);
+    const novoSelEnd = Math.max(novoSelStart, selEnd + deltaTotal);
+    textarea.setSelectionRange(novoSelStart, novoSelEnd);
+    notasAutoGrow(textarea);
+  }
+  async function notasSalvarCorpo(notaId, textarea){
+    const nota = notasState.notas[notaId];
+    if(!nota) return;
+    if(textarea.value === notasParaMarkdown(nota)) return;
+    await notasSubstituirItens(notaId, textarea.value);
+  }
+  function notasToggleSelecao(notaId){
+    if(notasSelecionados.has(notaId)) notasSelecionados.delete(notaId); else notasSelecionados.add(notaId);
+    notasRender();
+  }
+  function notasFocarCard(notaId, itemId){
+    notasCardFocadoId = notaId;
+    notasItemSelecionadoId = itemId;
+    notasRender();
+  }
+  function notasAplicarFocoNoDOM(){
+    notasContainerEl.querySelectorAll('.board-card.card-focado').forEach(el => el.classList.remove('card-focado'));
+    notasContainerEl.querySelectorAll('.l-item.selecionado').forEach(el => el.classList.remove('selecionado'));
+    if(!notasCardFocadoId) return;
+    const card = notasContainerEl.querySelector('[data-nota-id="' + notasCardFocadoId + '"]');
+    if(!card){ notasCardFocadoId = null; notasItemSelecionadoId = null; return; }
+    card.classList.add('card-focado');
+    if(notasItemSelecionadoId){
+      const item = card.querySelector('[data-item-id="' + notasItemSelecionadoId + '"]');
+      if(item){ item.classList.add('selecionado'); item.scrollIntoView({ block:'nearest' }); }
     }
-    while(i < n){ ops.push({ type:'removed', oldText: oldLines[i] }); i++; }
-    while(j < m){ ops.push({ type:'added', newText: newLines[j] }); j++; }
-    return ops;
   }
-
-  document.getElementById('runAiOrganizeBtn').addEventListener('click', async () => {
-    const btn = document.getElementById('runAiOrganizeBtn');
-    if(!IA_PROXY_URL){ showAppMessage('As features de IA precisam da Cloud Function publicada.', 'error'); return; }
-    btn.disabled = true; btn.textContent = '✦ Organizando...';
-    showLoading('Organizando sua Inbox com IA...');
-    try{
-      const inbox = await dbGet(userPath('/Inbox')) || {};
-      const pending = Object.entries(inbox).filter(([id,it]) => it.status === 'pending');
-      if(!pending.length){ showAppMessage('Não há itens novos em Capturas para organizar.', 'info'); return; }
-      const gavetas = await dbGet(userPath('/Gavetas')) || {};
-      const oldDoc = serializeGavetasToDoc(gavetas);
-      // Preserva as quebras de linha originais de cada captura (antes isso virava
-      // espaço, transformando uma captura com vários temas numa única linha
-      // ilegível) e delimita cada captura com "---", já que agora uma captura
-      // pode ocupar várias linhas.
-      const capturasText = pending.map(([, it]) => String(it.text || '').replace(/\r\n?/g, '\n').trim()).join('\n\n---\n\n');
-
-      const userPrompt = `Documento atual (todas as áreas e itens já existentes):
-${oldDoc || '(nenhuma área criada ainda)'}
-
-Novas capturas para incorporar e organizar dentro do documento (ainda soltas, sem organização). Cada captura é separada por uma linha "---". ATENÇÃO: uma mesma captura pode conter vários temas completamente diferentes, separados por linha em branco dentro dela (veja o princípio 11 do sistema) — trate cada bloco separadamente, nunca só o primeiro:
-${capturasText}
-
-Gere o documento ATUALIZADO completo — todas as áreas existentes (reorganizadas se fizer sentido) mais as novas capturas já incorporadas nos lugares certos. Devolva o documento inteiro, não só as mudanças.`;
-
-      const conteudoIA = await chamarIA(ORGANIZER_SYSTEM_PROMPT, userPrompt);
-      // normaliza quebras de linha (a API às vezes devolve \r\n) — sem isso, um \r
-      // invisível no fim de cada linha faz TODA linha parecer diferente no diff,
-      // mesmo quando o texto visível é idêntico ao da versão antiga.
-      const rawNewDoc = conteudoIA.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').replace(/\r\n?/g, '\n').trim();
-      // rede de segurança: se a IA mesmo assim devolver duas áreas com o mesmo
-      // nome, junta antes de mostrar a revisão (ver mergeDuplicateAreas); e se
-      // algum trecho das capturas ficou de fora, anexa numa área de reserva em
-      // vez de deixar sumir (ver reconcileMissingCaptures).
-      const newDoc = reconcileMissingCaptures(mergeDuplicateAreas(rawNewDoc), capturasText);
-
-      const inboxIds = pending.map(([id]) => id);
-      await dbPut(userPath('/RevisaoDocumento'), { oldText: oldDoc, newText: newDoc, inboxIds, createdAt: new Date().toISOString() });
-      await Promise.all(inboxIds.map(id => dbPatch(userPath('/Inbox/' + id), { status:'awaiting_review' })));
-
-      await renderInbox();
-      await renderRevisao();
-      document.querySelector('.subtab[data-target="storage-revisao"]').click();
-    }catch(err){
-      showAppMessage('Erro ao organizar com IA: ' + err.message, 'error');
-    }finally{
-      hideLoading();
-      btn.disabled = false; btn.textContent = '✦ Organizar Capturas com IA';
-    }
-  });
-
-
-  function ensureBulletLine(line){
-    if(line == null) return line;
-    const trimmed = line.trim();
-    if(!trimmed) return line;
-    // já tem marcador de lista (•, -, *, ou numerado "1." / "1)") — não duplica
-    if(/^(•|-|\*|\d+[.)])\s+/.test(trimmed)) return trimmed.replace(/^[\*\-]\s+/, '• ');
-    return '• ' + trimmed;
+  function notasMoverSelecao(delta){
+    const nota = notasState.notas[notasCardFocadoId];
+    if(!nota) return;
+    const itens = notasOrdenados(nota.itens);
+    if(!itens.length) return;
+    const idxAtual = itens.findIndex(i => i.id === notasItemSelecionadoId);
+    const novoIdx = idxAtual === -1 ? 0 : Math.min(itens.length - 1, Math.max(0, idxAtual + delta));
+    notasItemSelecionadoId = itens[novoIdx].id;
+    notasAplicarFocoNoDOM();
   }
-  function normalizeBullets(text){
-    if(!text) return text;
-    const lines = text.split('\n');
-    // Só força bullet quando o texto tem mais de uma linha (é de fato uma lista).
-    // Um texto de uma linha só (frase/parágrafo) fica como está.
-    if(lines.length <= 1) return text.replace(/^\s*[\*\-]\s+/, '• ');
-    return lines.map(l => (l.trim() ? ensureBulletLine(l) : l)).join('\n');
-  }
-  // Usado especificamente para conteúdo gerado pela IA no Storage: diferente de
-  // normalizeBullets, força bullet point mesmo em textos de uma linha só,
-  // já que todo item vindo da IA deve aparecer como bullet point.
-  function forceBulletText(text){
-    if(!text) return text;
-    return text.split('\n').map(l => (l.trim() ? ensureBulletLine(l) : l)).join('\n');
-  }
-  const DIFF_LINE_EMPTY = '<div class="diff-line diff-line-empty">&nbsp;</div>';
-  function revisaoDiffLineHtml(text, cls, idx){
-    const attr = idx != null ? ` data-line-idx="${idx}"` : '';
-    return `<div class="diff-line${cls}"${attr}>${text ? escapeHtml(text) : '&nbsp;'}</div>`;
-  }
-
-  // Normaliza uma linha pra comparar "captura original" com "versão atualizada":
-  // tira marcador de lista/título, deixa minúsculo e sem pontuação nas pontas.
-  // Usado só pra localizar onde uma captura foi parar, não pro diff em si (que
-  // precisa ser mais rígido — ver diffLineKey).
-  function captureMatchKey(line){
-    return String(line || '')
-      .replace(/^#\s*/, '')
-      .replace(/^[•\-\*]\s*/, '')
-      .trim()
-      .toLowerCase()
-      .replace(/[.,;:!?]+$/, '')
-      .replace(/\s+/g, ' ');
-  }
-  // Acha em que linha da versão atualizada uma linha de captura foi parar:
-  // primeiro tenta conter uma na outra (caso comum — a IA só ajusta em volta),
-  // senão cai pra sobreposição de palavras (caso a IA tenha reescrito o trecho).
-  function findCaptureLineMatch(captureKey, newLineKeys){
-    if(!captureKey) return -1;
-    const direct = newLineKeys.findIndex(k => k && (k.includes(captureKey) || captureKey.includes(k)));
-    if(direct !== -1) return direct;
-    const words = captureKey.split(' ').filter(w => w.length > 2);
-    if(!words.length) return -1;
-    let bestIdx = -1, bestScore = 0;
-    newLineKeys.forEach((k, i) => {
-      if(!k) return;
-      const kWords = k.split(' ');
-      const shared = words.filter(w => kWords.includes(w)).length;
-      const score = shared / words.length;
-      if(score > bestScore){ bestScore = score; bestIdx = i; }
-    });
-    return bestScore >= 0.5 ? bestIdx : -1;
-  }
-  // Enquanto true, o espelhamento de scroll entre as colunas antiga/nova (ver
-  // setupRevisaoScrollSync) fica pausado — usado durante o "pular pra" do clique
-  // numa captura, pra ele não brigar com a rolagem suave e travar no meio do caminho.
-  let revisaoSuppressMirror = false;
-  // Só uma linha por vez fica destacada no clique de uma captura — controla isso
-  // aqui em vez de um setTimeout solto por clique, senão clicar rápido em duas
-  // capturas diferentes deixava os dois destaques acesos ao mesmo tempo.
-  let revisaoHighlightEl = null;
-  let revisaoHighlightTimer = null;
-  function flashRevisaoTarget(target){
-    if(revisaoHighlightTimer) clearTimeout(revisaoHighlightTimer);
-    if(revisaoHighlightEl && revisaoHighlightEl !== target) revisaoHighlightEl.classList.remove('diff-line-target-flash');
-    target.classList.add('diff-line-target-flash');
-    revisaoHighlightEl = target;
-    revisaoHighlightTimer = setTimeout(() => {
-      target.classList.remove('diff-line-target-flash');
-      if(revisaoHighlightEl === target) revisaoHighlightEl = null;
-      revisaoHighlightTimer = null;
-    }, 1600);
-  }
-  // Rola as duas colunas (antiga e nova) direto pro alvo, num pulo só — como as
-  // linhas ficam alinhadas 1 a 1 entre as colunas (ver computeLineDiff), o mesmo
-  // deslocamento serve pras duas. Suspende o espelhamento de scroll durante a
-  // animação pra ele não interromper no meio (era isso que causava os "vários
-  // cliques" pra chegar no lugar certo).
-  function scrollRevisaoTo(target){
-    const oldPane = document.getElementById('revisaoOldPane');
-    const newPane = document.getElementById('revisaoNewPane');
-    if(!oldPane || !newPane) return;
-    revisaoSuppressMirror = true;
-    const paneRect = newPane.getBoundingClientRect();
-    const targetRect = target.getBoundingClientRect();
-    const delta = (targetRect.top + targetRect.height / 2) - (paneRect.top + paneRect.height / 2);
-    const desiredTop = Math.max(0, newPane.scrollTop + delta);
-    newPane.scrollTo({ top: desiredTop, behavior:'smooth' });
-    oldPane.scrollTo({ top: desiredTop, behavior:'smooth' });
-    clearTimeout(scrollRevisaoTo._releaseTimer);
-    scrollRevisaoTo._releaseTimer = setTimeout(() => { revisaoSuppressMirror = false; }, 700);
-  }
-  // Terceira coluna da Revisão: lista cada linha das capturas originais e diz se
-  // já achou (bolinha verde) ou não (bolinha âmbar) um trecho correspondente na
-  // versão atualizada — pra você confirmar que nada se perdeu no caminho, ou
-  // clicar e pular direto pra onde aquilo foi organizado.
-  async function renderRevisaoCapturas(doc, newLines){
-    const pane = document.getElementById('revisaoCapturasPane');
-    if(!pane) return;
-    const inboxIds = doc.inboxIds || [];
-    if(!inboxIds.length){ pane.innerHTML = '<p class="empty-state" style="margin:0;">Nenhuma captura nessa reorganização.</p>'; return; }
-    const inbox = await dbGet(userPath('/Inbox')) || {};
-    const newLineKeys = newLines.map(captureMatchKey);
-    const rowsHtml = [];
-    inboxIds.forEach((id, capIdx) => {
-      const item = inbox[id];
-      if(!item || item.text == null) return;
-      const lines = String(item.text).replace(/\r\n?/g, '\n').split('\n').map(l => l.trim()).filter(Boolean);
-      rowsHtml.push(`<p class="capture-check-divider">Captura ${capIdx + 1}</p>`);
-      lines.forEach(line => {
-        const targetIdx = findCaptureLineMatch(captureMatchKey(line), newLineKeys);
-        const found = targetIdx !== -1;
-        rowsHtml.push(`<div class="capture-check-row ${found ? 'found' : 'missing'}"${found ? ` data-capture-target="${targetIdx}"` : ''} title="${found ? 'Clique pra ver onde foi parar na versão atualizada' : 'Não achei com certeza na versão atualizada — confira manualmente'}">
-        <span class="capture-check-dot"></span><span class="capture-check-text">${escapeHtml(line)}</span>
-      </div>`);
-      });
-    });
-    pane.innerHTML = rowsHtml.join('') || '<p class="empty-state" style="margin:0;">Nenhuma captura nessa reorganização.</p>';
-    pane.querySelectorAll('[data-capture-target]').forEach(row => {
-      row.addEventListener('click', () => {
-        const idx = row.getAttribute('data-capture-target');
-        const target = document.querySelector('#revisaoNewPane [data-line-idx="' + idx + '"]');
-        if(!target) return;
-        scrollRevisaoTo(target);
-        flashRevisaoTarget(target);
-      });
-    });
-  }
-  async function renderRevisao(){
-    const emptyEl = document.getElementById('revisaoEmptyState');
-    const wrapEl = document.getElementById('revisaoDocWrap');
-    const oldPane = document.getElementById('revisaoOldPane');
-    const newPane = document.getElementById('revisaoNewPane');
-    const doc = await dbGet(userPath('/RevisaoDocumento'));
-    const countTab = document.getElementById('revisaoCountTab');
-    if(countTab) countTab.textContent = doc ? '(1)' : '';
-    if(!doc){
-      if(emptyEl) emptyEl.style.display = '';
-      if(wrapEl) wrapEl.style.display = 'none';
+  function notasOnKeydownNavegacao(e){
+    if(notasModoEdicao || notasModoSelecao || !notasCardFocadoId) return;
+    if(!notasContainerEl || !notasContainerEl.offsetParent) return; // view Arquivo não está aberta
+    const tag = document.activeElement && document.activeElement.tagName;
+    if(tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if(notasAlgumOutroModalAberto()) return;
+    if(e.key === 'ArrowDown'){ e.preventDefault(); notasMoverSelecao(1); return; }
+    if(e.key === 'ArrowUp'){ e.preventDefault(); notasMoverSelecao(-1); return; }
+    if(e.key === 'Escape'){ e.preventDefault(); notasCardFocadoId = null; notasItemSelecionadoId = null; notasAplicarFocoNoDOM(); return; }
+    if(e.key === ' ' && notasItemSelecionadoId){
+      const nota = notasState.notas[notasCardFocadoId];
+      const item = nota && nota.itens[notasItemSelecionadoId];
+      if(item && item.tipo === 'tarefa'){ e.preventDefault(); notasUpdateItem(notasCardFocadoId, notasItemSelecionadoId, { feito: !item.feito }).then(notasRender); }
       return;
     }
-    if(emptyEl) emptyEl.style.display = 'none';
-    if(wrapEl) wrapEl.style.display = '';
-    // normaliza \r\n → \n e tira uma eventual quebra de linha sobrando no final —
-    // sem isso, uma linha final "fantasma" de um dos lados aparece como
-    // removida/adicionada mesmo o documento sendo idêntico até ali.
-    const normalizeDoc = t => String(t || '').replace(/\r\n?/g, '\n').replace(/\n+$/, '');
-    const oldLines = normalizeDoc(doc.oldText).split('\n');
-    const newLines = normalizeDoc(doc.newText).split('\n');
-    const ops = computeLineDiff(oldLines, newLines);
-    // Cada op vira uma linha nas DUAS colunas, na mesma posição — quando uma
-    // linha só existe de um lado, o outro lado ganha uma lacuna vazia, pra
-    // manter tudo alinhado igual numa comparação de versões em merge.
-    oldPane.innerHTML = ops.map(op => op.type === 'added'
-      ? DIFF_LINE_EMPTY
-      : revisaoDiffLineHtml(op.oldText, op.type === 'removed' ? ' diff-line-removed' : '')
-    ).join('');
-    // newIdx acompanha a posição de cada linha em `newLines` (0-based, na ordem
-    // original) pra dar um alvo estável de scroll/highlight pro painel de
-    // Capturas — os "buracos" das linhas removidas não contam, exatamente como
-    // o algoritmo de diff consome newLines em ordem.
-    let newIdx = 0;
-    newPane.innerHTML = ops.map(op => {
-      if(op.type === 'removed') return DIFF_LINE_EMPTY;
-      const html = revisaoDiffLineHtml(op.newText, op.type === 'added' ? ' diff-line-added' : '', newIdx);
-      newIdx++;
-      return html;
-    }).join('');
-    await renderRevisaoCapturas(doc, newLines);
   }
-  // As duas colunas rolam juntas, igual num visualizador de diff/merge — sem
-  // isso, comparar linhas alinhadas ficaria impossível ao rolar uma sozinha.
-  (function setupRevisaoScrollSync(){
-    const oldPane = document.getElementById('revisaoOldPane');
-    const newPane = document.getElementById('revisaoNewPane');
-    if(!oldPane || !newPane) return;
-    let syncing = false;
-    function mirror(from, to){
-      return () => {
-        if(syncing || revisaoSuppressMirror) return;
-        syncing = true;
-        to.scrollTop = from.scrollTop;
-        // o scroll que essa atribuição dispara no destino chega de forma
-        // assíncrona (só no próximo frame) — resetar `syncing` aqui na hora
-        // não protege contra esse eco, que voltava e cortava a rolagem suave
-        // no meio do caminho. Por isso o reset espera o próximo frame também.
-        requestAnimationFrame(() => { syncing = false; });
-      };
-    }
-    oldPane.addEventListener('scroll', mirror(oldPane, newPane));
-    newPane.addEventListener('scroll', mirror(newPane, oldPane));
-  })();
-  document.getElementById('approveRevisaoDocBtn').addEventListener('click', async () => {
-    const doc = await dbGet(userPath('/RevisaoDocumento'));
-    if(!doc) return;
-    if(!await showConfirm('Aprovar a versão atualizada? Isso substitui as Gavetas atuais pelo conteúdo reorganizado.')) return;
-    const newPane = document.getElementById('revisaoNewPane');
-    const finalText = newPane.innerText;
-    const parsedGavetas = parseDocToGavetas(finalText);
-    const existing = await dbGet(userPath('/Gavetas')) || {};
-    // Substitui as Gavetas atuais pelo que foi aprovado (a comparação lado a lado
-    // já deixou claro o que estava mudando antes desse passo).
-    await Promise.all(Object.keys(existing).map(gid => dbDelete(userPath('/Gavetas/' + gid))));
-    for(let i = 0; i < parsedGavetas.length; i++){
-      const g = parsedGavetas[i];
-      const gid = newId();
-      const items = {};
-      g.items.forEach((text, idx) => {
-        items[newId()] = { text: forceBulletText(text), order: idx, addedAt: new Date().toISOString() };
-      });
-      await dbPut(userPath('/Gavetas/' + gid), { name: g.name, order: i, collapsed:false, items });
-    }
-    const inboxIds = doc.inboxIds || [];
-    await Promise.all(inboxIds.map(id => dbDelete(userPath('/Inbox/' + id))));
-    await dbDelete(userPath('/RevisaoDocumento'));
-    await renderInbox(); await renderRevisao(); await renderStorage();
-  });
-  document.getElementById('rejectRevisaoDocBtn').addEventListener('click', async () => {
-    const doc = await dbGet(userPath('/RevisaoDocumento'));
-    if(!doc) return;
-    if(!await showConfirm('Rejeitar e manter tudo como está? As capturas voltam pra fila de Capturas.')) return;
-    const inboxIds = doc.inboxIds || [];
-    await Promise.all(inboxIds.map(id => dbPatch(userPath('/Inbox/' + id), { status:'pending' })));
-    await dbDelete(userPath('/RevisaoDocumento'));
-    await renderInbox(); await renderRevisao();
+  document.addEventListener('keydown', notasOnKeydownNavegacao);
+  document.addEventListener('click', (e) => {
+    if(!notasCardFocadoId || e.target.closest('.board-card')) return;
+    notasCardFocadoId = null; notasItemSelecionadoId = null;
+    if(notasContainerEl) notasAplicarFocoNoDOM();
   });
 
-  /* ---------- GAVETAS COMO TEXTO (edição em massa, mesmo formato da Revisão IA) ---------- */
-  document.getElementById('gavetasTextViewBtn').addEventListener('click', async () => {
-    const gavetas = await dbGet(userPath('/Gavetas')) || {};
-    const doc = serializeGavetasToDoc(gavetas);
-    const textEl = document.getElementById('gavetasTextArea');
-    textEl.innerHTML = doc.split('\n').map(l => `<div class="diff-line">${l ? escapeHtml(l) : '&nbsp;'}</div>`).join('');
-    document.getElementById('gavetasTextModal').classList.add('active');
-  });
-  document.getElementById('gavetasTextCancelBtn').addEventListener('click', () => {
-    document.getElementById('gavetasTextModal').classList.remove('active');
-  });
-  document.getElementById('gavetasTextModal').addEventListener('click', (e) => {
-    if(e.target.id === 'gavetasTextModal') document.getElementById('gavetasTextModal').classList.remove('active');
-  });
-  document.getElementById('gavetasTextSaveBtn').addEventListener('click', async () => {
-    if(!await showConfirm('Salvar essas alterações? Isso substitui as Gavetas atuais pelo conteúdo editado aqui.')) return;
-    const finalText = document.getElementById('gavetasTextArea').innerText;
-    const parsedGavetas = parseDocToGavetas(finalText);
-    const existing = await dbGet(userPath('/Gavetas')) || {};
-    await Promise.all(Object.keys(existing).map(gid => dbDelete(userPath('/Gavetas/' + gid))));
-    for(let i = 0; i < parsedGavetas.length; i++){
-      const g = parsedGavetas[i];
-      const gid = newId();
-      const items = {};
-      g.items.forEach((text, idx) => {
-        items[newId()] = { text: forceBulletText(text), order: idx, addedAt: new Date().toISOString() };
-      });
-      await dbPut(userPath('/Gavetas/' + gid), { name: g.name, order: i, collapsed:false, items });
-    }
-    document.getElementById('gavetasTextModal').classList.remove('active');
-    await renderStorage();
-  });
+  function notasFecharPops(){ document.querySelectorAll('.board-card-pop, .color-picker').forEach(el => el.remove()); }
 
-  /* ---------- STORAGE (Gavetas) ---------- */
-  document.getElementById('newGavetaOpenBtn').addEventListener('click', async () => {
-    const name = await showPrompt('newGavetaModal', 'newGavetaModalInput', 'newGavetaModalOkBtn', 'newGavetaModalCancelBtn');
-    if(!name) return;
-    const existing = await dbGet(userPath('/Gavetas')) || {};
-    const id = newId();
-    await dbPut(userPath('/Gavetas/' + id), { name, order: Object.keys(existing).length, collapsed:false, items:{} });
-    await renderStorage();
-  });
-  document.getElementById('deleteSelectedGavetasBtn').addEventListener('click', async () => {
-    const n = selectedGavetasForDelete.size;
-    if(!n) return;
-    if(!await showConfirm(`Excluir ${n} gaveta${n > 1 ? 's' : ''} selecionada${n > 1 ? 's' : ''} e todo o conteúdo delas?`)) return;
-    await Promise.all([...selectedGavetasForDelete].map(gid => dbDelete(userPath('/Gavetas/' + gid))));
-    selectedGavetasForDelete.clear();
-    await renderStorage();
-  });
-
-  /* ---------- REORGANIZAÇÃO DE GAVETAS VIA IA (modelo Pull Request) ---------- */
-  document.getElementById('runStorageAiOrganizeBtn').addEventListener('click', async () => {
-    const btn = document.getElementById('runStorageAiOrganizeBtn');
-    if(!IA_PROXY_URL){ showAppMessage('As features de IA precisam da Cloud Function publicada.', 'error'); return; }
-    btn.disabled = true; btn.textContent = '✦ Analisando...';
-    showLoading('Analisando suas Gavetas com IA...');
-    try{
-      const gavetas = await dbGet(userPath('/Gavetas')) || {};
-      if(!Object.keys(gavetas).length){ showAppMessage('Você ainda não tem gavetas para analisar.', 'info'); return; }
-      const dump = Object.entries(gavetas).map(([gid,g]) => ({
-        gavetaId: gid, nome: g.name,
-        itens: Object.entries(g.items||{}).map(([iid,it]) => ({ itemId: iid, texto: it.text }))
-      }));
-
-      const systemPrompt = `Você é um assistente que organiza as "Gavetas" (agrupamentos de notas por assunto) de um sistema pessoal chamado Life OS.
-Estrutura atual completa (JSON): ${JSON.stringify(dump)}
-
-Seja CONSERVADOR: só proponha uma ação quando houver um problema real e evidente, como: item claramente na gaveta errada, gavetas duplicadas/redundantes tratando do mesmo assunto, itens duplicados ou obsoletos, gaveta vazia, nome de gaveta confuso/genérico demais, ou texto de item com erro claro (typo, corte, informação quebrada).
-NÃO proponha uma ação só para "melhorar o estilo" ou reescrever um texto que já está compreensível — pequenas preferências de redação não justificam uma ação. Cada ação deve ter um motivo objetivo e específico.
-Se, depois de analisar com calma, tudo já estiver bem organizado, retorne "acoes": [] (array vazio) e um resumo dizendo que está tudo organizado. Um array vazio é o resultado esperado na maioria das análises — não crie ações artificiais apenas para ter o que mostrar.
-Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato exato:
-{
-  "resumo": "breve resumo geral do que está sendo proposto e por quê",
-  "acoes": [
-    {"tipo":"mover_item", "itemId":"...", "gavetaOrigemId":"...", "gavetaDestinoId":"... ou null", "gavetaDestinoNome":"nome se for gaveta nova, senão omitir", "motivo":"..."},
-    {"tipo":"mesclar_gavetas", "gavetaIds":["id1","id2"], "gavetaFinalId":"um dos ids acima, ou null para criar uma nova", "novoNome":"nome final da gaveta (obrigatório se gavetaFinalId for null)", "motivo":"..."},
-    {"tipo":"excluir_item", "gavetaId":"...", "itemId":"...", "motivo":"..."},
-    {"tipo":"excluir_gaveta", "gavetaId":"...", "motivo":"..."},
-    {"tipo":"renomear_gaveta", "gavetaId":"...", "novoNome":"...", "motivo":"..."},
-    {"tipo":"editar_item", "gavetaId":"...", "itemId":"...", "novoTexto":"...", "motivo":"..."}
-  ]
-}`;
-
-      const proposal = extractJson(await chamarIA(systemPrompt, 'Analise as Gavetas acima e proponha as ações.'));
-      const acoes = Array.isArray(proposal.acoes) ? proposal.acoes : [];
-      if(!acoes.length){ showAppMessage('A IA não encontrou mudanças relevantes a propor — sua organização já está boa.', 'success'); return; }
-
-      const revId = newId();
-      await dbPut(userPath('/StorageRevisao/' + revId), {
-        resumo: proposal.resumo || 'Reorganização proposta pela IA.',
-        acoes, status:'pending', createdAt: new Date().toISOString()
-      });
-      await renderStorageRevisao();
-    }catch(err){
-      showAppMessage('Erro ao analisar organização com IA: ' + err.message, 'error');
-    }finally{
-      hideLoading();
-      btn.disabled = false; btn.textContent = '✦ Analisar Gavetas com IA';
-    }
-  });
-
-  function describeStorageAcao(a, gavetasById){
-    const gNome = (gid) => escapeHtml((gavetasById[gid] && gavetasById[gid].name) || '(gaveta removida)');
-    const iTexto = (gid, iid) => escapeHtml((gavetasById[gid] && gavetasById[gid].items && gavetasById[gid].items[iid] && gavetasById[gid].items[iid].text) || '(item removido)');
-    switch(a.tipo){
-      case 'mover_item':
-        return `Mover "${iTexto(a.gavetaOrigemId, a.itemId)}" de <strong>${gNome(a.gavetaOrigemId)}</strong> para <strong>${a.gavetaDestinoId ? gNome(a.gavetaDestinoId) : escapeHtml(a.gavetaDestinoNome || 'nova gaveta')}</strong>`;
-      case 'mesclar_gavetas':
-        return `Mesclar <strong>${a.gavetaIds.map(gNome).join(', ')}</strong> em <strong>${a.gavetaFinalId ? gNome(a.gavetaFinalId) : escapeHtml(a.novoNome || 'nova gaveta')}</strong>`;
-      case 'excluir_item':
-        return `Excluir item duplicado/obsoleto: "${iTexto(a.gavetaId, a.itemId)}" (em ${gNome(a.gavetaId)})`;
-      case 'excluir_gaveta':
-        return `Excluir gaveta <strong>${gNome(a.gavetaId)}</strong>`;
-      case 'renomear_gaveta':
-        return `Renomear <strong>${gNome(a.gavetaId)}</strong> para <strong>${escapeHtml(a.novoNome)}</strong>`;
-      case 'editar_item':
-        return `Reescrever item em <strong>${gNome(a.gavetaId)}</strong>: "${iTexto(a.gavetaId, a.itemId)}" → "${escapeHtml(a.novoTexto)}"`;
-      default:
-        return 'Ação desconhecida';
-    }
+  function notasAbrirCategoriaPopover(anchorEl, onEscolher){
+    notasFecharPops();
+    const areas = Object.values(notasState.areas).sort((a,b) => (a.ordem||0) - (b.ordem||0));
+    const pop = document.createElement('div');
+    pop.className = 'board-card-pop';
+    pop.innerHTML =
+      '<div class="cat-item" data-cat=""><span class="dot" style="background:var(--text-dim)"></span>Sem categoria</div>' +
+      areas.map(a => '<div class="cat-item" data-cat="' + a.id + '"><span class="dot" style="background:' + a.cor + '"></span>' + escapeHtml(a.nome) + '</div>').join('');
+    document.body.appendChild(pop);
+    const rect = anchorEl.getBoundingClientRect();
+    pop.style.left = Math.min(rect.left + window.scrollX, window.innerWidth - 210) + 'px';
+    pop.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    function fechar(){ pop.remove(); document.removeEventListener('click', onDoc); }
+    function onDoc(e){ if(!pop.contains(e.target) && e.target !== anchorEl) fechar(); }
+    pop.querySelectorAll('.cat-item').forEach(el => {
+      el.addEventListener('click', () => { fechar(); onEscolher(el.getAttribute('data-cat') || null); });
+    });
+    setTimeout(() => document.addEventListener('click', onDoc), 10);
   }
 
-  async function renderStorageRevisao(){
-    const el = document.getElementById('storageRevisaoList');
-    const data = await dbGet(userPath('/StorageRevisao')) || {};
-    const gavetasById = await dbGet(userPath('/Gavetas')) || {};
-    const entries = Object.entries(data).filter(([id,r]) => r.status === 'pending');
-    if(!entries.length){ el.innerHTML = ''; return; }
-    el.innerHTML = entries.sort((a,b) => (b[1].createdAt||'').localeCompare(a[1].createdAt||'')).map(([id, r]) => `
-      <div class="pr-card" style="margin-bottom:16px;">
-        <div class="pr-head">
-          <div class="pr-head-top">
-            <p class="pr-raw">${escapeHtml(r.resumo)}</p>
-            <span class="tag tag-gold">${r.acoes.length} ${r.acoes.length===1?'mudança':'mudanças'}</span>
-          </div>
-          <p class="pr-suggested-by">reorganização proposta pela IA</p>
-        </div>
-        <div class="pr-diff">
-          ${r.acoes.map(a => `<div class="diff-row"><span class="diff-key">${escapeHtml(a.tipo)}</span><span class="diff-val new">${describeStorageAcao(a, gavetasById)}</span></div>`).join('')}
-        </div>
-        <div class="pr-foot">
-          <button class="btn btn-approve btn-sm" data-approve-storage-pr="${id}">✓ Aprovar</button>
-          <button class="btn btn-reject btn-sm" data-reject-storage-pr="${id}">Rejeitar</button>
-        </div>
-      </div>
-    `).join('');
-    el.querySelectorAll('[data-approve-storage-pr]').forEach(btn => btn.addEventListener('click', () => approveStorageRevisao(btn.getAttribute('data-approve-storage-pr'))));
-    el.querySelectorAll('[data-reject-storage-pr]').forEach(btn => btn.addEventListener('click', () => rejectStorageRevisao(btn.getAttribute('data-reject-storage-pr'))));
+  function notasAbrirMenuCard(anchorEl, nota){
+    notasFecharPops();
+    const pop = document.createElement('div');
+    pop.className = 'board-card-pop';
+    const areas = Object.values(notasState.areas).sort((a,b) => (a.ordem||0) - (b.ordem||0));
+    pop.innerHTML =
+      '<div class="cat-item" data-cat=""><span class="dot" style="background:var(--text-dim)"></span>Sem categoria</div>' +
+      areas.map(a => '<div class="cat-item" data-cat="' + a.id + '"><span class="dot" style="background:' + a.cor + '"></span>' + escapeHtml(a.nome) + '</div>').join('') +
+      '<hr>' +
+      '<button type="button" data-act="excluir" class="danger">Excluir</button>';
+    document.body.appendChild(pop);
+    const rect = anchorEl.getBoundingClientRect();
+    pop.style.left = Math.min(rect.left + window.scrollX, window.innerWidth - 210) + 'px';
+    pop.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    function fechar(){ pop.remove(); document.removeEventListener('click', onDoc); }
+    function onDoc(e){ if(!pop.contains(e.target) && e.target !== anchorEl) fechar(); }
+    pop.querySelectorAll('.cat-item').forEach(el => {
+      el.addEventListener('click', () => { fechar(); notasUpdateNota(nota.id, { areaId: el.getAttribute('data-cat') || null }).then(() => { notasRender(); notasRenderChips(); }); });
+    });
+    pop.querySelector('[data-act="excluir"]').addEventListener('click', async () => {
+      fechar();
+      const ok = await showConfirm('Excluir "' + (nota.titulo || 'sem título') + '"? Essa ação não pode ser desfeita.');
+      if(!ok) return;
+      await notasDeleteNota(nota.id);
+      notasRender();
+      notasRenderChips();
+    });
+    setTimeout(() => document.addEventListener('click', onDoc), 10);
   }
 
-  async function rejectStorageRevisao(id){
-    await dbDelete(userPath('/StorageRevisao/' + id));
-    await renderStorageRevisao();
+  function notasAbrirColorPicker(anchorEl, corAtual, onEscolher){
+    notasFecharPops();
+    const pop = document.createElement('div');
+    pop.className = 'color-picker';
+    pop.innerHTML =
+      '<div class="color-picker-grid">' +
+      NOTAS_PALETA.map(c => '<button type="button" class="color-picker-swatch' + (c.toLowerCase() === (corAtual||'').toLowerCase() ? ' on' : '') + '" data-cor="' + c + '" style="background:' + c + '" title="' + c + '"></button>').join('') +
+      '<label class="color-picker-custom" title="Cor personalizada"><input type="color" value="' + (corAtual || '#60519b') + '"></label></div>';
+    document.body.appendChild(pop);
+    const rect = anchorEl.getBoundingClientRect();
+    pop.style.left = Math.max(8, Math.min(rect.left + window.scrollX, window.innerWidth - 190)) + 'px';
+    pop.style.top = (rect.bottom + window.scrollY + 6) + 'px';
+    pop.querySelectorAll('[data-cor]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); notasFecharPops(); onEscolher(b.getAttribute('data-cor')); }));
+    const inputCor = pop.querySelector('input[type="color"]');
+    inputCor.addEventListener('input', (e) => onEscolher(e.target.value));
+    inputCor.addEventListener('click', (e) => e.stopPropagation());
+    function fechar(){ pop.remove(); document.removeEventListener('click', onDoc); }
+    function onDoc(e){ if(!pop.contains(e.target) && e.target !== anchorEl) fechar(); }
+    setTimeout(() => document.addEventListener('click', onDoc), 10);
   }
 
-  async function approveStorageRevisao(id){
-    const rev = await dbGet(userPath('/StorageRevisao/' + id));
-    if(!rev) return;
-    const btn = document.querySelector(`[data-approve-storage-pr="${id}"]`);
-    if(btn){ btn.disabled = true; btn.textContent = 'Aplicando...'; }
-    try{
-      const gavetas = await dbGet(userPath('/Gavetas')) || {};
-      let maxOrder = Object.values(gavetas).reduce((m,g) => Math.max(m, g.order||0), -1);
-      const deleted = new Set();
+  function notasWireCards(){
+    notasContainerEl.querySelectorAll('.board-card').forEach(card => {
+      const notaId = card.getAttribute('data-nota-id');
+      const nota = notasState.notas[notaId];
+      if(!nota) return;
+      if(notasModoSelecao){
+        card.addEventListener('click', (e) => { if(e.target.closest('button, a, input')) return; notasToggleSelecao(notaId); });
+      }
+      const checkSel = card.querySelector('[data-select]');
+      if(checkSel) checkSel.addEventListener('click', (e) => { e.stopPropagation(); notasToggleSelecao(notaId); });
+      const menuBtn = card.querySelector('[data-menu]');
+      if(menuBtn) menuBtn.addEventListener('click', (e) => { e.stopPropagation(); notasAbrirMenuCard(menuBtn, nota); });
+      const pinBtn = card.querySelector('[data-pin]');
+      if(pinBtn) pinBtn.addEventListener('click', (e) => { e.stopPropagation(); notasUpdateNota(notaId, { fixada: !nota.fixada }).then(notasRender); });
 
-      function ensureGaveta(gid, nome){
-        if(gid && gavetas[gid] && !deleted.has(gid)) return gid;
-        const newGid = newId();
-        maxOrder += 1;
-        gavetas[newGid] = { name: nome || 'Sem nome', order: maxOrder, collapsed:false, items:{} };
-        return newGid;
+      if(notasModoEdicao && !notasModoSelecao){
+        const tituloInput = card.querySelector('[data-titulo]');
+        tituloInput.addEventListener('click', (e) => e.stopPropagation());
+        tituloInput.addEventListener('blur', () => {
+          if(tituloInput.value !== (nota.titulo || '')) notasUpdateNota(notaId, { titulo: tituloInput.value.trim() });
+        });
+        tituloInput.addEventListener('keydown', (e) => {
+          if(e.key === 'Enter'){ e.preventDefault(); const ta = card.querySelector('[data-corpo]'); if(ta) ta.focus(); }
+        });
+        const textarea = card.querySelector('[data-corpo]');
+        textarea.addEventListener('click', (e) => e.stopPropagation());
+        notasAutoGrow(textarea);
+        textarea.addEventListener('input', () => { notasAutoGrow(textarea); notasConverterBulletAoDigitar(textarea); });
+        textarea.addEventListener('keydown', (e) => {
+          if(e.key === 'Tab'){ e.preventDefault(); notasIndentarSelecao(textarea, !e.shiftKey); }
+        });
+        textarea.addEventListener('blur', () => notasSalvarCorpo(notaId, textarea));
+      } else if(!notasModoSelecao){
+        card.querySelectorAll('[data-toggle-tarefa]').forEach(chk => {
+          chk.addEventListener('click', (e) => {
+            e.stopPropagation();
+            notasUpdateItem(notaId, chk.getAttribute('data-toggle-tarefa'), { feito: chk.checked });
+          });
+        });
+        card.querySelectorAll('.l-item').forEach(el => {
+          const itemId = el.getAttribute('data-item-id');
+          el.addEventListener('click', (e) => { if(e.target.closest('input, a')) return; e.stopPropagation(); notasFocarCard(notaId, itemId); });
+        });
       }
 
-      for(const a of (rev.acoes || [])){
-        try{
-          if(a.tipo === 'mover_item'){
-            const origem = gavetas[a.gavetaOrigemId];
-            if(!origem || !origem.items || !origem.items[a.itemId]) continue;
-            const item = origem.items[a.itemId];
-            const destId = ensureGaveta(a.gavetaDestinoId, a.gavetaDestinoNome);
-            if(!gavetas[destId].items) gavetas[destId].items = {};
-            gavetas[destId].items[a.itemId] = item;
-            if(destId !== a.gavetaOrigemId) delete origem.items[a.itemId];
-          } else if(a.tipo === 'mesclar_gavetas'){
-            const finalId = ensureGaveta(a.gavetaFinalId, a.novoNome);
-            if(!gavetas[finalId].items) gavetas[finalId].items = {};
-            (a.gavetaIds || []).forEach(gid => {
-              if(gid === finalId || !gavetas[gid]) return;
-              Object.entries(gavetas[gid].items || {}).forEach(([iid, it]) => {
-                const key = gavetas[finalId].items[iid] ? newId() : iid;
-                gavetas[finalId].items[key] = it;
-              });
-              deleted.add(gid);
-            });
-          } else if(a.tipo === 'excluir_item'){
-            if(gavetas[a.gavetaId] && gavetas[a.gavetaId].items){ delete gavetas[a.gavetaId].items[a.itemId]; }
-          } else if(a.tipo === 'excluir_gaveta'){
-            if(gavetas[a.gavetaId]) deleted.add(a.gavetaId);
-          } else if(a.tipo === 'renomear_gaveta'){
-            if(gavetas[a.gavetaId]) gavetas[a.gavetaId].name = a.novoNome;
-          } else if(a.tipo === 'editar_item'){
-            if(gavetas[a.gavetaId] && gavetas[a.gavetaId].items && gavetas[a.gavetaId].items[a.itemId]){
-              gavetas[a.gavetaId].items[a.itemId].text = forceBulletText(a.novoTexto);
-            }
-          }
-        }catch(actionErr){ console.warn('Falha ao aplicar ação de reorganização:', a, actionErr); }
+      if(!notasModoSelecao){
+        card.addEventListener('dragstart', (e) => {
+          if(e.target.closest('input, textarea')){ e.preventDefault(); return; }
+          card.classList.add('arrastando');
+          e.dataTransfer.setData('text/nota-id', notaId);
+          e.dataTransfer.effectAllowed = 'move';
+        });
+        card.addEventListener('dragend', () => card.classList.remove('arrastando'));
+        card.addEventListener('dragover', (e) => { e.preventDefault(); card.classList.add('alvo-drop'); });
+        card.addEventListener('dragleave', () => card.classList.remove('alvo-drop'));
+        card.addEventListener('drop', async (e) => {
+          e.preventDefault();
+          card.classList.remove('alvo-drop');
+          const idArrastado = e.dataTransfer.getData('text/nota-id');
+          if(!idArrastado || idArrastado === notaId) return;
+          await notasReordenarNota(idArrastado, notaId);
+          notasRender();
+        });
       }
-
-      // Grava o estado final: gavetas alteradas/criadas em uma única escrita, e remove as excluídas.
-      const finalWrite = {};
-      Object.entries(gavetas).forEach(([gid, g]) => { if(!deleted.has(gid)) finalWrite[gid] = g; });
-      await dbPut(userPath('/Gavetas'), finalWrite);
-      await dbDelete(userPath('/StorageRevisao/' + id));
-      await renderStorage();
-      await renderStorageRevisao();
-    }catch(err){
-      showAppMessage('Erro ao aplicar a reorganização: ' + err.message, 'error');
-      if(btn){ btn.disabled = false; btn.textContent = '✓ Aprovar'; }
+    });
+    if(!notasModoSelecao){
+      notasContainerEl.querySelectorAll('.board-grid-col, #notasBoardGrid').forEach(zona => {
+        zona.addEventListener('dragover', (e) => { if(e.target === zona) e.preventDefault(); });
+        zona.addEventListener('drop', async (e) => {
+          if(e.target !== zona) return;
+          const idArrastado = e.dataTransfer.getData('text/nota-id');
+          if(!idArrastado) return;
+          await notasReordenarNota(idArrastado, null);
+          notasRender();
+        });
+      });
     }
   }
 
-  const editingGavetas = new Set();
-  // Seleção de gavetas pra exclusão em massa — mantida à parte do render pra
-  // sobreviver a um re-render que não mexeu nessas gavetas (ex: reordenar).
-  const selectedGavetasForDelete = new Set();
-  function updateDeleteSelectedGavetasBtn(){
-    const btn = document.getElementById('deleteSelectedGavetasBtn');
-    if(!btn) return;
-    const n = selectedGavetasForDelete.size;
-    btn.style.display = n ? '' : 'none';
-    btn.textContent = 'Excluir selecionadas (' + n + ')';
-  }
-  async function renderStorage(){
-    const el = document.getElementById('gavetaList');
-    const data = await dbGet(userPath('/Gavetas')) || {};
-    const gavetas = Object.entries(data).sort((a,b) => (a[1].order||0) - (b[1].order||0));
-    // Tira da seleção qualquer gaveta que não existe mais.
-    [...selectedGavetasForDelete].forEach(gid => { if(!data[gid]) selectedGavetasForDelete.delete(gid); });
-    updateDeleteSelectedGavetasBtn();
-    if(!gavetas.length){ el.innerHTML = '<p class="empty-state">Nenhuma gaveta ainda. Crie uma acima, ou aprove itens na Revisão IA.</p>'; return; }
-    el.innerHTML = gavetas.map(([id, g], idx) => {
-      const items = Object.entries(g.items || {}).sort((a,b) => (a[1].order||0) - (b[1].order||0));
-      const isEditing = editingGavetas.has(id);
-      const isMulti = items.length > 1;
-      const joinedText = items.map(([,it]) => (isMulti ? ensureBulletLine(it.text) : it.text)).join('\n');
-      return `
-      <div class="gaveta-card ${g.collapsed && !isEditing ? 'collapsed' : ''}" data-gid="${id}">
-        <div class="gaveta-head" data-toggle-collapse="${id}">
-          ${isEditing ? '' : `<input type="checkbox" class="gaveta-select-checkbox" data-gid-select="${id}" ${selectedGavetasForDelete.has(id) ? 'checked' : ''} onclick="event.stopPropagation()" title="Selecionar pra excluir em massa">`}
-          <span class="gaveta-chevron">▾</span>
-          ${isEditing
-            ? `<input type="text" class="gaveta-name-edit" data-gid-name-edit="${id}" value="${escapeHtml(g.name)}" onclick="event.stopPropagation()">`
-            : `<span class="gaveta-name">${escapeHtml(g.name)}</span>`}
-          <span class="gaveta-count">${items.length} ${items.length===1 ? 'item' : 'itens'}</span>
-          <div class="gaveta-actions">
-            ${isEditing ? '' : `<button data-move-up="${id}" ${idx===0?'disabled':''}>↑</button>
-            <button data-move-down="${id}" ${idx===gavetas.length-1?'disabled':''}>↓</button>
-            <button data-edit-gaveta="${id}">editar</button>
-            <button data-del-gaveta="${id}">excluir</button>`}
-          </div>
-        </div>
-        <div class="gaveta-body">
-          ${isEditing ? `
-            <textarea class="gaveta-edit-textarea" data-gid-edit="${id}" placeholder="Um item por linha...">${escapeHtml(joinedText)}</textarea>
-            <div class="gaveta-edit-actions">
-              <button class="btn btn-ghost btn-sm" data-cancel-edit-gaveta="${id}">Cancelar</button>
-              <button class="btn btn-primary btn-sm" data-save-gaveta="${id}">Salvar</button>
-            </div>
-          ` : (items.length ? `<div class="gaveta-item-text" style="white-space:pre-wrap;">${escapeHtml(joinedText)}</div>` : '<p class="gaveta-empty">Vazia.</p>')}
-        </div>
-      </div>`;
+  function notasRenderChips(){
+    const el = document.getElementById('notasAreaChips');
+    if(!el) return;
+    const areas = Object.values(notasState.areas).sort((a,b) => (a.ordem||0) - (b.ordem||0));
+    const total = Object.keys(notasState.notas).length;
+    const semCategoria = Object.values(notasState.notas).filter(n => !n.areaId).length;
+    let html = '<button type="button" class="notas-chip' + (notasFiltroAreaIds.size === 0 ? ' active' : '') + '" data-area-id="">' +
+      '<span class="notas-chip-dot" style="background:var(--text-dim)"></span>Tudo <span class="notas-chip-count">' + total + '</span></button>';
+    html += areas.map(a => {
+      const count = notasNaArea(a.id).length;
+      return '<button type="button" class="notas-chip' + (notasFiltroAreaIds.has(a.id) ? ' active' : '') + '" data-area-id="' + a.id + '" title="Shift+clique combina com outra categoria">' +
+        '<span class="notas-chip-dot" style="background:' + a.cor + '"></span>' + escapeHtml(a.nome) + ' <span class="notas-chip-count">' + count + '</span></button>';
     }).join('');
-
-    el.querySelectorAll('[data-toggle-collapse]').forEach(headEl => {
-      headEl.addEventListener('click', (e) => {
-        if(e.target.closest('.gaveta-actions') || e.target.closest('.gaveta-select-checkbox')) return;
-        const gid = headEl.getAttribute('data-toggle-collapse');
-        if(editingGavetas.has(gid)) return;
-        const g = data[gid];
-        const newCollapsed = !g.collapsed;
-        g.collapsed = newCollapsed;
-        const card = headEl.closest('.gaveta-card');
-        if(card) card.classList.toggle('collapsed', newCollapsed);
-        dbPatchSilent(userPath('/Gavetas/' + gid), { collapsed: newCollapsed })
-          .catch(err => console.error('Erro ao salvar estado da gaveta', err));
+    if(semCategoria){
+      html += '<button type="button" class="notas-chip' + (notasFiltroAreaIds.has('__sem__') ? ' active' : '') + '" data-area-id="__sem__">' +
+        '<span class="notas-chip-dot" style="background:var(--text-dim);opacity:.4"></span>Sem categoria <span class="notas-chip-count">' + semCategoria + '</span></button>';
+    }
+    el.innerHTML = html;
+    el.querySelectorAll('[data-area-id]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        notasAplicarFiltroArea(btn.getAttribute('data-area-id'), e.shiftKey);
+        notasRenderChips();
+        notasRender();
       });
     });
-    el.querySelectorAll('[data-gid-select]').forEach(cb => cb.addEventListener('change', () => {
-      const gid = cb.getAttribute('data-gid-select');
-      if(cb.checked) selectedGavetasForDelete.add(gid); else selectedGavetasForDelete.delete(gid);
-      updateDeleteSelectedGavetasBtn();
-    }));
-    el.querySelectorAll('[data-move-up]').forEach(btn => btn.addEventListener('click', () => swapGavetaOrder(gavetas, btn.getAttribute('data-move-up'), -1)));
-    el.querySelectorAll('[data-move-down]').forEach(btn => btn.addEventListener('click', () => swapGavetaOrder(gavetas, btn.getAttribute('data-move-down'), 1)));
-    el.querySelectorAll('[data-del-gaveta]').forEach(btn => btn.addEventListener('click', async () => {
-      if(!await showConfirm('Excluir esta gaveta e todo o seu conteúdo?')) return;
-      await dbDelete(userPath('/Gavetas/' + btn.getAttribute('data-del-gaveta')));
-      await renderStorage();
-    }));
-    el.querySelectorAll('[data-edit-gaveta]').forEach(btn => btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      editingGavetas.add(btn.getAttribute('data-edit-gaveta'));
-      await renderStorage();
-      const gid = btn.getAttribute('data-edit-gaveta');
-      const ta = el.querySelector(`[data-gid-edit="${gid}"]`);
-      if(ta){ ta.focus(); ta.selectionStart = ta.value.length; }
-    }));
-    el.querySelectorAll('[data-cancel-edit-gaveta]').forEach(btn => btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      editingGavetas.delete(btn.getAttribute('data-cancel-edit-gaveta'));
-      await renderStorage();
-    }));
-    el.querySelectorAll('[data-save-gaveta]').forEach(btn => btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const gid = btn.getAttribute('data-save-gaveta');
-      const ta = el.querySelector(`[data-gid-edit="${gid}"]`);
-      const nameInput = el.querySelector(`[data-gid-name-edit="${gid}"]`);
-      const rawLines = ta.value.split('\n').map(l => l.trim()).filter(Boolean);
-      const lines = rawLines.length > 1 ? rawLines.map(ensureBulletLine) : rawLines.map(l => normalizeBullets(l));
-      const newItems = {};
-      lines.forEach((text, i) => { newItems['it' + i] = { text, order: i, addedAt: new Date().toISOString() }; });
-      const newName = nameInput ? nameInput.value.trim() : '';
-      await dbPut(userPath('/Gavetas/' + gid + '/items'), newItems);
-      if(newName){ await dbPatch(userPath('/Gavetas/' + gid), { name: newName }); }
-      editingGavetas.delete(gid);
-      await renderStorage();
-    }));
   }
-  async function swapGavetaOrder(gavetas, gid, dir){
-    const idx = gavetas.findIndex(([id]) => id === gid);
-    const swapIdx = idx + dir;
-    if(swapIdx < 0 || swapIdx >= gavetas.length) return;
-    const [idA, gA] = gavetas[idx];
-    const [idB, gB] = gavetas[swapIdx];
-    await dbPatch(userPath('/Gavetas/' + idA), { order: gB.order });
-    await dbPatch(userPath('/Gavetas/' + idB), { order: gA.order });
-    await renderStorage();
+
+  function notasTituloFiltro(){
+    if(notasIsolando) return 'Selecionadas';
+    if(!notasFiltroAreaIds.size) return 'Todas as notas';
+    const nomes = Array.from(notasFiltroAreaIds).map(id => id === '__sem__' ? 'Sem categoria' : (notasState.areas[id] && notasState.areas[id].nome)).filter(Boolean);
+    return nomes.length ? nomes.join(' + ') : 'Todas as notas';
   }
-  async function setAllGavetasCollapsed(collapsed){
-    await withoutLoading(async () => {
-      const data = await dbGet(userPath('/Gavetas')) || {};
-      await Promise.all(Object.keys(data).map(id => dbPatchSilent(userPath('/Gavetas/' + id), { collapsed })));
-      await renderStorage();
+  function notasSelecaoBarHtml(){
+    return '<div class="board-selecao-bar">' + notasSelecionados.size + (notasSelecionados.size === 1 ? ' selecionada' : ' selecionadas') +
+      (notasIsolando ? ' <button type="button" data-act="mostrar-tudo">Mostrar tudo</button>' : ' <button type="button" data-act="isolar">Isolar</button>') +
+      ' <button type="button" data-act="mudar-categoria">Mudar categoria</button>' +
+      ' <button type="button" data-act="excluir-selecao">Excluir</button>' +
+      ' <button type="button" data-act="cancelar-selecao">Cancelar</button></div>';
+  }
+  function notasWireHead(){
+    const isolarBtn = notasContainerEl.querySelector('[data-act="isolar"]');
+    if(isolarBtn) isolarBtn.addEventListener('click', () => { notasIsolando = true; notasRender(); });
+    const mostrarBtn = notasContainerEl.querySelector('[data-act="mostrar-tudo"]');
+    if(mostrarBtn) mostrarBtn.addEventListener('click', () => { notasIsolando = false; notasRender(); });
+    const cancelarBtn = notasContainerEl.querySelector('[data-act="cancelar-selecao"]');
+    if(cancelarBtn) cancelarBtn.addEventListener('click', () => { notasSelecionados.clear(); notasIsolando = false; notasModoSelecao = false; notasRender(); });
+    const mudarCatBtn = notasContainerEl.querySelector('[data-act="mudar-categoria"]');
+    if(mudarCatBtn) mudarCatBtn.addEventListener('click', () => {
+      notasAbrirCategoriaPopover(mudarCatBtn, async (areaId) => {
+        await Promise.all(Array.from(notasSelecionados).map(id => notasUpdateNota(id, { areaId })));
+        notasRender(); notasRenderChips();
+      });
+    });
+    const excluirBtn = notasContainerEl.querySelector('[data-act="excluir-selecao"]');
+    if(excluirBtn) excluirBtn.addEventListener('click', async () => {
+      const n = notasSelecionados.size;
+      if(!await showConfirm(`Excluir ${n} nota${n > 1 ? 's' : ''} selecionada${n > 1 ? 's' : ''}? Essa ação não pode ser desfeita.`)) return;
+      await Promise.all(Array.from(notasSelecionados).map(id => notasDeleteNota(id)));
+      notasSelecionados.clear();
+      notasRender(); notasRenderChips();
     });
   }
-  document.getElementById('expandAllGavetasBtn').addEventListener('click', () => setAllGavetasCollapsed(false));
-  document.getElementById('collapseAllGavetasBtn').addEventListener('click', () => setAllGavetasCollapsed(true));
+  async function notasSalvarFocoAtivo(){
+    const ativo = document.activeElement;
+    if(!ativo) return;
+    if(ativo.classList && ativo.classList.contains('board-card-textarea')){
+      const card = ativo.closest('[data-nota-id]');
+      if(card) await notasSalvarCorpo(card.getAttribute('data-nota-id'), ativo);
+    } else if(ativo.classList && ativo.classList.contains('board-card-titulo-input')){
+      ativo.blur();
+    }
+  }
+  async function notasAlternarModo(querEdicao){
+    const alvo = querEdicao === undefined ? !notasModoEdicao : querEdicao;
+    if(alvo === notasModoEdicao) return;
+    if(notasModoEdicao) await notasSalvarFocoAtivo();
+    notasModoEdicao = alvo;
+    localStorage.setItem(NOTAS_MODO_KEY, notasModoEdicao ? 'edicao' : 'visualizacao');
+    document.getElementById('notasModoVerBtn').classList.toggle('on', !notasModoEdicao);
+    document.getElementById('notasModoEditarBtn').classList.toggle('on', notasModoEdicao);
+    notasRender();
+  }
+  async function notasAlternarSelecao(){
+    if(!notasModoSelecao) await notasSalvarFocoAtivo();
+    notasModoSelecao = !notasModoSelecao;
+    document.getElementById('notasSelecionarBtn').classList.toggle('btn-primary', notasModoSelecao);
+    if(!notasModoSelecao){ notasSelecionados.clear(); notasIsolando = false; }
+    notasRender();
+  }
+  async function notasNovaNota(){
+    await notasSalvarFocoAtivo();
+    const idsFiltro = Array.from(notasFiltroAreaIds);
+    const areaId = idsFiltro.length === 1 && idsFiltro[0] !== '__sem__' ? idsFiltro[0] : null;
+    const nota = await notasCreateNota(areaId, '');
+    notasModoEdicao = true;
+    localStorage.setItem(NOTAS_MODO_KEY, 'edicao');
+    document.getElementById('notasModoVerBtn').classList.remove('on');
+    document.getElementById('notasModoEditarBtn').classList.add('on');
+    notasModoSelecao = false;
+    notasFocarId = nota.id;
+    notasRender();
+  }
+
+  function notasRender(){
+    if(!notasContainerEl) return;
+    if(!notasState.loaded){ notasContainerEl.innerHTML = '<p class="empty-state">Carregando...</p>'; return; }
+    notasFecharPops();
+    const notas = notasFiltradas();
+    const semNadaAinda = Object.keys(notasState.notas).length === 0;
+    let html = '<div class="board-head"><h1 class="board-title">' + escapeHtml(notasTituloFiltro()) +
+      '<span class="board-count">' + notas.length + (notas.length === 1 ? ' nota' : ' notas') + '</span></h1></div>' +
+      (notasSelecionados.size ? notasSelecaoBarHtml() : '');
+    if(semNadaAinda){
+      html += '<div class="empty-state board-empty" style="text-align:left;max-width:52ch;padding-top:24px;"><strong>Nenhuma nota ainda.</strong><br><br>Jogue qualquer coisa na barra de captura lá embaixo, ou comece uma nota em branco em "+ Nova nota".</div>';
+    } else if(!notas.length){
+      html += '<div class="empty-state board-empty" style="text-align:left;">Nenhuma nota aqui ainda.</div>';
+    } else {
+      const nColunas = window.innerWidth <= 700 ? 1 : notasMaxColunas;
+      const colunas = notasDistribuirEmColunas(notas, nColunas);
+      html += '<div class="board-grid" id="notasBoardGrid">' +
+        colunas.map(col => '<div class="board-grid-col">' + col.map(n => notasCardHtml(n)).join('') + '</div>').join('') +
+        '</div>';
+    }
+    notasContainerEl.innerHTML = html;
+    notasWireHead();
+    notasWireCards();
+    if(notasFocarId){
+      const el = notasContainerEl.querySelector('[data-nota-id="' + notasFocarId + '"]');
+      if(el){
+        el.scrollIntoView({ block:'center' });
+        const alvo = el.querySelector('[data-titulo]') || el.querySelector('[data-corpo]');
+        if(alvo) setTimeout(() => alvo.focus(), 30);
+      }
+      notasFocarId = null;
+    }
+    notasAtualizarBadges();
+  }
+
+  function notasAtualizarBadges(){
+    const total = Object.keys(notasState.notas).length;
+    const badge = document.getElementById('navInboxBadge');
+    if(badge) badge.textContent = String(total);
+    const mobileBadge = document.getElementById('mobileInboxBadge');
+    if(mobileBadge) mobileBadge.textContent = total ? String(total) : '';
+  }
+
+  async function renderArquivoNotas(){
+    if(!document.getElementById('notasBoard')) return;
+    await notasCarregarEstado();
+    notasContainerEl = document.getElementById('notasBoard');
+    notasRenderChips();
+    notasRender();
+    notasAtualizarBadges();
+  }
+
+  /* ---------- Modal "Categorias" ---------- */
+  function notasRenderCategoriasModal(){
+    const list = document.getElementById('notasCategoriasList');
+    const areas = Object.values(notasState.areas).sort((a,b) => (a.ordem||0) - (b.ordem||0));
+    if(!areas.length){
+      list.innerHTML = '<p class="catcfg-vazio">Nenhuma categoria ainda — crie a primeira abaixo.</p>';
+      return;
+    }
+    list.innerHTML = areas.map(a => {
+      const notasDaArea = notasNaArea(a.id);
+      return '<div class="catcfg-row" data-area-row="' + a.id + '">' +
+        '<button type="button" class="catcfg-swatch" data-abrir-cor="' + a.id + '" style="background:' + a.cor + '" title="Mudar cor"></button>' +
+        '<input class="catcfg-nome" data-nome-area="' + a.id + '" value="' + escapeHtml(a.nome) + '">' +
+        '<span class="catcfg-count">' + notasDaArea.length + (notasDaArea.length === 1 ? ' nota' : ' notas') + '</span>' +
+        '<button type="button" class="catcfg-del" data-excluir-area="' + a.id + '" title="Excluir">🗑</button>' +
+        '</div>';
+    }).join('');
+    list.querySelectorAll('[data-nome-area]').forEach(inp => {
+      inp.addEventListener('blur', async () => {
+        const id = inp.getAttribute('data-nome-area');
+        const nome = inp.value.trim();
+        if(!nome){ inp.value = notasState.areas[id].nome; return; }
+        if(nome === notasState.areas[id].nome) return;
+        await notasUpdateArea(id, { nome });
+        notasRenderChips(); if(notasContainerEl) notasRender();
+      });
+      inp.addEventListener('keydown', (e) => { if(e.key === 'Enter') inp.blur(); });
+    });
+    list.querySelectorAll('[data-abrir-cor]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-abrir-cor');
+        notasAbrirColorPicker(btn, notasState.areas[id].cor, async (cor) => {
+          btn.style.background = cor;
+          await notasUpdateArea(id, { cor });
+          notasRenderChips(); if(notasContainerEl) notasRender();
+        });
+      });
+    });
+    list.querySelectorAll('[data-excluir-area]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-excluir-area');
+        const area = notasState.areas[id];
+        const presas = notasNaArea(id);
+        if(presas.length){
+          if(!await showConfirm(`${presas.length} nota(s) usa(m) "${area.nome}" — excluir mesmo assim? Elas ficam sem categoria.`)) return;
+          await Promise.all(presas.map(n => notasUpdateNota(n.id, { areaId:null })));
+        } else if(!await showConfirm('Excluir "' + area.nome + '"?')){
+          return;
+        }
+        await notasDeleteArea(id);
+        notasRenderCategoriasModal(); notasRenderChips(); if(notasContainerEl) notasRender();
+      });
+    });
+  }
+  document.getElementById('notasCategoriasBtn').addEventListener('click', async () => {
+    if(!notasState.loaded) await notasCarregarEstado();
+    notasRenderCategoriasModal();
+    document.getElementById('notasCategoriasModal').classList.add('active');
+  });
+  document.getElementById('notasCategoriasFecharBtn').addEventListener('click', () => {
+    document.getElementById('notasCategoriasModal').classList.remove('active');
+  });
+  document.getElementById('notasCategoriasModal').addEventListener('click', (e) => {
+    if(e.target.id === 'notasCategoriasModal') document.getElementById('notasCategoriasModal').classList.remove('active');
+  });
+  document.getElementById('notasCategoriasAddBtn').addEventListener('click', async () => {
+    const nova = await notasCreateArea('Nova categoria');
+    notasRenderChips();
+    notasRenderCategoriasModal();
+    const inp = document.getElementById('notasCategoriasList').querySelector('[data-nome-area="' + nova.id + '"]');
+    if(inp){ inp.focus(); inp.select(); }
+  });
+
+  /* ---------- Toolbar da view (Ver/Editar, Selecionar, Nova nota) ---------- */
+  document.getElementById('notasModoVerBtn').addEventListener('click', () => notasAlternarModo(false));
+  document.getElementById('notasModoEditarBtn').addEventListener('click', () => notasAlternarModo(true));
+  document.getElementById('notasSelecionarBtn').addEventListener('click', () => notasAlternarSelecao());
+  document.getElementById('notasNovaBtn').addEventListener('click', () => notasNovaNota());
+
+  /* ---------- Barra de captura (sem IA por enquanto: cria direto, ou divide por parágrafo) ---------- */
+  const notasCapturaInput = document.getElementById('notasCapturaInput');
+  notasCapturaInput.addEventListener('input', () => notasAutoGrow(notasCapturaInput));
+  notasCapturaInput.addEventListener('keydown', (e) => {
+    if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); document.getElementById('notasCapturaOkBtn').click(); }
+  });
+  document.getElementById('notasCapturaOkBtn').addEventListener('click', async () => {
+    const texto = notasCapturaInput.value.trim();
+    if(!texto) return;
+    if(!notasState.loaded) await notasCarregarEstado();
+    const idsFiltro = Array.from(notasFiltroAreaIds);
+    const areaId = idsFiltro.length === 1 && idsFiltro[0] !== '__sem__' ? idsFiltro[0] : null;
+    await notasCreateNotaComTexto(areaId, texto);
+    notasCapturaInput.value = '';
+    notasAutoGrow(notasCapturaInput);
+    notasRenderChips();
+    if(notasContainerEl) notasRender();
+    showAppMessage('Nota criada.', 'success');
+  });
+  document.getElementById('notasCapturaDividirBtn').addEventListener('click', async () => {
+    const texto = notasCapturaInput.value.trim();
+    if(!texto) return;
+    if(!notasState.loaded) await notasCarregarEstado();
+    const blocos = notasSplitEmBlocos(texto);
+    if(!blocos.length) return;
+    const idsFiltro = Array.from(notasFiltroAreaIds);
+    const areaId = idsFiltro.length === 1 && idsFiltro[0] !== '__sem__' ? idsFiltro[0] : null;
+    for(const bloco of blocos){ await notasCreateNotaComTexto(areaId, bloco); }
+    notasCapturaInput.value = '';
+    notasAutoGrow(notasCapturaInput);
+    notasRenderChips();
+    if(notasContainerEl) notasRender();
+    showAppMessage(blocos.length + (blocos.length === 1 ? ' nota criada.' : ' notas criadas.'), 'success');
+  });
+
 
   /* ---------- DIÁRIO (registro pessoal, sem interferência da IA no conteúdo) ---------- */
   function formatDiarioDate(iso){
@@ -6726,11 +6612,7 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
       [renderHojeTimeline,       'a linha do tempo de hoje',    'hojeTimeline24hTrack'],
       [renderFluenciaToday,      'o Fluência de hoje',          []]
     ],
-    storage: [
-      [renderRevisao,        'a Revisão',             'revisaoEmptyState'],
-      [renderStorage,        'as Gavetas',            'gavetaList'],
-      [renderStorageRevisao, 'a Revisão de Gavetas',  'storageRevisaoList']
-    ],
+    storage: [[renderArquivoNotas, 'o Arquivo', 'notasBoard']],
     tarefas: [
       [renderTasks,      'as Tarefas',            []],
       [renderTaskGroups, 'os grupos de tarefas',  'taskGroupsList']
@@ -6792,10 +6674,10 @@ Responda APENAS com um objeto JSON, sem markdown, sem texto extra, no formato ex
       try{ await fn(); }
       catch(err){ console.error('Falha no boot ao carregar ' + rotulo + ':', err); }
     }
-    // renderInbox fica no boot mesmo pertencendo ao Arquivo: é ele que preenche
-    // o badge de contagem na sidebar, visível de qualquer tela.
+    // Carrega as Notas no boot mesmo sem abrir o Arquivo: é o que preenche o
+    // badge de contagem na sidebar, visível de qualquer tela.
     await Promise.allSettled([
-      guardRender(renderInbox, 'a Inbox', 'inboxList'),
+      guardRender(async () => { await notasCarregarEstado(); notasAtualizarBadges(); }, 'o Arquivo', []),
       renderView('hoje')
     ]);
     // Trava de segurança: garante que o overlay global de loading nunca fique

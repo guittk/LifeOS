@@ -293,39 +293,12 @@
   </div>
 </div>
 
-<!-- MODAL — NOVA GAVETA -->
-<div class="confirm-modal" id="newGavetaModal">
-  <div class="confirm-modal-panel">
-    <p class="confirm-modal-text" style="margin-bottom:12px;">Nome da nova gaveta</p>
-    <input type="text" id="newGavetaModalInput" class="modal-text-input" placeholder="ex: Game Studio, Apartamento..." autocomplete="off">
-    <div class="confirm-modal-actions">
-      <button class="btn btn-ghost btn-sm" id="newGavetaModalCancelBtn">Cancelar</button>
-      <button class="btn btn-primary btn-sm" id="newGavetaModalOkBtn">Criar gaveta</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL — GAVETAS COMO TEXTO -->
-<div class="confirm-modal" id="gavetasTextModal">
-  <div class="confirm-modal-panel confirm-modal-panel-wide">
-    <p class="confirm-modal-text" style="margin-bottom:12px;">Todas as suas Gavetas num documento só — edite direto aqui e salve.</p>
-    <div class="revisao-diff-pane revisao-diff-pane-editable" id="gavetasTextArea" style="height:58vh; margin-bottom:16px;" contenteditable="true" spellcheck="false"></div>
-    <div class="confirm-modal-actions">
-      <button class="btn btn-ghost btn-sm" id="gavetasTextCancelBtn">Cancelar</button>
-      <button class="btn btn-primary btn-sm" id="gavetasTextSaveBtn">Salvar alterações</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL — NOVA CAPTURA -->
-<div class="confirm-modal" id="newCaptureModal">
-  <div class="confirm-modal-panel">
-    <p class="confirm-modal-text" style="margin-bottom:12px;">Nova captura</p>
-    <textarea id="newCaptureModalInput" class="modal-text-input" rows="4" placeholder="Digite, cole um link, ou uma ideia qualquer..." style="resize:vertical;"></textarea>
-    <div class="confirm-modal-actions">
-      <button class="btn btn-ghost btn-sm" id="newCaptureModalCancelBtn">Cancelar</button>
-      <button class="btn btn-primary btn-sm" id="newCaptureModalOkBtn">Capturar</button>
-    </div>
+<!-- MODAL — CATEGORIAS DO ARQUIVO (mural de notas) -->
+<div class="confirm-modal" id="notasCategoriasModal">
+  <div class="confirm-modal-panel" style="max-width:460px;">
+    <div class="catcfg-head"><h3>Categorias</h3><button class="btn btn-ghost btn-sm" id="notasCategoriasFecharBtn">Fechar</button></div>
+    <div class="catcfg-list" id="notasCategoriasList"></div>
+    <button type="button" class="catcfg-add-btn" id="notasCategoriasAddBtn">+ Nova categoria</button>
   </div>
 </div>
 
@@ -777,71 +750,29 @@
       <div>
         <p class="eyebrow">Organizar</p>
         <h1 class="view-title">Arquivo</h1>
-        <p class="view-desc">Capture qualquer coisa, sem categorizar, e organize suas Gavetas — agrupamentos de informação por assunto. Toda organização automática passa por aprovação, como um Pull Request.</p>
+        <p class="view-desc">Um mural de notas: jogue qualquer coisa na captura lá embaixo, organize em categorias, arraste pra reordenar.</p>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <div class="board-toggle" id="notasModoToggle">
+          <button type="button" id="notasModoVerBtn" class="on">Ver</button>
+          <button type="button" id="notasModoEditarBtn">Editar</button>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="notasSelecionarBtn">Selecionar</button>
+        <button class="btn btn-ghost btn-sm" id="notasCategoriasBtn">🗂️ Categorias</button>
+        <button class="btn btn-primary btn-sm" id="notasNovaBtn">+ Nova nota</button>
       </div>
     </div>
 
-    <div class="subtabs">
-      <button class="subtab active" data-sub="storage" data-target="storage-gavetas">Gavetas</button>
-      <button class="subtab" data-sub="storage" data-target="storage-captura">Capturas <span id="inboxCountTab"></span></button>
-      <button class="subtab" data-sub="storage" data-target="storage-revisao">Revisão IA <span id="revisaoCountTab"></span></button>
-    </div>
+    <div class="notas-chips" id="notasAreaChips"></div>
 
-    <!-- Gavetas -->
-    <div class="subview active" id="storage-gavetas">
-      <div class="subview-toolbar" style="justify-content:flex-end;">
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="btn btn-reject btn-sm" id="deleteSelectedGavetasBtn" style="display:none;">Excluir selecionadas</button>
-          <button class="btn btn-ghost btn-sm" id="newGavetaOpenBtn">+ Nova gaveta</button>
-          <button class="btn btn-ghost btn-sm" id="expandAllGavetasBtn">Maximizar todos</button>
-          <button class="btn btn-ghost btn-sm" id="collapseAllGavetasBtn">Minimizar todos</button>
-          <button class="btn btn-ghost btn-sm" id="gavetasTextViewBtn">📄 Ver como texto</button>
-          <button class="btn btn-approve btn-sm" id="runStorageAiOrganizeBtn">✦ Analisar Gavetas com IA</button>
-        </div>
-      </div>
-      <div id="storageRevisaoList"></div>
-      <div id="gavetaList">
-        <p class="empty-state">Carregando...</p>
-      </div>
-    </div>
+    <div id="notasBoard"><p class="empty-state">Carregando...</p></div>
 
-    <!-- Capturas -->
-    <div class="subview" id="storage-captura">
-      <div class="subview-toolbar" style="justify-content:flex-end;">
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="btn btn-ghost btn-sm" id="newCaptureOpenBtn">+ Nova captura</button>
-          <button class="btn btn-approve btn-sm" id="runAiOrganizeBtn" style="display:none;">✦ Organizar Capturas com IA</button>
-        </div>
-      </div>
-      <div class="inbox-list" id="inboxList">
-        <p class="empty-state">Carregando...</p>
-      </div>
-    </div>
-
-    <!-- Revisão IA -->
-    <div class="subview" id="storage-revisao">
-      <div id="revisaoEmptyState">
-        <p class="empty-state">Nenhuma reorganização pendente. Vá em Capturas e clique em "Organizar Capturas com IA".</p>
-      </div>
-      <div id="revisaoDocWrap" style="display:none;">
-        <div class="revisao-diff-grid">
-          <div class="revisao-diff-col">
-            <p class="revisao-diff-label">Versão atual</p>
-            <div class="revisao-diff-pane" id="revisaoOldPane"></div>
-          </div>
-          <div class="revisao-diff-col">
-            <p class="revisao-diff-label">Versão atualizada <span class="revisao-diff-editable-tag">clique pra editar</span></p>
-            <div class="revisao-diff-pane revisao-diff-pane-editable" id="revisaoNewPane" contenteditable="true" spellcheck="false"></div>
-          </div>
-          <div class="revisao-diff-col">
-            <p class="revisao-diff-label">Capturas originais <span class="revisao-diff-editable-tag">clique pra localizar</span></p>
-            <div class="revisao-diff-pane revisao-capturas-pane" id="revisaoCapturasPane"></div>
-          </div>
-        </div>
-        <div class="revisao-doc-actions">
-          <button class="btn btn-reject btn-sm" id="rejectRevisaoDocBtn">Rejeitar — manter como está</button>
-          <button class="btn btn-approve btn-sm" id="approveRevisaoDocBtn">✓ Aprovar versão atualizada</button>
-        </div>
+    <!-- Barra de captura — fixa ao fundo da tela só enquanto esta view está aberta -->
+    <div class="notas-captura-bar" id="notasCapturaBar">
+      <textarea id="notasCapturaInput" class="notas-captura-input" rows="1" placeholder="Jogue qualquer coisa aqui — Enter cria uma nota, Shift+Enter quebra linha..."></textarea>
+      <div class="notas-captura-actions">
+        <button type="button" class="btn btn-ghost btn-sm" id="notasCapturaDividirBtn" title="Cada parágrafo (separado por linha em branco) vira uma nota própria">Dividir em várias</button>
+        <button type="button" class="btn btn-primary btn-sm" id="notasCapturaOkBtn">Criar nota</button>
       </div>
     </div>
   </section>
