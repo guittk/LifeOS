@@ -2619,7 +2619,9 @@
      botão de play que abre o vídeo de verdade num lightbox — sem baixar/hospedar
      nada, só embutindo o player oficial de cada plataforma. */
   const VISION_YOUTUBE_RE = /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{6,})/i;
-  const VISION_INSTAGRAM_RE = /instagram\.com\/(p|reel|tv)\/([a-zA-Z0-9_-]+)/i;
+  // O link de um reel/post pode vir com o @usuário no meio (ex: instagram.com/fulano/reel/XYZ/),
+  // não só na forma "curta" instagram.com/reel/XYZ/ — o grupo de usuário é opcional.
+  const VISION_INSTAGRAM_RE = /instagram\.com\/(?:[a-zA-Z0-9_.]+\/)?(p|reel|reels|tv)\/([a-zA-Z0-9_-]+)/i;
   // Instagram não tem uma API pública de thumbnail sem token — em vez de tentar
   // buscar e falhar silenciosamente, usa um cartão-placeholder identificável (o
   // play visível já deixa claro que é um vídeo a abrir).
@@ -2645,9 +2647,10 @@
     }
     const ig = url.match(VISION_INSTAGRAM_RE);
     if(ig){
+      const tipo = ig[1].toLowerCase() === 'reels' ? 'reel' : ig[1].toLowerCase(); // embed só aceita a forma singular
       return {
         tipoVideo: 'instagram',
-        embedSrc: 'https://www.instagram.com/' + ig[1] + '/' + ig[2] + '/embed',
+        embedSrc: 'https://www.instagram.com/' + tipo + '/' + ig[2] + '/embed',
         thumb: VISION_INSTAGRAM_PLACEHOLDER
       };
     }
