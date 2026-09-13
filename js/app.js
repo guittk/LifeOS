@@ -413,15 +413,15 @@
 
   const SEARCH_KIND_LABEL = {
     tarefa:'Tarefa', nota:'Nota', area:'Categoria', objetivo:'Objetivo',
-    ponto:'Ponto', diario:'Diário', evento:'Agenda', decisao:'Decisão', monday:'Monday'
+    ponto:'Ponto', diario:'Diário', evento:'Agenda', decisao:'Decisão', plano:'Planejamento'
   };
   const SEARCH_KIND_VIEW = {
     tarefa:'tarefas', nota:'storage', area:'storage', objetivo:'objetivos',
-    ponto:'objetivos', diario:'diario', evento:'agenda', decisao:'decisoes', monday:'monday'
+    ponto:'objetivos', diario:'diario', evento:'agenda', decisao:'decisoes', plano:'monday'
   };
   // Agrupa os tipos sob o filtro que aparece na barra de escopos.
   const SEARCH_SCOPE_OF = {
-    tarefa:'tarefa', monday:'tarefa', nota:'nota', area:'nota',
+    tarefa:'tarefa', plano:'tarefa', nota:'nota', area:'nota',
     objetivo:'objetivo', ponto:'objetivo', diario:'diario', evento:'evento', decisao:'decisao'
   };
 
@@ -446,7 +446,7 @@
   ];
   // Toda view também é um comando de navegação.
   const SEARCH_VIEWS = [
-    ['hoje','Hoje'], ['storage','Arquivo'], ['tarefas','Tarefas'], ['monday','Monday'],
+    ['hoje','Hoje'], ['storage','Arquivo'], ['tarefas','Tarefas'], ['monday','Planejamento'],
     ['agenda','Agenda'], ['rotina','Rotina'], ['casa','Casa'], ['financas','Finanças'],
     ['fluencia','Fluência'], ['bateria','Bateria'], ['academia','Academia'], ['diario','Diário'],
     ['planoalimentar','Plano Alimentar'], ['objetivos','Objetivos'], ['decisoes','Decisões'],
@@ -473,17 +473,17 @@
   }
 
   async function buildSearchIndex(){
-    const [tasks, notasAreas, notas, objetivos, diario, events, decisoes, monday] = await Promise.all([
+    const [tasks, notasAreas, notas, objetivos, diario, events, decisoes, planItens] = await Promise.all([
       dbGet(userPath('/Tasks')), dbGet(userPath('/NotasAreas')), dbGet(userPath('/Notas')),
       dbGet(userPath('/objetivos')), dbGet(userPath('/DiarioEntradas')), dbGet(userPath('/Events')),
-      dbGet(userPath('/Decisoes')), dbGet(userPath('/MondayTasks'))
+      dbGet(userPath('/Decisoes')), dbGet(userPath('/PlanItens'))
     ]);
     const list = [];
     Object.values(tasks || {}).forEach(t => {
       searchPush(list, 'tarefa', t.name, (t.done ? 'concluída' : 'a fazer') + (t.date ? ' · ' + fmtShortDate(t.date) : ''));
     });
-    Object.values(monday || {}).forEach(t => {
-      searchPush(list, 'monday', t.nome || t.name, [t.responsavel, t.status].filter(Boolean).join(' · '));
+    Object.values(planItens || {}).forEach(t => {
+      searchPush(list, 'plano', t.nome, [t.responsavel, PLAN_STATUS_LABEL[t.status]].filter(Boolean).join(' · '));
     });
     Object.values(notasAreas || {}).forEach(a => searchPush(list, 'area', a.nome, 'categoria do Arquivo'));
     Object.values(notas || {}).forEach(n => {
@@ -1248,7 +1248,7 @@
     { key:'hoje', label:'Hoje' },
     { key:'rotina', label:'Rotina' },
     { key:'tarefas', label:'Tarefas' },
-    { key:'monday', label:'Monday' },
+    { key:'monday', label:'Planejamento' },
     { key:'agenda', label:'Agenda' },
     { key:'storage', label:'Arquivo' },
     { key:'academia', label:'Academia' },
@@ -1454,7 +1454,7 @@
       .sort((a,b) => String(a[1]).localeCompare(String(b[1])));
     const atividadeSelect = document.getElementById('casaAtividadeResponsavelInput');
     const regraSelect = document.getElementById('casaRegraResponsavelInput');
-    const mondaySelect = document.getElementById('mondayResponsavelModalInput');
+    const mondaySelect = document.getElementById('planResponsavelModalInput');
     const erroSelect = document.getElementById('casaErroPessoaInput');
     if(erroSelect){
       const current = erroSelect.value;
@@ -1843,15 +1843,17 @@
     academia: 'exercícios concluídos na Academia',
     tarefas: 'tarefas concluídas',
     diario: 'entradas no Diário',
-    monday: 'tarefas concluídas no Monday'
+    // Chave "monday" mantida por compatibilidade com pontos já salvos com esse
+    // autoTipo — o rótulo e a fonte de dados é que mudaram pro Planejamento.
+    monday: 'elementos concluídos no Planejamento'
   };
   async function fetchAutoActionCounts(){
-    const [cards, academiaDias, tasks, diario, monday] = await Promise.all([
+    const [cards, academiaDias, tasks, diario, planItens] = await Promise.all([
       dbGet(userPath('/Cards')).catch(() => null),
       dbGet(userPath('/AcademiaDias')).catch(() => null),
       dbGet(userPath('/Tasks')).catch(() => null),
       dbGet(userPath('/DiarioEntradas')).catch(() => null),
-      dbGet(userPath('/MondayTasks')).catch(() => null)
+      dbGet(userPath('/PlanItens')).catch(() => null)
     ]);
     let fluencia = 0;
     Object.values(cards || {}).forEach(c => { fluencia += (c.History || []).length; });
@@ -1861,8 +1863,8 @@
     });
     const tarefas = Object.values(tasks || {}).filter(t => t.done).length;
     const diarioCount = Object.keys(diario || {}).length;
-    const mondayCount = Object.values(monday || {}).filter(t => t.status === 'done').length;
-    return { fluencia, academia, tarefas, diario: diarioCount, monday: mondayCount };
+    const planCount = Object.values(planItens || {}).filter(t => t.status === 'done').length;
+    return { fluencia, academia, tarefas, diario: diarioCount, monday: planCount };
   }
   function objetivoPctFromData(objId, data, cache, visiting){
     if(cache.has(objId)) return cache.get(objId);
@@ -5924,244 +5926,592 @@
     await populateTaskGroupSelect();
   }
 
-  /* ---------- MONDAY (board com sessões de início/parada, responsável, status e tempo total) ---------- */
-  const MONDAY_STATUS_ORDER = ['todo', 'doing', 'done', 'blocked'];
-  const MONDAY_STATUS_CLASS = { todo:'status-todo', doing:'status-andamento', done:'status-concluido', blocked:'status-blocked' };
-  const MONDAY_STATUS_LABEL = { todo:'To Do', doing:'Doing', done:'Done', blocked:'Blocked' };
-  const MONDAY_STATUS_DOT = { todo:'var(--blue)', doing:'var(--gold)', done:'var(--sage)', blocked:'var(--coral)' };
-  let mondayTasksData = {};
-  let mondayResponsavelEditingId = null;
+  /* ---------- PLANEJAMENTO (portado do projeto Apice) ----------
+     Quadro estilo Monday.com: grupos coloridos → elementos → subelementos (só 2
+     níveis), cada um com status, prioridade, responsável e prazo. Substitui o
+     board simples de "sessões de início/parada" que existia antes — dados
+     antigos em /MondayTasks ficam intocados no banco, só não são mais lidos
+     por nenhuma tela (ver conversa: troca pedida explicitamente pelo usuário).
+     Escopo combinado: só o quadro principal — sem Timeline/Gantt, Kanban de
+     Task nem Aprovação por votação, que existem no Apice mas ficam de fora. */
 
-  function fmtHMS(totalSeconds){
-    const s = Math.max(0, Math.floor(totalSeconds || 0));
-    const hh = Math.floor(s / 3600);
-    const mm = Math.floor((s % 3600) / 60);
-    const ss = s % 60;
-    return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+  const PLAN_STATUS_ORDER = ['backlog', 'todo', 'doing', 'blocked', 'done', 'moved', 'canceled'];
+  const PLAN_STATUS_LABEL = { backlog:'Backlog', todo:'To Do', doing:'Em andamento', blocked:'Bloqueado', done:'Concluído', moved:'Adiado', canceled:'Cancelado' };
+  const PLAN_STATUS_COLOR = { backlog:'#707588', todo:'#79AFFD', doing:'#FDBC64', blocked:'#E8697D', done:'#33D391', moved:'#359970', canceled:'#5C5C5C' };
+  const PLAN_STATUS_TEXTO_ESCURO = new Set(['todo', 'doing', 'done']);
+  const PLAN_GROUP_COLORS = ['#00b7c4', '#ffa800', '#6c8cff', '#e5484d', '#8b5cf6', '#f5b301', '#60519b', '#0a7386'];
+
+  let planState = { grupos:{}, itens:{}, loaded:false };
+  async function planCarregarEstado(){
+    const [grupos, itens] = await Promise.all([dbGet(userPath('/PlanGrupos')), dbGet(userPath('/PlanItens'))]);
+    planState = { grupos: grupos || {}, itens: itens || {}, loaded:true };
+    return planState;
   }
-  function isoToDatetimeLocal(iso){
-    if(!iso) return '';
-    const d = new Date(iso);
-    if(isNaN(d.getTime())) return '';
-    const pad = n => String(n).padStart(2, '0');
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  function planGruposOrdenados(){ return Object.values(planState.grupos).sort((a, b) => (a.ordem || 0) - (b.ordem || 0)); }
+  function planItensDe(groupId, parentId){
+    return Object.values(planState.itens)
+      .filter(i => i.groupId === groupId && (i.parentId || null) === (parentId || null))
+      .sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
   }
-  function datetimeLocalToIso(val){
-    if(!val) return '';
-    const d = new Date(val);
-    if(isNaN(d.getTime())) return '';
-    return d.toISOString();
+  function planContarNoGrupo(groupId){ return Object.values(planState.itens).filter(i => i.groupId === groupId).length; }
+
+  async function planCreateGrupo(nome){
+    const grupos = planGruposOrdenados();
+    const grupo = { id:newId(), nome: nome || 'Novo grupo', cor: PLAN_GROUP_COLORS[grupos.length % PLAN_GROUP_COLORS.length], ordem: grupos.length, colapsado:false, criadoEm:new Date().toISOString() };
+    planState.grupos[grupo.id] = grupo;
+    await dbPutSilent(userPath('/PlanGrupos/' + grupo.id), grupo);
+    return grupo;
   }
-  function mondaySessionsTotalSeconds(sessoes){
-    const now = Date.now();
-    return Object.values(sessoes || {}).reduce((sum, s) => {
-      const start = new Date(s.inicio).getTime();
-      if(isNaN(start)) return sum;
-      const end = s.fim ? new Date(s.fim).getTime() : now;
-      return sum + Math.max(0, Math.floor((end - start) / 1000));
-    }, 0);
+  async function planUpdateGrupo(id, patch){
+    if(!planState.grupos[id]) return;
+    planState.grupos[id] = { ...planState.grupos[id], ...patch };
+    await dbPatchSilent(userPath('/PlanGrupos/' + id), patch);
   }
-  function mondayOpenSessionId(sessoes){
-    const found = Object.entries(sessoes || {}).find(([, s]) => !s.fim);
-    return found ? found[0] : null;
+  async function planDeleteGrupo(id){
+    const itensDoGrupo = Object.values(planState.itens).filter(i => i.groupId === id);
+    delete planState.grupos[id];
+    itensDoGrupo.forEach(i => delete planState.itens[i.id]);
+    await Promise.all([dbDeleteSilent(userPath('/PlanGrupos/' + id)), ...itensDoGrupo.map(i => dbDeleteSilent(userPath('/PlanItens/' + i.id)))]);
+  }
+  async function planCreateItem(groupId, parentId, nome){
+    const irmaos = planItensDe(groupId, parentId);
+    const item = {
+      id:newId(), groupId, parentId: parentId || null, nome: nome || '', descricao:'', responsavel:'',
+      status:'backlog', prioridade:0, dueDate:null, ordem: irmaos.length, criadoEm:new Date().toISOString()
+    };
+    planState.itens[item.id] = item;
+    await dbPutSilent(userPath('/PlanItens/' + item.id), item);
+    return item;
+  }
+  async function planUpdateItem(id, patch){
+    if(!planState.itens[id]) return;
+    planState.itens[id] = { ...planState.itens[id], ...patch };
+    await dbPatchSilent(userPath('/PlanItens/' + id), patch);
+  }
+  async function planDeleteItem(id){
+    const filhos = Object.values(planState.itens).filter(i => i.parentId === id);
+    delete planState.itens[id];
+    filhos.forEach(f => delete planState.itens[f.id]);
+    await Promise.all([dbDeleteSilent(userPath('/PlanItens/' + id)), ...filhos.map(f => dbDeleteSilent(userPath('/PlanItens/' + f.id)))]);
+  }
+  // Move (ou só reordena) um item pra logo antes de `antesDeId` dentro do escopo
+  // (groupId, parentId) informado — cobre reordenar, mudar de grupo e promover/
+  // aninhar como subitem, tudo com a mesma conta de "ordem" fracionária.
+  async function planMoverItem(itemId, { groupId, parentId, antesDeId }){
+    const item = planState.itens[itemId];
+    if(!item) return;
+    const irmaos = planItensDe(groupId, parentId).filter(i => i.id !== itemId);
+    const idx = antesDeId ? irmaos.findIndex(i => i.id === antesDeId) : irmaos.length;
+    const anterior = idx > 0 ? irmaos[idx - 1] : null;
+    const seguinte = idx >= 0 && idx < irmaos.length ? irmaos[idx] : null;
+    const ordemAnterior = anterior ? (anterior.ordem || 0) : -1;
+    const ordemSeguinte = seguinte ? (seguinte.ordem || 0) : (anterior ? anterior.ordem + 2 : 1);
+    await planUpdateItem(itemId, { groupId, parentId: parentId || null, ordem: (ordemAnterior + ordemSeguinte) / 2 });
+  }
+  async function planReordenarGrupo(idArrastado, idAlvo){
+    const grupos = planGruposOrdenados().filter(g => g.id !== idArrastado);
+    const idx = idAlvo ? grupos.findIndex(g => g.id === idAlvo) : grupos.length;
+    const anterior = idx > 0 ? grupos[idx - 1] : null;
+    const seguinte = idx >= 0 && idx < grupos.length ? grupos[idx] : null;
+    const ordemAnterior = anterior ? (anterior.ordem || 0) : -1;
+    const ordemSeguinte = seguinte ? (seguinte.ordem || 0) : (anterior ? anterior.ordem + 2 : 1);
+    await planUpdateGrupo(idArrastado, { ordem: (ordemAnterior + ordemSeguinte) / 2 });
   }
 
-  function tickMondayTimers(){
-    Object.entries(mondayTasksData).forEach(([id, t]) => {
-      if(!mondayOpenSessionId(t.sessoes)) return;
-      const totalEl = document.querySelector('[data-monday-total="' + id + '"]');
-      if(totalEl) totalEl.textContent = fmtHMS(mondaySessionsTotalSeconds(t.sessoes));
-    });
-  }
-  setInterval(tickMondayTimers, 1000);
+  /* ---------- UI ---------- */
+  let planContainerEl = null;
+  let planModoSelecao = false;
+  const planSelecionados = new Set();
+  let planItemDragId = null;
+  let planGrupoDragId = null;
+  let planResponsavelAlvo = null; // id (string) ou array de ids, definido antes de abrir o modal
 
-  /* Dropdown genérico para escolher status (em vez de ciclar clicando) */
-  function closeStatusDropdown(){
-    const existing = document.querySelector('.status-dropdown');
-    if(existing) existing.remove();
-    document.removeEventListener('click', closeStatusDropdownOnOutsideClick, true);
-  }
-  function closeStatusDropdownOnOutsideClick(e){
-    const dd = document.querySelector('.status-dropdown');
-    if(dd && !dd.contains(e.target)) closeStatusDropdown();
-  }
-  function openStatusDropdown(anchorEl, onSelect){
-    closeStatusDropdown();
+  function planFecharPops(){ document.querySelectorAll('.board-card-pop, .color-picker').forEach(el => el.remove()); }
+
+  function planAbrirStatusPopover(anchorEl, onEscolher){
+    planFecharPops();
+    const pop = document.createElement('div');
+    pop.className = 'board-card-pop';
+    pop.innerHTML = PLAN_STATUS_ORDER.map(st =>
+      `<div class="cat-item" data-status="${st}"><span class="dot" style="background:${PLAN_STATUS_COLOR[st]}"></span>${PLAN_STATUS_LABEL[st]}</div>`
+    ).join('');
+    document.body.appendChild(pop);
     const rect = anchorEl.getBoundingClientRect();
-    const menu = document.createElement('div');
-    menu.className = 'status-dropdown';
-    menu.style.top = (rect.bottom + 6) + 'px';
-    menu.style.left = rect.left + 'px';
-    menu.innerHTML = MONDAY_STATUS_ORDER.map(s => `<button type="button" data-pick-status="${s}"><span class="status-dropdown-dot" style="background:${MONDAY_STATUS_DOT[s]};"></span>${MONDAY_STATUS_LABEL[s]}</button>`).join('');
-    document.body.appendChild(menu);
-    menu.querySelectorAll('[data-pick-status]').forEach(btn => btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      onSelect(btn.getAttribute('data-pick-status'));
-      closeStatusDropdown();
-    }));
-    setTimeout(() => document.addEventListener('click', closeStatusDropdownOnOutsideClick, true), 0);
+    pop.style.left = Math.min(rect.left + window.scrollX, window.innerWidth - 190) + 'px';
+    pop.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    function fechar(){ pop.remove(); document.removeEventListener('click', onDoc); }
+    function onDoc(e){ if(!pop.contains(e.target) && e.target !== anchorEl) fechar(); }
+    pop.querySelectorAll('[data-status]').forEach(el => el.addEventListener('click', () => { fechar(); onEscolher(el.getAttribute('data-status')); }));
+    setTimeout(() => document.addEventListener('click', onDoc), 10);
   }
-
-  async function renderMondayTasks(){
-    const el = document.getElementById('mondayList');
-    if(!el) return;
-    const data = await dbGet(userPath('/MondayTasks')) || {};
-    mondayTasksData = data;
-    const entries = Object.entries(data).sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
-    if(!entries.length){
-      el.innerHTML = '<p class="empty-state">Nenhuma task ainda. Clique em "+ Nova task" para começar a rodar horas.</p>';
-      return;
-    }
-    el.innerHTML = `
-      <table class="task-table">
-        <thead><tr><th>Task</th><th>Responsável</th><th>Status</th><th>Tempo total</th><th></th><th></th><th></th></tr></thead>
-        <tbody>
-          ${entries.map(([id, t]) => {
-            const status = MONDAY_STATUS_ORDER.includes(t.status) ? t.status : 'todo';
-            const openSid = mondayOpenSessionId(t.sessoes);
-            const total = mondaySessionsTotalSeconds(t.sessoes);
-            const sessCount = Object.keys(t.sessoes || {}).length;
-            return `
-            <tr data-monday-id="${id}">
-              <td>${escapeHtml(t.nome)}</td>
-              <td><span class="monday-responsavel-tag" data-edit-responsavel="${id}">${t.responsavel ? escapeHtml(t.responsavel) : '+ definir'}</span></td>
-              <td><span class="status-pill ${MONDAY_STATUS_CLASS[status]}" data-pick-status-for="${id}" style="cursor:pointer;">${MONDAY_STATUS_LABEL[status]}</span></td>
-              <td class="mono" data-monday-total="${id}">${fmtHMS(total)}</td>
-              <td>${openSid
-                ? `<button class="btn btn-ghost btn-sm" data-pause-monday="${id}">⏸ Pausar</button>`
-                : `<button class="btn btn-approve btn-sm" data-play-monday="${id}">▶ Play</button>`}</td>
-              <td><button class="monday-sessions-count" data-view-sessions="${id}">${sessCount} sessõe${sessCount === 1 ? '' : 's'}</button></td>
-              <td><button class="task-del-btn" data-del-monday="${id}">excluir</button></td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>`;
-
-    el.querySelectorAll('[data-pick-status-for]').forEach(pill => pill.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const id = pill.getAttribute('data-pick-status-for');
-      openStatusDropdown(pill, async (status) => {
-        await dbPatchSilent(userPath('/MondayTasks/' + id), { status });
-        await renderMondayTasks();
+  function planStarsHtml(prioridade, tamanho){
+    const p = prioridade || 0;
+    return Array.from({ length:5 }).map((_, i) =>
+      `<span class="plan-star${i < p ? ' on' : ''}" data-star="${i + 1}" style="font-size:${tamanho || 13}px">★</span>`
+    ).join('');
+  }
+  function planWireStars(el, onEscolher){
+    el.querySelectorAll('[data-star]').forEach(star => {
+      star.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const v = parseInt(star.getAttribute('data-star'), 10);
+        const atual = el.querySelectorAll('.plan-star.on').length;
+        onEscolher(v === atual ? 0 : v);
       });
-    }));
-    el.querySelectorAll('[data-play-monday]').forEach(btn => btn.addEventListener('click', async () => {
-      const id = btn.getAttribute('data-play-monday');
-      await dbPutSilent(userPath('/MondayTasks/' + id + '/sessoes/' + newId()), { inicio: new Date().toISOString(), fim: '' });
-      await renderMondayTasks();
-    }));
-    el.querySelectorAll('[data-pause-monday]').forEach(btn => btn.addEventListener('click', async () => {
-      const id = btn.getAttribute('data-pause-monday');
-      const sid = mondayOpenSessionId(mondayTasksData[id] && mondayTasksData[id].sessoes);
-      if(!sid) return;
-      await dbPatchSilent(userPath('/MondayTasks/' + id + '/sessoes/' + sid), { fim: new Date().toISOString() });
-      await renderMondayTasks();
-    }));
-    el.querySelectorAll('[data-edit-responsavel]').forEach(tag => tag.addEventListener('click', () => {
-      openMondayResponsavelModal(tag.getAttribute('data-edit-responsavel'));
-    }));
-    el.querySelectorAll('[data-view-sessions]').forEach(btn => btn.addEventListener('click', () => {
-      openMondaySessionsModal(btn.getAttribute('data-view-sessions'));
-    }));
-    el.querySelectorAll('[data-del-monday]').forEach(btn => btn.addEventListener('click', async () => {
-      if(!await showConfirm('Excluir esta task e todo o histórico de sessões dela?')) return;
-      await dbDeleteSilent(userPath('/MondayTasks/' + btn.getAttribute('data-del-monday')));
-      await renderMondayTasks();
-    }));
-
-    tickMondayTimers();
-  }
-
-  document.getElementById('addMondayTaskBtn').addEventListener('click', async () => {
-    const nome = await showPrompt('newMondayTaskModal', 'newMondayTaskModalInput', 'newMondayTaskModalOkBtn', 'newMondayTaskModalCancelBtn');
-    if(!nome) return;
-    const data = await dbGet(userPath('/MondayTasks')) || {};
-    await dbPutSilent(userPath('/MondayTasks/' + newId()), {
-      nome, responsavel:'', status:'todo', sessoes:{}, order: Object.keys(data).length, criadoEm: new Date().toISOString()
     });
-    await renderMondayTasks();
-  });
-
-  /* Modal de responsável: escolhido a partir da lista de pessoas cadastrada em Configurações */
-  function openMondayResponsavelModal(id){
-    mondayResponsavelEditingId = id;
-    populateCasaResponsavelSelects();
-    const sel = document.getElementById('mondayResponsavelModalInput');
-    sel.value = (mondayTasksData[id] && mondayTasksData[id].responsavel) || '';
-    document.getElementById('mondayResponsavelModal').classList.add('active');
   }
-  document.getElementById('mondayResponsavelModalCancelBtn').addEventListener('click', () => {
-    document.getElementById('mondayResponsavelModal').classList.remove('active');
-  });
-  document.getElementById('mondayResponsavelModalOkBtn').addEventListener('click', async () => {
-    const id = mondayResponsavelEditingId;
-    if(!id) return;
-    const responsavel = document.getElementById('mondayResponsavelModalInput').value;
-    await dbPatchSilent(userPath('/MondayTasks/' + id), { responsavel });
-    document.getElementById('mondayResponsavelModal').classList.remove('active');
-    await renderMondayTasks();
-  });
+  function planStatusPillHtml(status){
+    const dark = PLAN_STATUS_TEXTO_ESCURO.has(status);
+    return `<span class="plan-status-pill" style="background:${PLAN_STATUS_COLOR[status]}; color:${dark ? '#14141e' : '#fff'}">${PLAN_STATUS_LABEL[status]}</span>`;
+  }
+  function planPrazoAtrasado(item){
+    if(!item.dueDate || ['done', 'moved', 'canceled'].includes(item.status)) return false;
+    return item.dueDate < todayStr();
+  }
 
-  /* Modal de sessões: lista editável de início/fim, com adição e remoção manual de linhas */
-  let mondaySessionsEditingId = null;
-  function mondaySessionRowHtml(sid, s){
+  function planRowHtml(item, isSub){
+    const sel = planSelecionados.has(item.id);
     return `
-      <div class="monday-session-row" data-sid="${sid}">
-        <input type="datetime-local" class="monday-session-inicio" value="${isoToDatetimeLocal(s.inicio)}">
-        <input type="datetime-local" class="monday-session-fim" value="${isoToDatetimeLocal(s.fim)}" placeholder="ainda rodando">
-        <button type="button" data-remove-session-row title="Remover">×</button>
+      <div class="plan-row${isSub ? ' plan-row-sub' : ''}${sel ? ' selecionado' : ''}" data-item-id="${item.id}" draggable="${!planModoSelecao}">
+        ${planModoSelecao ? `<input type="checkbox" class="plan-check" data-select-item="${item.id}"${sel ? ' checked' : ''}>` : '<span class="plan-drag">⠿</span>'}
+        <input type="text" class="plan-row-nome" data-nome-item="${item.id}" value="${escapeHtml(item.nome || '')}" placeholder="Sem nome">
+        <button type="button" class="plan-row-resp" data-resp-item="${item.id}">${item.responsavel ? escapeHtml(item.responsavel) : '+ resp.'}</button>
+        <button type="button" class="plan-row-status-btn" data-status-item="${item.id}">${planStatusPillHtml(item.status)}</button>
+        <div class="plan-stars" data-stars-item="${item.id}">${planStarsHtml(item.prioridade)}</div>
+        <input type="date" class="plan-row-prazo${planPrazoAtrasado(item) ? ' atrasado' : ''}" data-prazo-item="${item.id}" value="${item.dueDate || ''}">
+        <button type="button" class="plan-row-icon" data-detail-item="${item.id}" title="Abrir detalhes">⤢</button>
+        <button type="button" class="plan-row-icon plan-row-del" data-del-item="${item.id}" title="Excluir">🗑</button>
       </div>`;
   }
-  function openMondaySessionsModal(id){
-    mondaySessionsEditingId = id;
-    const t = mondayTasksData[id];
-    if(!t) return;
-    document.getElementById('mondaySessionsModalTitle').textContent = t.nome;
-    const rows = document.getElementById('mondaySessionsRows');
-    const sessoes = Object.entries(t.sessoes || {}).sort((a, b) => (a[1].inicio || '').localeCompare(b[1].inicio || ''));
-    rows.innerHTML = sessoes.length
-      ? sessoes.map(([sid, s]) => mondaySessionRowHtml(sid, s)).join('')
-      : '<p class="empty-state" style="margin:0 0 8px;">Nenhuma sessão ainda.</p>';
-    wireMondaySessionRowRemovers();
-    document.getElementById('mondaySessionsModal').classList.add('active');
+
+  function planGrupoHtml(grupo){
+    const raizes = planItensDe(grupo.id, null);
+    const total = planContarNoGrupo(grupo.id);
+    const linhas = raizes.map(raiz => {
+      const subs = planItensDe(grupo.id, raiz.id);
+      return planRowHtml(raiz, false) + subs.map(s => planRowHtml(s, true)).join('') +
+        `<div class="plan-add-row plan-add-sub" data-add-sub-de="${raiz.id}"><input type="text" placeholder="+ Adicionar sub elemento" data-add-sub-input="${raiz.id}"></div>`;
+    }).join('');
+    return `
+      <div class="plan-group" data-group-id="${grupo.id}" style="--group-cor:${grupo.cor}">
+        <div class="plan-group-head" draggable="true">
+          <span class="plan-drag">⠿</span>
+          <button type="button" class="plan-group-chevron" data-toggle-grupo="${grupo.id}">${grupo.colapsado ? '▸' : '▾'}</button>
+          <button type="button" class="plan-group-swatch" data-abrir-cor-grupo="${grupo.id}" style="background:${grupo.cor}"></button>
+          <input type="text" class="plan-group-nome" data-nome-grupo="${grupo.id}" value="${escapeHtml(grupo.nome)}">
+          <span class="plan-group-count">${total} elemento${total === 1 ? '' : 's'}</span>
+          <button type="button" class="plan-row-icon plan-row-del" data-del-grupo="${grupo.id}" title="Excluir grupo">🗑</button>
+        </div>
+        <div class="plan-group-body" data-group-body="${grupo.id}" style="display:${grupo.colapsado ? 'none' : 'block'}">
+          ${linhas}
+          <div class="plan-add-row" data-add-de="${grupo.id}"><input type="text" placeholder="+ Adicionar elemento" data-add-input="${grupo.id}"></div>
+        </div>
+      </div>`;
   }
-  function wireMondaySessionRowRemovers(){
-    document.querySelectorAll('#mondaySessionsRows [data-remove-session-row]').forEach(btn => {
-      btn.addEventListener('click', () => btn.closest('.monday-session-row').remove());
+
+  function planSelecaoBarHtml(){
+    const grupos = planGruposOrdenados();
+    return `
+      <span>${planSelecionados.size} selecionado${planSelecionados.size === 1 ? '' : 's'}</span>
+      <button type="button" data-act="status">Status</button>
+      <button type="button" data-act="prioridade">Prioridade</button>
+      <button type="button" data-act="responsavel">Responsável</button>
+      <input type="date" id="planBulkPrazo" title="Definir prazo pra todos os selecionados">
+      <select id="planBulkGrupo" class="plan-bulk-select"><option value="">Mover pra grupo...</option>${grupos.map(g => `<option value="${g.id}">${escapeHtml(g.nome)}</option>`).join('')}</select>
+      <button type="button" data-act="excluir" style="color:var(--coral);">Excluir</button>
+      <button type="button" data-act="cancelar">Cancelar</button>`;
+  }
+
+  async function planRender(){
+    if(!planContainerEl) return;
+    if(!planState.loaded){ planContainerEl.innerHTML = '<p class="empty-state">Carregando...</p>'; return; }
+    planFecharPops();
+    const grupos = planGruposOrdenados();
+    const barEl = document.getElementById('planSelecaoBar');
+    if(planSelecionados.size){
+      barEl.style.display = 'flex';
+      barEl.innerHTML = planSelecaoBarHtml();
+      planWireSelecaoBar();
+    } else {
+      barEl.style.display = 'none';
+      barEl.innerHTML = '';
+    }
+    if(!grupos.length){
+      planContainerEl.innerHTML = '<p class="empty-state">Nenhum grupo ainda. Clique em "+ Novo grupo" pra começar.</p>';
+      return;
+    }
+    planContainerEl.innerHTML = grupos.map(g => planGrupoHtml(g)).join('');
+    planWireGrupos();
+  }
+
+  function planWireSelecaoBar(){
+    const bar = document.getElementById('planSelecaoBar');
+    bar.querySelector('[data-act="cancelar"]').addEventListener('click', () => { planSelecionados.clear(); planModoSelecao = false; planRender(); });
+    bar.querySelector('[data-act="excluir"]').addEventListener('click', async () => {
+      const n = planSelecionados.size;
+      if(!await showConfirm(`Excluir ${n} elemento(s) selecionado(s)? Subelementos deles também são excluídos.`)) return;
+      await Promise.all(Array.from(planSelecionados).map(id => planDeleteItem(id)));
+      planSelecionados.clear();
+      planRender();
+    });
+    bar.querySelector('[data-act="status"]').addEventListener('click', (e) => {
+      planAbrirStatusPopover(e.currentTarget, async (status) => {
+        await Promise.all(Array.from(planSelecionados).map(id => planUpdateItem(id, { status })));
+        planRender();
+      });
+    });
+    bar.querySelector('[data-act="prioridade"]').addEventListener('click', (e) => {
+      planFecharPops();
+      const pop = document.createElement('div');
+      pop.className = 'board-card-pop';
+      pop.innerHTML = '<div class="plan-stars" style="padding:6px 9px;">' + planStarsHtml(0, 18) + '</div>';
+      document.body.appendChild(pop);
+      const rect = e.currentTarget.getBoundingClientRect();
+      pop.style.left = Math.min(rect.left + window.scrollX, window.innerWidth - 190) + 'px';
+      pop.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+      planWireStars(pop, async (prioridade) => {
+        pop.remove();
+        await Promise.all(Array.from(planSelecionados).map(id => planUpdateItem(id, { prioridade })));
+        planRender();
+      });
+      function onDoc(ev){ if(!pop.contains(ev.target)){ pop.remove(); document.removeEventListener('click', onDoc); } }
+      setTimeout(() => document.addEventListener('click', onDoc), 10);
+    });
+    bar.querySelector('[data-act="responsavel"]').addEventListener('click', () => {
+      planResponsavelAlvo = Array.from(planSelecionados);
+      document.getElementById('planResponsavelModalInput').value = '';
+      document.getElementById('planResponsavelModal').classList.add('active');
+    });
+    bar.querySelector('#planBulkPrazo').addEventListener('change', async (e) => {
+      const dueDate = e.target.value || null;
+      await Promise.all(Array.from(planSelecionados).map(id => planUpdateItem(id, { dueDate })));
+      planRender();
+    });
+    bar.querySelector('#planBulkGrupo').addEventListener('change', async (e) => {
+      const groupId = e.target.value;
+      if(!groupId) return;
+      await Promise.all(Array.from(planSelecionados).map(id => planUpdateItem(id, { groupId, parentId:null })));
+      planSelecionados.clear();
+      planRender();
     });
   }
-  document.getElementById('mondayAddSessionRowBtn').addEventListener('click', () => {
-    const rows = document.getElementById('mondaySessionsRows');
-    const empty = rows.querySelector('.empty-state');
-    if(empty) empty.remove();
-    const now = new Date().toISOString();
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = mondaySessionRowHtml('new_' + newId(), { inicio: now, fim: now });
-    rows.appendChild(wrapper.firstElementChild);
-    wireMondaySessionRowRemovers();
-  });
-  document.getElementById('mondaySessionsModalCancelBtn').addEventListener('click', () => {
-    document.getElementById('mondaySessionsModal').classList.remove('active');
-  });
-  document.getElementById('mondaySessionsModalOkBtn').addEventListener('click', async () => {
-    const id = mondaySessionsEditingId;
-    if(!id) return;
-    const rowEls = document.querySelectorAll('#mondaySessionsRows .monday-session-row');
-    const novasSessoes = {};
-    let invalido = false;
-    rowEls.forEach(row => {
-      const sid = row.getAttribute('data-sid');
-      const inicioVal = row.querySelector('.monday-session-inicio').value;
-      const fimVal = row.querySelector('.monday-session-fim').value;
-      if(!inicioVal){ invalido = true; return; }
-      const finalSid = sid.startsWith('new_') ? newId() : sid;
-      novasSessoes[finalSid] = { inicio: datetimeLocalToIso(inicioVal), fim: fimVal ? datetimeLocalToIso(fimVal) : '' };
+
+  function planWireGrupos(){
+    planContainerEl.querySelectorAll('[data-toggle-grupo]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-toggle-grupo');
+        await planUpdateGrupo(id, { colapsado: !planState.grupos[id].colapsado });
+        planRender();
+      });
     });
-    if(invalido){ showAppMessage('Toda sessão precisa de um início.', 'error'); return; }
-    await dbPutSilent(userPath('/MondayTasks/' + id + '/sessoes'), novasSessoes);
-    document.getElementById('mondaySessionsModal').classList.remove('active');
-    await renderMondayTasks();
+    planContainerEl.querySelectorAll('[data-abrir-cor-grupo]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-abrir-cor-grupo');
+        notasAbrirColorPicker(btn, planState.grupos[id].cor, async (cor) => {
+          btn.style.background = cor;
+          await planUpdateGrupo(id, { cor });
+          planRender();
+        });
+      });
+    });
+    planContainerEl.querySelectorAll('[data-nome-grupo]').forEach(inp => {
+      inp.addEventListener('click', (e) => e.stopPropagation());
+      inp.addEventListener('blur', async () => {
+        const id = inp.getAttribute('data-nome-grupo');
+        const nome = inp.value.trim() || 'Sem nome';
+        if(nome !== planState.grupos[id].nome) await planUpdateGrupo(id, { nome });
+      });
+      inp.addEventListener('keydown', (e) => { if(e.key === 'Enter') inp.blur(); });
+    });
+    planContainerEl.querySelectorAll('[data-del-grupo]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-del-grupo');
+        const total = planContarNoGrupo(id);
+        if(!await showConfirm(`Excluir o grupo "${planState.grupos[id].nome}"${total ? ` e seus ${total} elemento(s)` : ''}? Essa ação não pode ser desfeita.`)) return;
+        await planDeleteGrupo(id);
+        planRender();
+      });
+    });
+    planContainerEl.querySelectorAll('[data-add-input]').forEach(inp => {
+      inp.addEventListener('keydown', async (e) => {
+        if(e.key !== 'Enter' || !inp.value.trim()) return;
+        const groupId = inp.getAttribute('data-add-input');
+        await planCreateItem(groupId, null, inp.value.trim());
+        planRender();
+      });
+    });
+    planContainerEl.querySelectorAll('[data-add-sub-input]').forEach(inp => {
+      inp.addEventListener('keydown', async (e) => {
+        if(e.key !== 'Enter' || !inp.value.trim()) return;
+        const raizId = inp.getAttribute('data-add-sub-input');
+        const raiz = planState.itens[raizId];
+        await planCreateItem(raiz.groupId, raizId, inp.value.trim());
+        planRender();
+      });
+    });
+    // Grupo: arrastar pela alça do header reordena grupos entre si.
+    planContainerEl.querySelectorAll('.plan-group-head').forEach(head => {
+      const groupEl = head.closest('.plan-group');
+      const groupId = groupEl.getAttribute('data-group-id');
+      head.addEventListener('dragstart', (e) => {
+        if(e.target.closest('input, button')){ e.preventDefault(); return; }
+        planGrupoDragId = groupId;
+        groupEl.classList.add('arrastando');
+        e.dataTransfer.setData('text/plan-grupo-id', groupId);
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      head.addEventListener('dragend', () => groupEl.classList.remove('arrastando'));
+    });
+    planContainerEl.querySelectorAll('.plan-group').forEach(groupEl => {
+      const groupId = groupEl.getAttribute('data-group-id');
+      groupEl.addEventListener('dragover', (e) => { if(planGrupoDragId) e.preventDefault(); });
+      groupEl.addEventListener('drop', async (e) => {
+        if(!planGrupoDragId || planGrupoDragId === groupId) return;
+        e.preventDefault();
+        e.stopPropagation();
+        await planReordenarGrupo(planGrupoDragId, groupId);
+        planGrupoDragId = null;
+        planRender();
+      });
+    });
+    planWireRows();
+  }
+
+  function planWireRows(){
+    planContainerEl.querySelectorAll('.plan-row').forEach(row => {
+      const itemId = row.getAttribute('data-item-id');
+      const item = planState.itens[itemId];
+      if(!item) return;
+
+      const checkbox = row.querySelector('[data-select-item]');
+      if(checkbox) checkbox.addEventListener('change', () => {
+        if(checkbox.checked) planSelecionados.add(itemId); else planSelecionados.delete(itemId);
+        planRender();
+      });
+
+      const nomeInp = row.querySelector('[data-nome-item]');
+      nomeInp.addEventListener('click', (e) => e.stopPropagation());
+      nomeInp.addEventListener('blur', async () => {
+        if(nomeInp.value.trim() !== (item.nome || '')) await planUpdateItem(itemId, { nome: nomeInp.value.trim() });
+      });
+      nomeInp.addEventListener('keydown', (e) => { if(e.key === 'Enter') nomeInp.blur(); });
+
+      const respBtn = row.querySelector('[data-resp-item]');
+      respBtn.addEventListener('click', () => {
+        planResponsavelAlvo = itemId;
+        document.getElementById('planResponsavelModalInput').value = item.responsavel || '';
+        document.getElementById('planResponsavelModal').classList.add('active');
+      });
+
+      const statusBtn = row.querySelector('[data-status-item]');
+      statusBtn.addEventListener('click', () => {
+        planAbrirStatusPopover(statusBtn, async (status) => { await planUpdateItem(itemId, { status }); planRender(); });
+      });
+
+      planWireStars(row.querySelector('[data-stars-item]'), async (prioridade) => { await planUpdateItem(itemId, { prioridade }); planRender(); });
+
+      const prazoInp = row.querySelector('[data-prazo-item]');
+      prazoInp.addEventListener('click', (e) => e.stopPropagation());
+      prazoInp.addEventListener('change', async () => { await planUpdateItem(itemId, { dueDate: prazoInp.value || null }); planRender(); });
+
+      row.querySelector('[data-detail-item]').addEventListener('click', (e) => { e.stopPropagation(); planAbrirDetalhe(itemId); });
+      row.querySelector('[data-del-item]').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if(!await showConfirm(`Excluir "${item.nome || 'sem nome'}"?`)) return;
+        await planDeleteItem(itemId);
+        planRender();
+      });
+
+      if(planModoSelecao){
+        row.addEventListener('click', (e) => {
+          if(e.target.closest('input, button')) return;
+          if(checkbox){ checkbox.checked = !checkbox.checked; checkbox.dispatchEvent(new Event('change')); }
+        });
+      } else {
+        row.addEventListener('dragstart', (e) => {
+          if(e.target.closest('input, button')){ e.preventDefault(); return; }
+          planItemDragId = itemId;
+          row.classList.add('arrastando');
+          e.dataTransfer.setData('text/plan-item-id', itemId);
+          e.dataTransfer.effectAllowed = 'move';
+        });
+        row.addEventListener('dragend', () => row.classList.remove('arrastando'));
+        row.addEventListener('dragover', (e) => { if(planItemDragId) { e.preventDefault(); e.stopPropagation(); row.classList.add('alvo-drop'); } });
+        row.addEventListener('dragleave', () => row.classList.remove('alvo-drop'));
+        row.addEventListener('drop', async (e) => {
+          if(!planItemDragId || planItemDragId === itemId) return;
+          e.preventDefault();
+          e.stopPropagation();
+          row.classList.remove('alvo-drop');
+          // Soltar sobre uma linha insere o arrastado logo antes dela, no mesmo
+          // grupo/pai — vira reordenar, promover a raiz, virar irmão de um
+          // subitem ou mudar de grupo, tudo com a mesma regra.
+          await planMoverItem(planItemDragId, { groupId: item.groupId, parentId: item.parentId || null, antesDeId: itemId });
+          planItemDragId = null;
+          planRender();
+        });
+      }
+    });
+    // Soltar na área vazia do corpo do grupo (fora de qualquer linha) manda o
+    // item pro fim daquele grupo, como raiz.
+    planContainerEl.querySelectorAll('[data-group-body]').forEach(body => {
+      const groupId = body.getAttribute('data-group-body');
+      body.addEventListener('dragover', (e) => { if(planItemDragId && e.target === body) e.preventDefault(); });
+      body.addEventListener('drop', async (e) => {
+        if(!planItemDragId || e.target !== body) return;
+        e.preventDefault();
+        await planMoverItem(planItemDragId, { groupId, parentId:null, antesDeId:null });
+        planItemDragId = null;
+        planRender();
+      });
+    });
+  }
+
+  /* ---------- Modal de detalhe do elemento ---------- */
+  let planDetalheId = null;
+  function planRenderSubsNoModal(){
+    const raiz = planState.itens[planDetalheId];
+    const wrap = document.getElementById('planItemSubsWrap');
+    if(!raiz || raiz.parentId){ wrap.style.display = 'none'; return; }
+    wrap.style.display = 'block';
+    const subs = planItensDe(raiz.groupId, raiz.id);
+    document.getElementById('planItemSubsList').innerHTML = subs.map(s => `
+      <div class="plan-modal-sub-row" data-sub-row="${s.id}">
+        <input type="text" data-sub-nome="${s.id}" value="${escapeHtml(s.nome || '')}">
+        <button type="button" data-sub-del="${s.id}" title="Excluir">×</button>
+      </div>`).join('') || '<p class="empty-state" style="margin:6px 0;">Nenhum subelemento ainda.</p>';
+    document.querySelectorAll('#planItemSubsList [data-sub-nome]').forEach(inp => {
+      inp.addEventListener('blur', async () => {
+        const id = inp.getAttribute('data-sub-nome');
+        if(inp.value.trim() !== (planState.itens[id].nome || '')) await planUpdateItem(id, { nome: inp.value.trim() });
+        planRender();
+      });
+    });
+    document.querySelectorAll('#planItemSubsList [data-sub-del]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await planDeleteItem(btn.getAttribute('data-sub-del'));
+        planRenderSubsNoModal();
+        planRender();
+      });
+    });
+  }
+  function planWireModalPrioridadeStars(itemId){
+    const el = document.getElementById('planItemPrioridade');
+    planWireStars(el, async (prioridade) => {
+      await planUpdateItem(itemId, { prioridade });
+      el.innerHTML = planStarsHtml(prioridade, 18);
+      planWireModalPrioridadeStars(itemId);
+      planRender();
+    });
+  }
+  function planAbrirDetalhe(itemId){
+    const item = planState.itens[itemId];
+    if(!item) return;
+    planDetalheId = itemId;
+    document.getElementById('planItemNomeInput').value = item.nome || '';
+    document.getElementById('planItemPrazoInput').value = item.dueDate || '';
+    document.getElementById('planItemDescricaoInput').value = item.descricao || '';
+    document.getElementById('planItemResponsavelBtn').textContent = item.responsavel || 'Ninguém específico';
+    document.getElementById('planItemStatusBtn').innerHTML = planStatusPillHtml(item.status);
+    document.getElementById('planItemPrioridade').innerHTML = planStarsHtml(item.prioridade, 18);
+    planWireModalPrioridadeStars(itemId);
+    planRenderSubsNoModal();
+    document.getElementById('planItemModal').classList.add('active');
+  }
+  document.getElementById('planItemNomeInput').addEventListener('blur', async (e) => {
+    if(!planDetalheId) return;
+    const nome = e.target.value.trim();
+    if(nome !== (planState.itens[planDetalheId].nome || '')){ await planUpdateItem(planDetalheId, { nome }); planRender(); }
   });
+  document.getElementById('planItemPrazoInput').addEventListener('change', async (e) => {
+    if(!planDetalheId) return;
+    await planUpdateItem(planDetalheId, { dueDate: e.target.value || null });
+    planRender();
+  });
+  document.getElementById('planItemDescricaoInput').addEventListener('blur', async (e) => {
+    if(!planDetalheId) return;
+    await planUpdateItem(planDetalheId, { descricao: e.target.value });
+  });
+  document.getElementById('planItemStatusBtn').addEventListener('click', (e) => {
+    if(!planDetalheId) return;
+    planAbrirStatusPopover(e.currentTarget, async (status) => {
+      await planUpdateItem(planDetalheId, { status });
+      document.getElementById('planItemStatusBtn').innerHTML = planStatusPillHtml(status);
+      planRender();
+    });
+  });
+  document.getElementById('planItemResponsavelBtn').addEventListener('click', () => {
+    if(!planDetalheId) return;
+    planResponsavelAlvo = planDetalheId;
+    document.getElementById('planResponsavelModalInput').value = planState.itens[planDetalheId].responsavel || '';
+    document.getElementById('planResponsavelModal').classList.add('active');
+  });
+  document.getElementById('planItemNovoSubInput').addEventListener('keydown', async (e) => {
+    if(e.key !== 'Enter' || !e.target.value.trim() || !planDetalheId) return;
+    const raiz = planState.itens[planDetalheId];
+    await planCreateItem(raiz.groupId, planDetalheId, e.target.value.trim());
+    e.target.value = '';
+    planRenderSubsNoModal();
+    planRender();
+  });
+  document.getElementById('planItemExcluirBtn').addEventListener('click', async () => {
+    if(!planDetalheId) return;
+    if(!await showConfirm('Excluir este elemento e seus subelementos?')) return;
+    await planDeleteItem(planDetalheId);
+    document.getElementById('planItemModal').classList.remove('active');
+    planDetalheId = null;
+    planRender();
+  });
+  document.getElementById('planItemFecharBtn').addEventListener('click', () => {
+    document.getElementById('planItemModal').classList.remove('active');
+    planDetalheId = null;
+  });
+  document.getElementById('planItemModal').addEventListener('click', (e) => {
+    if(e.target.id === 'planItemModal'){ document.getElementById('planItemModal').classList.remove('active'); planDetalheId = null; }
+  });
+
+  /* ---------- Modal de responsável (compartilhado: linha isolada, lote, ou pelo detalhe) ---------- */
+  document.getElementById('planResponsavelModalCancelBtn').addEventListener('click', () => {
+    document.getElementById('planResponsavelModal').classList.remove('active');
+    planResponsavelAlvo = null;
+  });
+  document.getElementById('planResponsavelModal').addEventListener('click', (e) => {
+    if(e.target.id === 'planResponsavelModal'){ document.getElementById('planResponsavelModal').classList.remove('active'); planResponsavelAlvo = null; }
+  });
+  document.getElementById('planResponsavelModalOkBtn').addEventListener('click', async () => {
+    const responsavel = document.getElementById('planResponsavelModalInput').value;
+    const alvo = planResponsavelAlvo;
+    document.getElementById('planResponsavelModal').classList.remove('active');
+    planResponsavelAlvo = null;
+    if(!alvo) return;
+    if(Array.isArray(alvo)) await Promise.all(alvo.map(id => planUpdateItem(id, { responsavel })));
+    else await planUpdateItem(alvo, { responsavel });
+    if(planDetalheId === alvo) document.getElementById('planItemResponsavelBtn').textContent = responsavel || 'Ninguém específico';
+    planRender();
+  });
+
+  /* ---------- Toolbar da view ---------- */
+  document.getElementById('planNovoGrupoBtn').addEventListener('click', async () => {
+    const grupo = await planCreateGrupo('Novo grupo');
+    planRender();
+    const inp = planContainerEl.querySelector(`[data-nome-grupo="${grupo.id}"]`);
+    if(inp){ inp.focus(); inp.select(); }
+  });
+  document.getElementById('planSelecionarBtn').addEventListener('click', () => {
+    planModoSelecao = !planModoSelecao;
+    document.getElementById('planSelecionarBtn').classList.toggle('btn-primary', planModoSelecao);
+    if(!planModoSelecao) planSelecionados.clear();
+    planRender();
+  });
+
+  async function renderPlanejamento(){
+    if(!document.getElementById('planGruposList')) return;
+    await planCarregarEstado();
+    planContainerEl = document.getElementById('planGruposList');
+    planRender();
+  }
 
   /* ---------- HOJE (fila combinada: tarefas + treino/hábitos de hoje) ---------- */
   async function renderHojeQueue(){
@@ -6690,7 +7040,7 @@
       [renderTasks,      'as Tarefas',            []],
       [renderTaskGroups, 'os grupos de tarefas',  'taskGroupsList']
     ],
-    monday:         [[renderMondayTasks, 'o Monday', 'mondayList']],
+    monday:         [[renderPlanejamento, 'o Planejamento', 'planGruposList']],
     agenda:         [[renderAgenda, 'a Agenda', 'agendaList']],
     rotina:         [[renderRotina, 'a Rotina', 'rotinaDaysGrid']],
     casa: [

@@ -101,7 +101,7 @@
   <!-- Telas de uso ocasional: continuam funcionando 100%, só ficam visualmente
        apagadas e no fim da lista pra não competir com o resto da sidebar. -->
   <nav class="nav-level">
-    <div class="nav-item nav-item-dim" data-view="monday"><span class="nav-icon">📋</span> Monday</div>
+    <div class="nav-item nav-item-dim" data-view="monday"><span class="nav-icon">📋</span> Planejamento</div>
     <div class="nav-item nav-item-dim" data-view="financas"><span class="nav-icon">💰</span> Finanças</div>
     <div class="nav-item nav-item-dim" data-view="bateria"><span class="nav-icon">🔋</span> Bateria</div>
   </nav>
@@ -190,46 +190,53 @@
   </div>
 </div>
 
-<!-- MODAL — NOVA TASK (Monday) -->
-<div class="confirm-modal" id="newMondayTaskModal">
+<!-- MODAL — RESPONSÁVEL (Planejamento) -->
+<div class="confirm-modal" id="planResponsavelModal">
   <div class="confirm-modal-panel">
-    <p class="confirm-modal-text" style="margin-bottom:12px;">Nome da nova task</p>
-    <input type="text" id="newMondayTaskModalInput" class="modal-text-input" placeholder="ex: Escrever proposta do cliente" autocomplete="off">
-    <div class="confirm-modal-actions">
-      <button class="btn btn-ghost btn-sm" id="newMondayTaskModalCancelBtn">Cancelar</button>
-      <button class="btn btn-primary btn-sm" id="newMondayTaskModalOkBtn">Criar task</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL — RESPONSÁVEL (Monday) -->
-<div class="confirm-modal" id="mondayResponsavelModal">
-  <div class="confirm-modal-panel">
-    <p class="confirm-modal-text" style="margin-bottom:12px;">Responsável pela task</p>
-    <select id="mondayResponsavelModalInput" class="modal-text-input">
+    <p class="confirm-modal-text" style="margin-bottom:12px;">Responsável pelo elemento</p>
+    <select id="planResponsavelModalInput" class="modal-text-input">
       <option value="">Ninguém específico</option>
     </select>
     <p class="view-desc" style="margin:-8px 0 12px;">A lista vem das pessoas cadastradas em Configurações → Casa.</p>
     <div class="confirm-modal-actions">
-      <button class="btn btn-ghost btn-sm" id="mondayResponsavelModalCancelBtn">Cancelar</button>
-      <button class="btn btn-primary btn-sm" id="mondayResponsavelModalOkBtn">Salvar</button>
+      <button class="btn btn-ghost btn-sm" id="planResponsavelModalCancelBtn">Cancelar</button>
+      <button class="btn btn-primary btn-sm" id="planResponsavelModalOkBtn">Salvar</button>
     </div>
   </div>
 </div>
 
-<!-- MODAL — SESSÕES (Monday): histórico de inícios/paradas de uma task -->
-<div class="confirm-modal" id="mondaySessionsModal">
-  <div class="confirm-modal-panel" style="max-width:620px;">
-    <p class="confirm-modal-text" style="margin-bottom:4px;">Sessões de <strong id="mondaySessionsModalTitle"></strong></p>
-    <p class="view-desc" style="margin:0 0 14px;">Cada sessão é um início e uma parada. Deixe "fim" em branco se ainda estiver rodando.</p>
-    <div class="monday-sessions-head">
-      <span>Início</span><span>Fim</span><span></span>
+<!-- MODAL — DETALHE DO ELEMENTO (Planejamento) -->
+<div class="confirm-modal" id="planItemModal">
+  <div class="confirm-modal-panel" style="max-width:560px;">
+    <input type="text" id="planItemNomeInput" class="plan-item-nome-input" placeholder="Nome do elemento">
+    <div class="plan-item-grid">
+      <div>
+        <label class="modal-field-label">Status</label>
+        <button type="button" class="plan-chip-select" id="planItemStatusBtn"></button>
+      </div>
+      <div>
+        <label class="modal-field-label">Prioridade</label>
+        <div class="plan-stars" id="planItemPrioridade"></div>
+      </div>
+      <div>
+        <label class="modal-field-label">Prazo</label>
+        <input type="date" id="planItemPrazoInput" class="modal-text-input">
+      </div>
+      <div>
+        <label class="modal-field-label">Responsável</label>
+        <button type="button" class="plan-chip-select" id="planItemResponsavelBtn"></button>
+      </div>
     </div>
-    <div id="mondaySessionsRows"></div>
-    <button type="button" class="btn btn-ghost btn-sm" id="mondayAddSessionRowBtn" style="margin-top:6px;">+ Adicionar sessão manual</button>
-    <div class="confirm-modal-actions" style="margin-top:18px;">
-      <button class="btn btn-ghost btn-sm" id="mondaySessionsModalCancelBtn">Cancelar</button>
-      <button class="btn btn-primary btn-sm" id="mondaySessionsModalOkBtn">Salvar</button>
+    <label class="modal-field-label">Descrição</label>
+    <textarea id="planItemDescricaoInput" class="modal-text-input" rows="3" style="resize:vertical;"></textarea>
+    <div id="planItemSubsWrap" style="display:none;">
+      <label class="modal-field-label" style="margin-top:14px;">Subelementos</label>
+      <div id="planItemSubsList"></div>
+      <input type="text" id="planItemNovoSubInput" class="modal-text-input" placeholder="+ Adicionar sub elemento e apertar Enter" style="margin-top:6px;">
+    </div>
+    <div class="confirm-modal-actions" style="margin-top:16px; justify-content:space-between;">
+      <button class="btn btn-ghost btn-sm" id="planItemExcluirBtn" style="color:var(--coral);">Excluir elemento</button>
+      <button class="btn btn-primary btn-sm" id="planItemFecharBtn">Fechar</button>
     </div>
   </div>
 </div>
@@ -807,20 +814,21 @@
   </section>
 
   <!-- MONDAY (board com responsável, status, e sessões de início/parada por task) -->
+  <!-- PLANEJAMENTO (portado do Apice: grupos → elementos → subelementos, estilo Monday.com) -->
   <section class="view" id="view-monday">
     <div class="view-head">
       <div>
         <p class="eyebrow">Organizar</p>
-        <h1 class="view-title">Monday</h1>
-        <p class="view-desc">Board de execução: dê play ao começar uma task e pausa ao parar. Cada task guarda o histórico de todos os inícios e paradas, tem responsável, status e o tempo total somado.</p>
+        <h1 class="view-title">Planejamento</h1>
+        <p class="view-desc">Grupos, elementos e subelementos com status, prioridade, responsável e prazo — arraste pra reorganizar.</p>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" id="planSelecionarBtn">Selecionar</button>
+        <button class="btn btn-primary btn-sm" id="planNovoGrupoBtn">+ Novo grupo</button>
       </div>
     </div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-      <button class="btn btn-primary btn-sm" id="addMondayTaskBtn">+ Nova task</button>
-    </div>
-    <div class="panel panel-flush-bottom">
-      <div id="mondayList"><p class="empty-state">Carregando...</p></div>
-    </div>
+    <div id="planSelecaoBar" class="plan-selecao-bar" style="display:none;"></div>
+    <div id="planGruposList"><p class="empty-state">Carregando...</p></div>
   </section>
 
   <!-- AGENDA -->
