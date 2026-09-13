@@ -2375,10 +2375,12 @@
       el.innerHTML = '<p class="empty-state" style="padding:40px;">Seu Vision Board está vazio. Clique em "Gerenciar imagens" pra começar a montar.</p>';
       return;
     }
-    // o board cresce conforme a quantidade de fotos além do que já preenche a
-    // tela, em vez de um tamanho fixo grande demais que deixa vão sobrando
-    // quando tem poucas imagens.
-    el.style.minHeight = Math.max(visionAlturaDisponivel(el), 160 + entries.length * 130) + 'px';
+    // A posição de cada foto é uma % da altura do board — se o board for mais
+    // alto que o necessário pro conteúdo, essa % estica e as fotos ficam com
+    // vão enorme entre si. Por isso a altura aqui segue só a quantidade de
+    // fotos (empacotamento real), nunca a altura da tela: encher a tela é bom
+    // só quando o board está vazio (ver acima), não quando já tem conteúdo.
+    el.style.minHeight = Math.min(1100, Math.max(360, 130 + entries.length * 110)) + 'px';
     el.classList.toggle('layers-mode', visionLayersOpen());
     const visibleEntries = entries.filter(([, v]) => !v.hidden);
     const handlesHtml = visionLayersOpen() ? `
@@ -2869,7 +2871,8 @@
   document.getElementById('visionAddCancelBtn').addEventListener('click', () => {
     document.getElementById('visionAddModal').classList.remove('active');
   });
-  document.getElementById('visionAddOkBtn').addEventListener('click', async () => {
+  document.getElementById('visionAddOkBtn').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
     const errorEl = document.getElementById('visionAddError');
     errorEl.style.display = 'none';
     const urlsDigitadas = document.getElementById('visionUrlInput').value.split('\n').map(s => s.trim()).filter(Boolean);
@@ -2879,59 +2882,70 @@
       errorEl.style.display = 'block';
       return;
     }
-    // Links de vídeo (YouTube/Instagram) usam a thumb oficial direto, sem passar
-    // pelo teste de <img> — só o resto (link de imagem de verdade) precisa provar
-    // que carrega antes de entrar, porque um link de página (ex: post do
-    // Instagram/Pinterest em vez do arquivo) não carrega como <img> e a foto
-    // nunca aparecia no board, sem aviso nenhum.
-    const avisos = [];
-    const novosItens = [];
-    const urlsParaTestar = [];
-    for(const url of urlsDigitadas){
-      const video = await detectarVisionVideo(url);
-      if(video) novosItens.push({ src: video.thumb, tipoVideo: video.tipoVideo, embedSrc: video.embedSrc });
-      else urlsParaTestar.push(url);
-    }
-    if(urlsParaTestar.length){
-      const testesUrl = await Promise.all(urlsParaTestar.map(async (url) => ({ url, ok: await testarUrlImagem(url) })));
-      testesUrl.filter(t => t.ok).forEach(t => novosItens.push({ src: t.url, tipoVideo: null, embedSrc: null }));
-      const urlsInvalidas = testesUrl.filter(t => !t.ok).map(t => t.url);
-      if(urlsInvalidas.length){
-        avisos.push(`${urlsInvalidas.length} link(s) não carregaram como imagem e foram ignorados — confira se é o link direto do ARQUIVO da imagem, não da página onde ela aparece (ex: no Instagram, abra a foto e use "Copiar endereço da imagem", não o link do post). Se for um vídeo do YouTube/Instagram, também pode ser que ele tenha sido removido ou esteja privado.`);
+    // Testar cada link (imagem, YouTube, Instagram) é uma sequência de chamadas
+    // de rede que pode levar alguns segundos com vários links de uma vez — sem
+    // um estado de carregamento, o clique parecia não ter feito nada.
+    const textoOriginal = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Adicionando...';
+    try{
+      // Links de vídeo (YouTube/Instagram) usam a thumb oficial direto, sem passar
+      // pelo teste de <img> — só o resto (link de imagem de verdade) precisa provar
+      // que carrega antes de entrar, porque um link de página (ex: post do
+      // Instagram/Pinterest em vez do arquivo) não carrega como <img> e a foto
+      // nunca aparecia no board, sem aviso nenhum.
+      const avisos = [];
+      const novosItens = [];
+      const urlsParaTestar = [];
+      for(const url of urlsDigitadas){
+        const video = await detectarVisionVideo(url);
+        if(video) novosItens.push({ src: video.thumb, tipoVideo: video.tipoVideo, embedSrc: video.embedSrc });
+        else urlsParaTestar.push(url);
       }
-    }
-    for(const file of files){
-      try{
-        novosItens.push({ src: await resizeImageDataUrl(file, 900), tipoVideo: null, embedSrc: null });
-      } catch(err){
-        avisos.push('Não consegui ler um dos arquivos enviados. Os demais foram adicionados.');
+      if(urlsParaTestar.length){
+        const testesUrl = await Promise.all(urlsParaTestar.map(async (url) => ({ url, ok: await testarUrlImagem(url) })));
+        testesUrl.filter(t => t.ok).forEach(t => novosItens.push({ src: t.url, tipoVideo: null, embedSrc: null }));
+        const urlsInvalidas = testesUrl.filter(t => !t.ok).map(t => t.url);
+        if(urlsInvalidas.length){
+          avisos.push(`${urlsInvalidas.length} link(s) não carregaram como imagem e foram ignorados — confira se é o link direto do ARQUIVO da imagem, não da página onde ela aparece (ex: no Instagram, abra a foto e use "Copiar endereço da imagem", não o link do post). Se for um vídeo do YouTube/Instagram, também pode ser que ele tenha sido removido ou esteja privado.`);
+        }
       }
+      for(const file of files){
+        try{
+          novosItens.push({ src: await resizeImageDataUrl(file, 900), tipoVideo: null, embedSrc: null });
+        } catch(err){
+          avisos.push('Não consegui ler um dos arquivos enviados. Os demais foram adicionados.');
+        }
+      }
+      if(!novosItens.length){
+        errorEl.textContent = avisos.join(' ') || 'Nenhuma imagem válida pra adicionar.';
+        errorEl.style.display = 'block';
+        return;
+      }
+      const data = await dbGet(userPath('/VisionBoard')) || {};
+      const existingEntries = Object.entries(data).sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
+      const allSrcs = existingEntries.map(([, v]) => v.src).concat(novosItens.map(it => it.src));
+      const layout = await visionBoardAutoLayout(allSrcs);
+      const updates = {};
+      existingEntries.forEach(([id], i) => { updates[id] = { ...data[id], ...layout[i] }; });
+      const novasEntries = novosItens.map((it, i) => {
+        const pos = layout[existingEntries.length + i];
+        return [newId(), { ...it, order: existingEntries.length + i, criadoEm: new Date().toISOString(), ...pos }];
+      });
+      novasEntries.forEach(([id, v]) => { updates[id] = v; });
+      await Promise.all(Object.entries(updates).map(([id, v]) => dbPutSilent(userPath('/VisionBoard/' + id), v)));
+      document.getElementById('visionUrlInput').value = '';
+      document.getElementById('visionUploadInput').value = '';
+      if(avisos.length){
+        errorEl.textContent = avisos.join(' ');
+        errorEl.style.display = 'block';
+      }
+      await renderVisionManageList();
+      await renderVisionBoard();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = textoOriginal;
     }
-    if(!novosItens.length){
-      errorEl.textContent = avisos.join(' ') || 'Nenhuma imagem válida pra adicionar.';
-      errorEl.style.display = 'block';
-      return;
-    }
-    const data = await dbGet(userPath('/VisionBoard')) || {};
-    const existingEntries = Object.entries(data).sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
-    const allSrcs = existingEntries.map(([, v]) => v.src).concat(novosItens.map(it => it.src));
-    const layout = await visionBoardAutoLayout(allSrcs);
-    const updates = {};
-    existingEntries.forEach(([id], i) => { updates[id] = { ...data[id], ...layout[i] }; });
-    const novasEntries = novosItens.map((it, i) => {
-      const pos = layout[existingEntries.length + i];
-      return [newId(), { ...it, order: existingEntries.length + i, criadoEm: new Date().toISOString(), ...pos }];
-    });
-    novasEntries.forEach(([id, v]) => { updates[id] = v; });
-    await Promise.all(Object.entries(updates).map(([id, v]) => dbPutSilent(userPath('/VisionBoard/' + id), v)));
-    document.getElementById('visionUrlInput').value = '';
-    document.getElementById('visionUploadInput').value = '';
-    if(avisos.length){
-      errorEl.textContent = avisos.join(' ');
-      errorEl.style.display = 'block';
-    }
-    await renderVisionManageList();
-    await renderVisionBoard();
   });
 
   /* ---------- Central de Decisões ---------- */
