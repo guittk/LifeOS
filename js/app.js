@@ -180,7 +180,7 @@
       visionLayersCloseBtn: 'Fechar o painel de camadas',
       corPrincipalSwatchBtn: 'Escolher a cor principal',
       importIcsBtn: 'Importar eventos de um arquivo .ics',
-      notasCategoriasBtn: 'Gerenciar categorias do Arquivo'
+      notasCategoriasBtn: 'Gerenciar categorias das Notas'
     };
     Object.entries(rotulos).forEach(([id, rotulo]) => {
       const el = document.getElementById(id);
@@ -341,6 +341,31 @@
     el.addEventListener('click', () => goToView(el.getAttribute('data-view-link')));
   });
 
+  /* ---------- Minimizar/maximizar a sidebar (só desktop, >880px) ----------
+     No mobile a sidebar já vira gaveta (ver "Navegação mobile" abaixo) — as
+     regras de colapso ficam atrás de um @media (min-width:881px) no CSS, então
+     nunca competem: redimensionar a janela pra baixo de 880px simplesmente
+     ignora a classe .collapsed sem precisar zerar nada aqui. */
+  const SIDEBAR_COLAPSADA_KEY = 'lifeosSidebarColapsada';
+  const sidebarCollapseBtn = document.getElementById('sidebarCollapseBtn');
+  function aplicarSidebarColapsada(colapsada){
+    document.querySelector('.sidebar').classList.toggle('collapsed', colapsada);
+    document.body.classList.toggle('sidebar-collapsed', colapsada);
+    if(sidebarCollapseBtn){
+      sidebarCollapseBtn.textContent = colapsada ? '»' : '«';
+      sidebarCollapseBtn.title = colapsada ? 'Maximizar sidebar' : 'Minimizar sidebar';
+      sidebarCollapseBtn.setAttribute('aria-label', sidebarCollapseBtn.title);
+    }
+  }
+  if(sidebarCollapseBtn){
+    aplicarSidebarColapsada(localStorage.getItem(SIDEBAR_COLAPSADA_KEY) === 'sim');
+    sidebarCollapseBtn.addEventListener('click', () => {
+      const colapsada = !document.querySelector('.sidebar').classList.contains('collapsed');
+      localStorage.setItem(SIDEBAR_COLAPSADA_KEY, colapsada ? 'sim' : 'nao');
+      aplicarSidebarColapsada(colapsada);
+    });
+  }
+
   /* ---------- Navegação mobile ----------
      Abaixo de 880px a sidebar vira gaveta: a barra inferior leva direto às 4
      telas mais usadas e o botão "Menu" abre a sidebar por cima do conteúdo. */
@@ -384,6 +409,16 @@
   // Voltando pro desktop, a gaveta não pode continuar "aberta" por baixo.
   window.addEventListener('resize', () => {
     if(window.innerWidth > 880) closeMobileMenu();
+  });
+  // A altura da lousa do Vision Board acompanha a tela — recalcula ao redimensionar
+  // a janela (só quando a view está mesmo aberta, senão getBoundingClientRect mentiria).
+  let visionResizeDebounce = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(visionResizeDebounce);
+    visionResizeDebounce = setTimeout(() => {
+      const view = document.getElementById('view-visionboard');
+      if(view && view.classList.contains('active') && typeof paintVisionBoard === 'function') paintVisionBoard();
+    }, 150);
   });
 
   /* ---------- Sub-abas (Tarefas: Hoje / Semana / Lista / Kanban) ---------- */
@@ -446,10 +481,10 @@
   ];
   // Toda view também é um comando de navegação.
   const SEARCH_VIEWS = [
-    ['hoje','Hoje'], ['storage','Arquivo'], ['tarefas','Tarefas'], ['monday','Planejamento'],
+    ['hoje','Hoje'], ['storage','Notas'], ['tarefas','Tarefas'], ['monday','Planejamento'],
     ['agenda','Agenda'], ['rotina','Rotina'], ['casa','Casa'], ['financas','Finanças'],
     ['fluencia','Fluência'], ['bateria','Bateria'], ['academia','Academia'], ['diario','Diário'],
-    ['planoalimentar','Plano Alimentar'], ['objetivos','Objetivos'], ['decisoes','Decisões'],
+    ['planoalimentar','Plano Alimentar'], ['objetivos','Objetivos'], ['timelineobjetivos','Timeline'], ['decisoes','Decisões'],
     ['visionboard','Vision Board']
   ].map(([v, nome]) => ({
     rotulo: 'Ir para ' + nome, chaves: 'ir abrir ' + nome + ' ' + v, run: () => goToView(v)
@@ -485,7 +520,7 @@
     Object.values(planItens || {}).forEach(t => {
       searchPush(list, 'plano', t.nome, [t.responsavel, PLAN_STATUS_LABEL[t.status]].filter(Boolean).join(' · '));
     });
-    Object.values(notasAreas || {}).forEach(a => searchPush(list, 'area', a.nome, 'categoria do Arquivo'));
+    Object.values(notasAreas || {}).forEach(a => searchPush(list, 'area', a.nome, 'categoria das Notas'));
     Object.values(notas || {}).forEach(n => {
       const area = n.areaId && notasAreas ? notasAreas[n.areaId] : null;
       searchPush(list, 'nota', n.titulo, 'nota' + (area ? ' · ' + area.nome : ''));
@@ -1250,7 +1285,7 @@
     { key:'tarefas', label:'Tarefas' },
     { key:'monday', label:'Planejamento' },
     { key:'agenda', label:'Agenda' },
-    { key:'storage', label:'Arquivo' },
+    { key:'storage', label:'Notas' },
     { key:'academia', label:'Academia' },
     { key:'diario', label:'Diário' },
     { key:'planoalimentar', label:'Plano Alimentar' },
@@ -2321,6 +2356,13 @@
     const panel = document.getElementById('visionLayersPanel');
     return !!(panel && panel.classList.contains('open')) && !visionPendingShuffle;
   }
+  // Altura disponível da tela a partir de onde a lousa começa, com uma folga
+  // embaixo — é o piso real (a lousa preenche a tela toda de altura), que só
+  // cresce além disso quando o conteúdo (muitas fotos) pede mais espaço.
+  function visionAlturaDisponivel(el){
+    const top = el.getBoundingClientRect().top;
+    return Math.max(460, Math.round(window.innerHeight - top - 28));
+  }
   function paintVisionBoard(){
     const el = document.getElementById('visionBoard');
     if(!el) return;
@@ -2329,15 +2371,14 @@
       return [id, override ? { ...v, ...override } : v];
     });
     if(!entries.length){
-      el.style.minHeight = '260px';
+      el.style.minHeight = visionAlturaDisponivel(el) + 'px';
       el.innerHTML = '<p class="empty-state" style="padding:40px;">Seu Vision Board está vazio. Clique em "Gerenciar imagens" pra começar a montar.</p>';
       return;
     }
-    // o board cresce conforme a quantidade de fotos, em vez de um tamanho fixo
-    // grande demais que deixa vão sobrando quando tem poucas imagens. O piso
-    // subiu de 320 pra 460: com só 1-3 fotos a lousa ficava baixa demais,
-    // espremendo o colagem em vez de dar respiro ao redor.
-    el.style.minHeight = Math.min(1100, Math.max(460, 160 + entries.length * 130)) + 'px';
+    // o board cresce conforme a quantidade de fotos além do que já preenche a
+    // tela, em vez de um tamanho fixo grande demais que deixa vão sobrando
+    // quando tem poucas imagens.
+    el.style.minHeight = Math.max(visionAlturaDisponivel(el), 160 + entries.length * 130) + 'px';
     el.classList.toggle('layers-mode', visionLayersOpen());
     const visibleEntries = entries.filter(([, v]) => !v.hidden);
     const handlesHtml = visionLayersOpen() ? `
@@ -2638,6 +2679,31 @@
     '<circle cx="255" cy="188" r="8" fill="#fff"/>' +
     '</svg>'
   );
+  // Busca a imagem de capa de verdade de um post/reel do Instagram, lendo o
+  // og:image (metadado público que o próprio Instagram expõe pra qualquer
+  // link-preview — o mesmo que WhatsApp/Slack/Discord usam) via um serviço
+  // gratuito de unfurling, já que o navegador não pode ler isso direto
+  // (CORS bloqueia um fetch cru pro instagram.com). Sem login, sem token.
+  // Se o serviço estiver fora do ar ou o post não tiver preview, tenta o
+  // atalho antigo como plano B; se os dois falharem, quem chamou usa o
+  // cartão-placeholder.
+  async function buscarThumbInstagram(url){
+    try{
+      const res = await fetchWithTimeout('https://api.microlink.io/?url=' + encodeURIComponent(url), undefined, 7000);
+      if(res.ok){
+        const json = await res.json();
+        const img = json && json.data && json.data.image && json.data.image.url;
+        if(img && await testarUrlImagem(img)) return img;
+      }
+    }catch(err){ /* segue pro plano B */ }
+    const ig = url.match(VISION_INSTAGRAM_RE);
+    if(ig){
+      const tipo = ig[1].toLowerCase() === 'reels' ? 'reel' : ig[1].toLowerCase();
+      const thumbReal = 'https://www.instagram.com/' + tipo + '/' + ig[2] + '/media/?size=l';
+      if(await testarUrlImagem(thumbReal)) return thumbReal;
+    }
+    return null;
+  }
   async function detectarVisionVideo(url){
     const yt = url.match(VISION_YOUTUBE_RE);
     if(yt){
@@ -2650,15 +2716,11 @@
     const ig = url.match(VISION_INSTAGRAM_RE);
     if(ig){
       const tipo = ig[1].toLowerCase() === 'reels' ? 'reel' : ig[1].toLowerCase(); // embed só aceita a forma singular
-      // Endpoint não-oficial, mas público (sem login/token): redireciona pra
-      // imagem de capa de verdade do post. Se um dia parar de funcionar (o
-      // Instagram pode bloquear a qualquer momento), cai pro placeholder.
-      const thumbReal = 'https://www.instagram.com/' + tipo + '/' + ig[2] + '/media/?size=l';
-      const thumb = (await testarUrlImagem(thumbReal)) ? thumbReal : VISION_INSTAGRAM_PLACEHOLDER;
+      const thumb = await buscarThumbInstagram(url);
       return {
         tipoVideo: 'instagram',
         embedSrc: 'https://www.instagram.com/' + tipo + '/' + ig[2] + '/embed',
-        thumb
+        thumb: thumb || VISION_INSTAGRAM_PLACEHOLDER
       };
     }
     return null;
@@ -3178,7 +3240,7 @@
 
     try{
       const ctx = await buscaColetarContexto();
-      const systemPrompt = 'Você é um assistente que responde perguntas em português sobre a vida pessoal de um usuário do LifeOS, usando apenas os dados fornecidos abaixo (tarefas, notas do Arquivo, objetivos, diário, agenda e decisões). ' +
+      const systemPrompt = 'Você é um assistente que responde perguntas em português sobre a vida pessoal de um usuário do LifeOS, usando apenas os dados fornecidos abaixo (tarefas, notas, objetivos, diário, agenda e decisões). ' +
         'Seja direto e específico, citando datas e nomes quando existirem. Se não houver informação suficiente, diga isso claramente em vez de inventar. ' +
         'Responda APENAS com um objeto JSON, sem markdown, no formato exato: {"resposta": "texto da resposta em português", "referencias": [{"tipo": "tarefas|storage|objetivos|diario|agenda|decisoes", "texto": "trecho curto de referência"}]}. ' +
         'Inclua no máximo 6 referências, só das fontes realmente usadas na resposta.\n\nDados do usuário (JSON): ' + JSON.stringify(ctx);
@@ -4441,7 +4503,28 @@
       }
     }catch(e){ /* mantém o tema já aplicado a partir do localStorage */ }
   }
+  /* Esconder/mostrar os textos do Diário — pra folhear sem se preocupar com quem
+     está de relance por perto. Lembra a escolha entre sessões; começa escondido
+     por padrão (privacidade primeiro), a não ser que a pessoa já tenha optado
+     por deixar visível antes. */
+  const DIARIO_OCULTO_KEY = 'lifeosDiarioOculto';
+  function diarioTextosOcultos(){ return localStorage.getItem(DIARIO_OCULTO_KEY) !== 'nao'; }
+  function aplicarDiarioOculto(){
+    const view = document.getElementById('view-diario');
+    const btn = document.getElementById('diarioToggleTextoBtn');
+    if(!view || !btn) return;
+    const oculto = diarioTextosOcultos();
+    view.classList.toggle('diario-oculto', oculto);
+    btn.textContent = oculto ? '👁 Mostrar textos' : '🙈 Esconder textos';
+  }
+  document.getElementById('diarioToggleTextoBtn').addEventListener('click', () => {
+    localStorage.setItem(DIARIO_OCULTO_KEY, diarioTextosOcultos() ? 'nao' : 'sim');
+    aplicarDiarioOculto();
+  });
+  aplicarDiarioOculto();
+
   async function renderDiario(){
+    aplicarDiarioOculto();
     const listEl = document.getElementById('diarioEntriesList');
     const countEl = document.getElementById('diarioEntryCount');
     const labelEl = document.getElementById('diarioTodayLabel');
@@ -4965,17 +5048,12 @@
     if(document.activeElement !== almocoInput) almocoInput.value = config.insulinaAlmocoUi || '';
     if(document.activeElement !== jantarInput) jantarInput.value = config.insulinaJantarUi || '';
   }
-  document.getElementById('paInsulinaCafeMetaInput').addEventListener('change', async (e) => {
-    await dbPatch(userPath('/PlanoAlimentarConfig'), { insulinaCafeUi: Math.max(0, Number(e.target.value) || 0) });
-    await renderHojeInsulina();
-  });
-  document.getElementById('paInsulinaAlmocoMetaInput').addEventListener('change', async (e) => {
-    await dbPatch(userPath('/PlanoAlimentarConfig'), { insulinaAlmocoUi: Math.max(0, Number(e.target.value) || 0) });
-    await renderHojeInsulina();
-  });
-  document.getElementById('paInsulinaJantarMetaInput').addEventListener('change', async (e) => {
-    await dbPatch(userPath('/PlanoAlimentarConfig'), { insulinaJantarUi: Math.max(0, Number(e.target.value) || 0) });
-    await renderHojeInsulina();
+  // As três metas de insulina só entravam no rascunho de nome — na prática
+  // gravavam na hora (dbPatch a cada "change"), fora do fluxo de "Salvar
+  // alterações" do resto da tela. Agora só marcam a tela como suja; a
+  // gravação de verdade acontece junto com o resto, no clique de Salvar.
+  ['paInsulinaCafeMetaInput', 'paInsulinaAlmocoMetaInput', 'paInsulinaJantarMetaInput'].forEach(id => {
+    document.getElementById(id).addEventListener('input', () => setPaDirty(true));
   });
 
   document.getElementById('paSaveBtn').addEventListener('click', async () => {
@@ -4986,9 +5064,15 @@
         Object.values(m.alimentos || {}).forEach(f => { if(typeof f.nome === 'string') f.nome = f.nome.trim(); });
       });
     });
-    await dbPut(userPath('/PlanoAlimentar'), paDraft);
+    const insulinaCafeUi = Math.max(0, Number(document.getElementById('paInsulinaCafeMetaInput').value) || 0);
+    const insulinaAlmocoUi = Math.max(0, Number(document.getElementById('paInsulinaAlmocoMetaInput').value) || 0);
+    const insulinaJantarUi = Math.max(0, Number(document.getElementById('paInsulinaJantarMetaInput').value) || 0);
+    await Promise.all([
+      dbPut(userPath('/PlanoAlimentar'), paDraft),
+      dbPatch(userPath('/PlanoAlimentarConfig'), { insulinaCafeUi, insulinaAlmocoUi, insulinaJantarUi })
+    ]);
     setPaDirty(false);
-    await renderHojePlanoAlimentar();
+    await Promise.all([renderHojePlanoAlimentar(), renderHojeInsulina()]);
   });
   document.getElementById('paCancelBtn').addEventListener('click', async () => {
     await renderPlanoAlimentar();
@@ -7045,7 +7129,7 @@
       [renderHojeTimeline,       'a linha do tempo de hoje',    'hojeTimeline24hTrack'],
       [renderFluenciaToday,      'o Fluência de hoje',          []]
     ],
-    storage: [[renderArquivoNotas, 'o Arquivo', 'notasBoard']],
+    storage: [[renderArquivoNotas, 'as Notas', 'notasBoard']],
     tarefas: [
       [renderTasks,      'as Tarefas',            []],
       [renderTaskGroups, 'os grupos de tarefas',  'taskGroupsList']
@@ -7068,6 +7152,7 @@
     diario:         [[renderDiario, 'o Diário', 'diarioEntriesList']],
     planoalimentar: [[renderPlanoAlimentar, 'o Plano Alimentar', 'paDaysGrid']],
     busca:          [],
+    timelineobjetivos: [],
     config:         []
   };
 
@@ -7110,7 +7195,7 @@
     // Carrega as Notas no boot mesmo sem abrir o Arquivo: é o que preenche o
     // badge de contagem na sidebar, visível de qualquer tela.
     await Promise.allSettled([
-      guardRender(async () => { await notasCarregarEstado(); notasAtualizarBadges(); }, 'o Arquivo', []),
+      guardRender(async () => { await notasCarregarEstado(); notasAtualizarBadges(); }, 'as Notas', []),
       renderView('hoje')
     ]);
     // Trava de segurança: garante que o overlay global de loading nunca fique

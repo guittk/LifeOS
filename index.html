@@ -63,52 +63,54 @@
 <aside class="sidebar" aria-label="Navegação lateral">
   <div class="brand">
     <div class="brand-mark">L</div>
-    <div>
+    <div class="brand-text">
       <div class="brand-name">Life OS</div>
       <div class="brand-sub">Evolução assistida</div>
     </div>
+    <button type="button" class="sidebar-collapse-btn" id="sidebarCollapseBtn" title="Minimizar sidebar" aria-label="Minimizar sidebar">«</button>
   </div>
   <div class="sidebar-date" id="sidebarDate">—</div>
 
   <nav class="nav-level">
     <div class="nav-level-label">Executar</div>
-    <div class="nav-item active" data-view="hoje">
-      <span class="nav-icon">☀️</span> Hoje
+    <div class="nav-item active" data-view="hoje" title="Hoje">
+      <span class="nav-icon">☀️</span><span class="nav-label">Hoje</span>
     </div>
   </nav>
 
   <nav class="nav-level">
     <div class="nav-level-label">Organizar</div>
-    <div class="nav-item" data-view="storage"><span class="nav-icon">🗂️</span> Arquivo <span class="badge" id="navInboxBadge">0</span></div>
-    <div class="nav-item" data-view="tarefas"><span class="nav-icon">✅</span> Tarefas</div>
-    <div class="nav-item" data-view="agenda"><span class="nav-icon">📅</span> Agenda</div>
-    <div class="nav-item" data-view="rotina"><span class="nav-icon">🔁</span> Rotina</div>
-    <div class="nav-item" data-view="casa"><span class="nav-icon">🏡</span> Casa</div>
+    <div class="nav-item" data-view="storage" title="Notas"><span class="nav-icon">🗂️</span><span class="nav-label">Notas</span> <span class="badge" id="navInboxBadge">0</span></div>
+    <div class="nav-item" data-view="tarefas" title="Tarefas"><span class="nav-icon">✅</span><span class="nav-label">Tarefas</span></div>
+    <div class="nav-item" data-view="agenda" title="Agenda"><span class="nav-icon">📅</span><span class="nav-label">Agenda</span></div>
+    <div class="nav-item" data-view="rotina" title="Rotina"><span class="nav-icon">🔁</span><span class="nav-label">Rotina</span></div>
+    <div class="nav-item" data-view="casa" title="Casa"><span class="nav-icon">🏡</span><span class="nav-label">Casa</span></div>
+    <div class="nav-item" data-view="decisoes" title="Decisões"><span class="nav-icon">🧭</span><span class="nav-label">Decisões</span></div>
+    <div class="nav-item" data-view="busca" title="Perguntar"><span class="nav-icon">💬</span><span class="nav-label">Perguntar</span></div>
   </nav>
 
   <nav class="nav-level">
     <div class="nav-level-label">Evoluir</div>
-    <div class="nav-item" data-view="fluencia"><span class="nav-icon">🗣️</span> Fluência</div>
-    <div class="nav-item" data-view="academia"><span class="nav-icon">🏋️</span> Academia</div>
-    <div class="nav-item" data-view="diario"><span class="nav-icon">📓</span> Diário</div>
-    <div class="nav-item" data-view="planoalimentar"><span class="nav-icon">🍽️</span> Plano Alimentar</div>
-    <div class="nav-item" data-view="objetivos"><span class="nav-icon">🎯</span> Objetivos</div>
-    <div class="nav-item" data-view="decisoes"><span class="nav-icon">🧭</span> Decisões</div>
-    <div class="nav-item" data-view="busca"><span class="nav-icon">💬</span> Perguntar</div>
-    <div class="nav-item" data-view="visionboard"><span class="nav-icon">🖼️</span> Vision Board</div>
+    <div class="nav-item" data-view="fluencia" title="Fluência"><span class="nav-icon">🗣️</span><span class="nav-label">Fluência</span></div>
+    <div class="nav-item" data-view="academia" title="Academia"><span class="nav-icon">🏋️</span><span class="nav-label">Academia</span></div>
+    <div class="nav-item" data-view="diario" title="Diário"><span class="nav-icon">📓</span><span class="nav-label">Diário</span></div>
+    <div class="nav-item" data-view="planoalimentar" title="Plano Alimentar"><span class="nav-icon">🍽️</span><span class="nav-label">Plano Alimentar</span></div>
+    <div class="nav-item" data-view="objetivos" title="Objetivos"><span class="nav-icon">🎯</span><span class="nav-label">Objetivos</span></div>
+    <div class="nav-item" data-view="timelineobjetivos" title="Timeline"><span class="nav-icon">📍</span><span class="nav-label">Timeline</span></div>
+    <div class="nav-item" data-view="visionboard" title="Vision Board"><span class="nav-icon">🖼️</span><span class="nav-label">Vision Board</span></div>
   </nav>
 
   <!-- Telas de uso ocasional: continuam funcionando 100%, só ficam visualmente
        apagadas e no fim da lista pra não competir com o resto da sidebar. -->
   <nav class="nav-level">
-    <div class="nav-item nav-item-dim" data-view="monday"><span class="nav-icon">📋</span> Planejamento</div>
-    <div class="nav-item nav-item-dim" data-view="financas"><span class="nav-icon">💰</span> Finanças</div>
-    <div class="nav-item nav-item-dim" data-view="bateria"><span class="nav-icon">🔋</span> Bateria</div>
+    <div class="nav-item nav-item-dim" data-view="monday" title="Planejamento"><span class="nav-icon">📋</span><span class="nav-label">Planejamento</span></div>
+    <div class="nav-item nav-item-dim" data-view="financas" title="Finanças"><span class="nav-icon">💰</span><span class="nav-label">Finanças</span></div>
+    <div class="nav-item nav-item-dim" data-view="bateria" title="Bateria"><span class="nav-icon">🔋</span><span class="nav-label">Bateria</span></div>
   </nav>
 
   <div class="sidebar-foot">
-    <div class="nav-item" data-view="config"><span class="nav-icon">⚙️</span> Configurações</div>
-    <div class="nav-item" id="logoutBtn"><span class="nav-icon">🚪</span> Sair</div>
+    <div class="nav-item" data-view="config" title="Configurações"><span class="nav-icon">⚙️</span><span class="nav-label">Configurações</span></div>
+    <div class="nav-item" id="logoutBtn" title="Sair"><span class="nav-icon">🚪</span><span class="nav-label">Sair</span></div>
   </div>
 </aside>
 
@@ -118,7 +120,7 @@
   <button type="button" class="mobile-nav-item active" data-view="hoje"><span class="mn-icon">◉</span>Hoje</button>
   <button type="button" class="mobile-nav-item" data-view="tarefas"><span class="mn-icon">✓</span>Tarefas</button>
   <button type="button" class="mobile-nav-item" data-view="agenda"><span class="mn-icon">▦</span>Agenda</button>
-  <button type="button" class="mobile-nav-item" data-view="storage"><span class="mn-icon">▤</span>Arquivo<span class="mn-badge" id="mobileInboxBadge"></span></button>
+  <button type="button" class="mobile-nav-item" data-view="storage"><span class="mn-icon">▤</span>Notas<span class="mn-badge" id="mobileInboxBadge"></span></button>
   <button type="button" class="mobile-nav-item" id="mobileMoreBtn" aria-expanded="false"><span class="mn-icon">≡</span>Menu</button>
 </nav>
 
@@ -764,7 +766,7 @@
     <div class="view-head">
       <div>
         <p class="eyebrow">Organizar</p>
-        <h1 class="view-title">Arquivo</h1>
+        <h1 class="view-title">Notas</h1>
         <p class="view-desc">Um mural de notas: jogue qualquer coisa na captura lá embaixo, organize em categorias, arraste pra reordenar.</p>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -947,6 +949,30 @@
     </div>
   </section>
 
+  <!-- TIMELINE DE OBJETIVOS (estática, só pra visualizar a ordem — sem edição) -->
+  <section class="view" id="view-timelineobjetivos">
+    <div class="view-head">
+      <div>
+        <p class="eyebrow">Evoluir</p>
+        <h1 class="view-title">Timeline de Objetivos</h1>
+        <p class="view-desc">A ordem dos grandes marcos, um depois do outro.</p>
+      </div>
+    </div>
+
+    <ol class="obj-timeline">
+      <li class="obj-timeline-item"><span class="obj-timeline-num">1</span><span class="obj-timeline-nome">Pagar dívidas</span></li>
+      <li class="obj-timeline-item"><span class="obj-timeline-num">2</span><span class="obj-timeline-nome">Tirar CNH da Julia</span></li>
+      <li class="obj-timeline-item"><span class="obj-timeline-num">3</span><span class="obj-timeline-nome">Arrumar notebook</span></li>
+      <li class="obj-timeline-item"><span class="obj-timeline-num">4</span><span class="obj-timeline-nome">Comprar apartamento</span></li>
+      <li class="obj-timeline-item"><span class="obj-timeline-num">5</span><span class="obj-timeline-nome">Comprar microondas</span></li>
+      <li class="obj-timeline-item"><span class="obj-timeline-num">6</span><span class="obj-timeline-nome">Reformar apartamento</span></li>
+      <li class="obj-timeline-item"><span class="obj-timeline-num">7</span><span class="obj-timeline-nome">Comprar uma moto</span></li>
+      <li class="obj-timeline-item"><span class="obj-timeline-num">8</span><span class="obj-timeline-nome">Vender apartamento</span></li>
+      <li class="obj-timeline-item"><span class="obj-timeline-num">9</span><span class="obj-timeline-nome">Comprar uma chácara</span></li>
+      <li class="obj-timeline-item"><span class="obj-timeline-num">10</span><span class="obj-timeline-nome">Ter filho</span></li>
+    </ol>
+  </section>
+
   <!-- DECISÕES -->
   <section class="view" id="view-decisoes">
     <div class="view-head">
@@ -1122,6 +1148,7 @@
         <h1 class="view-title">Diário</h1>
         <p class="view-desc">Seu registro pessoal — só suas palavras, do jeito que você escreveu.</p>
       </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="diarioToggleTextoBtn">👁 Mostrar textos</button>
     </div>
 
     <div class="diary-theme-row">
