@@ -2657,6 +2657,17 @@
       img.src = url;
     });
   }
+  // Igual, mas devolve o tamanho da imagem — usado pra distinguir a thumbnail
+  // de verdade da imagem-placeholder cinza que o YouTube devolve (com HTTP 200
+  // normal, sem erro nenhum) quando o vídeo foi removido ou é privado.
+  function testarUrlImagemComTamanho(url){
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve({ ok:true, w:img.naturalWidth, h:img.naturalHeight });
+      img.onerror = () => resolve({ ok:false, w:0, h:0 });
+      img.src = url;
+    });
+  }
 
   /* Vídeo do YouTube/Instagram no Vision Board: mostra só a thumb no card, com um
      botão de play que abre o vídeo de verdade num lightbox — sem baixar/hospedar
@@ -2704,23 +2715,33 @@
     }
     return null;
   }
+  // Devolve null quando não dá pra confirmar que o vídeo existe de verdade —
+  // nesse caso quem chama trata o link como inválido e não adiciona nada
+  // (pedido explícito: vídeo removido/privado não deve virar card nenhum).
   async function detectarVisionVideo(url){
     const yt = url.match(VISION_YOUTUBE_RE);
     if(yt){
+      const thumb = 'https://img.youtube.com/vi/' + yt[1] + '/hqdefault.jpg';
+      const teste = await testarUrlImagemComTamanho(thumb);
+      // Vídeo removido/privado: o YouTube devolve 200 OK com uma imagem cinza
+      // de exatamente 120×90 em vez de um erro HTTP — os vídeos de verdade
+      // vêm em 480×360 (ou maiores).
+      if(!teste.ok || (teste.w === 120 && teste.h === 90)) return null;
       return {
         tipoVideo: 'youtube',
         embedSrc: 'https://www.youtube.com/embed/' + yt[1] + '?autoplay=1',
-        thumb: 'https://img.youtube.com/vi/' + yt[1] + '/hqdefault.jpg'
+        thumb
       };
     }
     const ig = url.match(VISION_INSTAGRAM_RE);
     if(ig){
       const tipo = ig[1].toLowerCase() === 'reels' ? 'reel' : ig[1].toLowerCase(); // embed só aceita a forma singular
       const thumb = await buscarThumbInstagram(url);
+      if(!thumb) return null; // não deu pra confirmar uma thumbnail real
       return {
         tipoVideo: 'instagram',
         embedSrc: 'https://www.instagram.com/' + tipo + '/' + ig[2] + '/embed',
-        thumb: thumb || VISION_INSTAGRAM_PLACEHOLDER
+        thumb
       };
     }
     return null;
@@ -2876,7 +2897,7 @@
       testesUrl.filter(t => t.ok).forEach(t => novosItens.push({ src: t.url, tipoVideo: null, embedSrc: null }));
       const urlsInvalidas = testesUrl.filter(t => !t.ok).map(t => t.url);
       if(urlsInvalidas.length){
-        avisos.push(`${urlsInvalidas.length} link(s) não carregaram como imagem e foram ignorados — confira se é o link direto do ARQUIVO da imagem, não da página onde ela aparece (ex: no Instagram, abra a foto e use "Copiar endereço da imagem", não o link do post), ou um link de vídeo do YouTube/Instagram.`);
+        avisos.push(`${urlsInvalidas.length} link(s) não carregaram como imagem e foram ignorados — confira se é o link direto do ARQUIVO da imagem, não da página onde ela aparece (ex: no Instagram, abra a foto e use "Copiar endereço da imagem", não o link do post). Se for um vídeo do YouTube/Instagram, também pode ser que ele tenha sido removido ou esteja privado.`);
       }
     }
     for(const file of files){

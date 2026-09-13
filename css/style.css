@@ -1165,7 +1165,7 @@
     .vision-layers-panel{ width:100%; height:0; }
     .vision-layers-panel.open{ width:100%; height:320px; margin-left:0; margin-top:14px; }
   }
-  .vision-manage-bar{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  .vision-manage-bar{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 10px; margin-bottom:10px; }
   .vision-manage-selectall{ display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text-mut); cursor:pointer; }
   .vision-manage-list{ display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:10px; margin-bottom:16px; max-height:340px; overflow-y:auto; }
   .vision-manage-item{ position:relative; border-radius:6px; overflow:hidden; background:var(--surface); border:1px solid var(--line); }
