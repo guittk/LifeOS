@@ -627,6 +627,14 @@
     if(visionFiltroCategoria === '__sem__') return entries.filter(([, v]) => !v.categoria);
     return entries.filter(([, v]) => v.categoria === visionFiltroCategoria);
   }
+  // Igual à de cima, mas por uma categoria específica (não a que está sendo
+  // vista agora) — usado ao adicionar 1 foto direto numa categoria escolhida
+  // (retry de link quebrado), sem depender do filtro atual da tela.
+  function visionEntriesDaCategoria(data, categoria){
+    const entries = visionSortedEntries(data);
+    if(categoria == null) return entries.filter(([, v]) => !v.categoria);
+    return entries.filter(([, v]) => v.categoria === categoria);
+  }
   /* ---------- Categorias do Vision Board (quadros à parte + o Geral, que soma tudo) ---------- */
   async function visionCreateCategoria(nome){
     const cats = Object.values(visionCategorias);
@@ -1408,6 +1416,24 @@
     }));
     renderVisionManageBar();
   }
+  // Repete o mesmo teste do fluxo de adicionar (vídeo primeiro, depois <img>)
+  // pra um único link, e já entra no board na categoria escolhida se der certo.
+  async function tentarNovamenteVisionLink(url, categoria){
+    const video = await detectarVisionVideo(url);
+    let item = video ? { src: video.thumb, tipoVideo: video.tipoVideo, embedSrc: video.embedSrc } : null;
+    if(!item && await testarUrlImagem(url)) item = { src: url, tipoVideo: null, embedSrc: null };
+    if(!item) return false;
+    const data = await dbGet(userPath('/VisionBoard')) || {};
+    const existingEntries = visionEntriesDaCategoria(data, categoria);
+    const dims = visionBoardDims();
+    const layout = await visionBoardAutoLayout(existingEntries.map(([, v]) => v.src).concat([item.src]), dims.w, dims.h);
+    const updates = {};
+    existingEntries.forEach(([id], i) => { updates[id] = { ...data[id], ...layout[i] }; });
+    const idNovo = newId();
+    updates[idNovo] = { ...item, order: existingEntries.length, categoria, criadoEm: new Date().toISOString(), ...layout[existingEntries.length] };
+    await Promise.all(Object.entries(updates).map(([id, v]) => dbPutSilent(userPath('/VisionBoard/' + id), v)));
+    return true;
+  }
   async function renderVisionLinksQuebrados(){
     const wrap = document.getElementById('visionLinksQuebradosWrap');
     const list = document.getElementById('visionLinksQuebradosList');
@@ -1415,18 +1441,41 @@
     const entries = Object.values(data).sort((a, b) => (a.criadoEm || '').localeCompare(b.criadoEm || ''));
     wrap.style.display = entries.length ? '' : 'none';
     if(!entries.length) return;
-    list.innerHTML = entries.map(l => {
-      const cat = l.categoria && visionCategorias[l.categoria];
-      return `
+    const cats = Object.values(visionCategorias).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+    list.innerHTML = entries.map(l => `
       <div class="vision-broken-item" data-broken-id="${l.id}">
         <a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.url)}</a>
-        <span class="vision-broken-cat">${escapeHtml(cat ? cat.nome : 'Sem categoria')}</span>
+        <select class="vision-broken-cat-select" data-broken-cat="${l.id}" title="Categoria pra entrar se der certo">
+          <option value="">Sem categoria</option>
+          ${cats.map(c => `<option value="${c.id}"${l.categoria === c.id ? ' selected' : ''}>${escapeHtml(c.nome)}</option>`).join('')}
+        </select>
+        <button type="button" class="vision-broken-retry" data-retry-broken="${l.id}" title="Tentar novamente">🔄</button>
         <button type="button" data-del-broken="${l.id}" title="Remover da lista">×</button>
-      </div>`;
-    }).join('');
+      </div>`).join('');
+    list.querySelectorAll('[data-broken-cat]').forEach(sel => sel.addEventListener('change', () => {
+      dbPatchSilent(userPath('/VisionLinksQuebrados/' + sel.getAttribute('data-broken-cat')), { categoria: sel.value || null })
+        .catch(err => console.error('Erro ao salvar categoria do link quebrado', err));
+    }));
     list.querySelectorAll('[data-del-broken]').forEach(btn => btn.addEventListener('click', async () => {
       await dbDeleteSilent(userPath('/VisionLinksQuebrados/' + btn.getAttribute('data-del-broken')));
       await renderVisionLinksQuebrados();
+    }));
+    list.querySelectorAll('[data-retry-broken]').forEach(btn => btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-retry-broken');
+      const row = btn.closest('.vision-broken-item');
+      const categoria = row.querySelector('[data-broken-cat]').value || null;
+      btn.disabled = true;
+      const ok = await tentarNovamenteVisionLink(data[id].url, categoria);
+      if(ok){
+        await dbDeleteSilent(userPath('/VisionLinksQuebrados/' + id));
+        await renderVisionManageList();
+        await renderVisionLinksQuebrados();
+        await renderVisionBoard();
+        showAppMessage('Link adicionado ao board.', 'success');
+      }else{
+        btn.disabled = false;
+        showAppMessage('Continua não carregando — segue na lista.', 'error');
+      }
     }));
   }
   document.getElementById('visionManageSelectAll').addEventListener('change', (e) => {

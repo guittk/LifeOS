@@ -1139,7 +1139,7 @@
 
   /* Links que falharam no teste de imagem: não viram card, mas ficam aqui
      pra abrir e conferir depois — em vez de simplesmente sumirem. */
-  .vision-broken-list{ display:flex; flex-direction:column; gap:4px; margin-bottom:14px; max-height:120px; overflow-y:auto; }
+  .vision-broken-list{ display:flex; flex-direction:column; gap:4px; margin-bottom:14px; max-height:170px; overflow-y:auto; }
   .vision-broken-item{
     display:flex; align-items:center; gap:8px; background:var(--surface-hi);
     border:1px solid var(--line); border-radius:6px; padding:6px 8px;
@@ -1149,15 +1149,18 @@
     font-family:var(--mono); font-size:11px; color:var(--text-mut);
   }
   .vision-broken-item a:hover{ color:var(--sage); }
-  .vision-broken-cat{
-    flex:none; font-size:10px; color:var(--text-dim); background:var(--surface);
-    border:1px solid var(--line); border-radius:20px; padding:2px 8px; white-space:nowrap;
+  .vision-broken-cat-select{
+    flex:none; max-width:120px; font-size:10px; color:var(--text-mut); background:var(--surface);
+    border:1px solid var(--line); border-radius:20px; padding:2px 6px; cursor:pointer;
   }
+  .vision-broken-cat-select:hover{ border-color:var(--line-strong); }
   .vision-broken-item button{
     flex:none; border:none; background:none; color:var(--text-dim); cursor:pointer;
     font-size:13px; line-height:1; padding:2px 5px; border-radius:4px;
   }
   .vision-broken-item button:hover{ color:var(--coral); background:var(--hover); }
+  .vision-broken-item .vision-broken-retry:hover{ color:var(--sage); background:var(--hover); }
+  .vision-broken-item .vision-broken-retry:disabled{ opacity:0.5; cursor:default; }
   .vision-manage-item{ position:relative; border-radius:6px; overflow:hidden; background:var(--surface); border:1px solid var(--line); }
   .vision-manage-item img{ display:block; width:100%; height:96px; object-fit:cover; }
   .vision-manage-item.broken img{ opacity:0; }
