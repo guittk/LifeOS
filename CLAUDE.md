@@ -11,7 +11,7 @@ diário, plano alimentar, academia, finanças, vision board etc., em português.
 ```
 index.html          Markup: tela de login + shell do app (sidebar + uma <section class="view"> por página)
 css/style.css        Todo o CSS, em blocos comentados por área
-js/app.js            Toda a lógica JS, em blocos comentados por área (sem módulos — escopo global, ordem de carregamento importa)
+js/app-*.js          Toda a lógica JS, dividida em 7 arquivos por assunto (ver abaixo) — sem módulos, escopo global, ordem de carregamento importa
 sw.js                Service worker: cache do shell (network-first) + push de despertadores/lembretes (Firebase Messaging)
 functions/index.js   Cloud Functions: proxy de IA (iaProxy) + push agendado (checarDespertadores)
 database.rules.json  Regras do Realtime Database — sempre deploy com --project anki-71f4f (ver seção Backend)
@@ -19,17 +19,33 @@ database.rules.json  Regras do Realtime Database — sempre deploy com --project
 
 Não há bundler/transpiler. Editar os arquivos já edita o app — só dar refresh no navegador.
 
-**Achar o código de uma feature**: cada bloco de `js/app.js` e `css/style.css` começa
-com um comentário `/* ---------- Nome ---------- */`. Faça Grep pelo nome da feature
-(ou pelo `data-view` da tela, que costuma bater com o nome do bloco) em vez de
-navegar por número de linha — os arquivos crescem e números de linha ficam
-errados rápido. Ex: procurando a Timeline? `grep -n "Timeline de Objetivos" js/app.js`.
+**`js/app-*.js` — um script clássico só, dividido em 7 arquivos** (14/09/2026: era um
+`app.js` de 8.796 linhas; virou isto pra ficar navegável). São `<script>` normais no
+`index.html`, **não** `type="module"` — todo mundo compartilha o mesmo escopo global,
+exatamente como antes. A ORDEM das tags em `index.html` é a mesma ordem das linhas
+no arquivo único de antes: uma declaração de função só fica disponível pros scripts
+seguintes depois que o script dela já rodou (hoisting não atravessa arquivos). Não
+reordene as tags nem mova código de um arquivo pro outro sem manter a ordem relativa.
+
+Ordem e conteúdo, do primeiro ao último `<script>`:
+1. `app-core.js` — Tema, Aparência, Navegação, sub-abas de Tarefas, fila de hoje, Sessão, Loading global
+2. `app-db-casa.js` — camada REST do Firebase (`dbGet`/`dbPut`/...), Config do Quadro, CASA
+3. `app-objetivos-vision.js` — OBJETIVOS, Timeline de Objetivos, VISION BOARD
+4. `app-decisoes-auth-notas.js` — Central de Decisões, Busca Semântica, Autenticação/login, NOTAS
+5. `app-diario-hoje.js` — DIÁRIO, painel "Objetivos" da Hoje, Rotina/Timeline 24h da Hoje
+6. `app-agenda-tarefas.js` — AGENDA, TAREFAS, GRUPOS DE TAREFAS
+7. `app-widgets-boot.js` — painéis "Água & creatina"/"Insulina" da Hoje, FLUÊNCIA, BATERIA, BOOT (é o que chama `bootApp()` no final)
+
+**Achar o código de uma feature**: cada bloco continua começando com um comentário
+`/* ---------- Nome ---------- */`, igual antes. Faça Grep pelo nome da feature (ou
+pelo `data-view` da tela) em `js/*.js` em vez de adivinhar em qual dos 7 arquivos
+ela está. Ex: procurando a Timeline? `grep -n "Timeline de Objetivos" js/*.js`.
 
 ## Backend
 
 Sem servidor próprio pra dados/auth. O app fala direto com APIs externas:
 
-- **Firebase Realtime Database** (REST, via `dbGet`/`dbPut`/`dbPatch`/`dbDelete` em `js/app.js`) — todos os dados do usuário.
+- **Firebase Realtime Database** (REST, via `dbGet`/`dbPut`/`dbPatch`/`dbDelete` em `js/app-db-casa.js`) — todos os dados do usuário.
 - **Firebase Identity Toolkit** (REST) — login/cadastro/senha. Login restrito por whitelist (`AUTH_EMAILS_PERMITIDOS` no cliente + `auth.token.email` nas Database Rules) — só guittk@hotmail.com e julialealdecamargo@hotmail.com.
 - **Firebase Cloud Messaging** — push dos despertadores/lembretes, mesmo com o app fechado/celular bloqueado (ver `sw.js` e `checarDespertadores` abaixo).
 - **Claude (Anthropic)** via Cloud Function própria (`iaProxy`) — a chave nunca chega ao navegador.
@@ -38,7 +54,7 @@ Sem servidor próprio pra dados/auth. O app fala direto com APIs externas:
 
 ### ⚠️ Dois projetos Firebase diferentes — a armadilha mais recorrente deste repo
 
-- **Dados reais** (Realtime Database + Identity Toolkit/Auth): projeto **`anki-71f4f`** (nome de exibição "LifeOS" — o app registrado lá dentro se chama "Anki", sobra de uso anterior do projeto). `FIREBASE_DB_URL`/`FIREBASE_API_KEY` em `js/app.js` apontam pra cá.
+- **Dados reais** (Realtime Database + Identity Toolkit/Auth): projeto **`anki-71f4f`** (nome de exibição "LifeOS" — o app registrado lá dentro se chama "Anki", sobra de uso anterior do projeto). `FIREBASE_DB_URL`/`FIREBASE_API_KEY` em `js/app-core.js` apontam pra cá.
 - **Hosting** (`thurgh-lifeos.web.app`) e **Cloud Functions**: projeto **`basehub-135f5`** (nome de exibição "Hube") — alias `default` no `.firebaserc`. É onde o Blaze está ativo; `anki-71f4f` não tem Cloud Functions habilitado.
 
 Na prática:
@@ -65,7 +81,7 @@ Na prática:
 `config`.
 
 O `data-view` na sidebar é o mesmo sufixo do id da `<section>` e, em geral, do nome
-do bloco correspondente em `app.js`/`style.css`.
+do bloco correspondente em `js/app-*.js`/`style.css`.
 
 ## Quadro compartilhado (casal)
 

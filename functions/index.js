@@ -12,7 +12,7 @@
 
    ---------------------------------------------------------------------------
    PUBLICADA em 14/09/2026 — secret ANTHROPIC_API_KEY setado, função no ar em
-   basehub-135f5, URL já em IA_PROXY_URL (js/app.js). Precisa validar o
+   basehub-135f5, URL já em IA_PROXY_URL (js/app-db-casa.js). Precisa validar o
    idToken contra o anki-71f4f (getAnkiApp() abaixo), não contra o Admin SDK
    padrão — sem isso toda chamada seria recusada por token de projeto errado.
 
@@ -219,7 +219,7 @@ async function dispararParaUsuario(db, messaging, uid, despertador, dataStr){
   if(!tokens.length) return;
 
   // Lembrete é a mesma coleção, com tipo diferente: notificação só de aviso,
-  // sem o som/checklist do despertador (ver dispararLembrete em js/app.js e
+  // sem o som/checklist do despertador (ver dispararLembrete em js/app-core.js e
   // o notificationclick em sw.js, que decide pra onde o toque leva).
   const ehLembrete = despertador.tipo === 'lembrete';
 
