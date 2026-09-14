@@ -1540,13 +1540,11 @@
 
      Preencha IA_PROXY_URL com a URL que `firebase deploy --only functions`
      imprime (instruções completas no topo de functions/index.js). */
-  // Vazio = features de IA desligadas (avisam por toast). Quando publicar a
-  // function, cole aqui a URL que
-  //   firebase deploy --only functions --project anki-71f4f
-  // imprime — deve ser algo como
-  //   https://southamerica-east1-anki-71f4f.cloudfunctions.net/iaProxy
-  // (funções de 2ª geração às vezes recebem um domínio .run.app).
-  const IA_PROXY_URL = '';
+  // Publicada em basehub-135f5 (onde o Blaze já está ativo — não em
+  // anki-71f4f, que é só onde os dados moram; ver getAnkiApp() em
+  // functions/index.js pra entender essa separação):
+  //   firebase deploy --only functions:iaProxy --project basehub-135f5
+  const IA_PROXY_URL = 'https://southamerica-east1-basehub-135f5.cloudfunctions.net/iaProxy';
 
   /* system: as instruções (papel, regras, formato de saída)
      prompt: o que se pede nesta chamada
@@ -1597,7 +1595,12 @@
     { key:'diario', label:'Diário' },
     { key:'planoalimentar', label:'Plano Alimentar' },
     { key:'objetivos', label:'Objetivos' },
-    { key:'visionboard', label:'Vision Board' }
+    { key:'visionboard', label:'Vision Board' },
+    { key:'financas', label:'Finanças' },
+    { key:'decisoes', label:'Decisões' },
+    { key:'timelineobjetivos', label:'Timeline' },
+    { key:'fluencia', label:'Fluência' },
+    { key:'bateria', label:'Bateria' }
   ];
   const BOARD_ID_STORAGE_KEY = 'lifeos_currentBoardId';
 
@@ -1643,11 +1646,15 @@
     }).join('');
   }
 
+  // Telas que não são "dados de um Quadro" — são utilitários pessoais
+  // (configurações da própria conta, o chat de IA) — por isso ficam sempre
+  // visíveis, mesmo vendo o Quadro de outra pessoa.
+  const NAV_SEMPRE_VISIVEL = ['config', 'busca'];
   function applyBoardPermissionsToNav(){
     const isOwn = currentBoardId === session.uid;
     document.querySelectorAll('.nav-item[data-view]').forEach(item => {
       const key = item.getAttribute('data-view');
-      if(isOwn){ item.style.display = ''; return; }
+      if(isOwn || NAV_SEMPRE_VISIVEL.includes(key)){ item.style.display = ''; return; }
       const perms = (myBoards[currentBoardId] && myBoards[currentBoardId].permissions) || {};
       item.style.display = perms[key] ? '' : 'none';
     });
@@ -1680,7 +1687,15 @@
     await ensureOwnBoard();
     await loadMyBoards();
     const saved = localStorage.getItem(BOARD_ID_STORAGE_KEY);
-    currentBoardId = (saved && myBoards[saved]) ? saved : session.uid;
+    if(saved && myBoards[saved]){
+      currentBoardId = saved;
+    }else{
+      // Sem preferência salva (primeiro login neste aparelho): se a pessoa é
+      // membro do Quadro de alguém, abre lá em vez do próprio Quadro vazio —
+      // é o caso do casal, onde um é dono e o outro só participa.
+      const quadroCompartilhado = Object.entries(myBoards).find(([id, b]) => b.role === 'member');
+      currentBoardId = quadroCompartilhado ? quadroCompartilhado[0] : session.uid;
+    }
     activeDataUid = currentBoardId;
     renderBoardSwitcher();
     applyBoardPermissionsToNav();
@@ -4618,7 +4633,7 @@
     }
   });
 
-  const AUTH_EMAILS_PERMITIDOS = ['guittk@hotmail.com', 'guittkk@hotmail.com'];
+  const AUTH_EMAILS_PERMITIDOS = ['guittk@hotmail.com', 'julialealdecamargo@hotmail.com'];
   authSubmitBtn.addEventListener('click', async () => {
     const email = authEmail.value.trim();
     const password = authPassword.value;

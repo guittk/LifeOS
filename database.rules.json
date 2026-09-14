@@ -5,8 +5,8 @@
 
     "users": {
       "$uid": {
-        ".read":  "auth != null && (auth.token.email === 'guittk@hotmail.com' || auth.token.email === 'guittkk@hotmail.com') && (auth.uid === $uid || root.child('boards').child($uid).child('members').child(auth.uid).exists())",
-        ".write": "auth != null && (auth.token.email === 'guittk@hotmail.com' || auth.token.email === 'guittkk@hotmail.com') && (auth.uid === $uid || root.child('boards').child($uid).child('members').child(auth.uid).exists())",
+        ".read":  "auth != null && (auth.token.email === 'guittk@hotmail.com' || auth.token.email === 'julialealdecamargo@hotmail.com') && (auth.uid === $uid || root.child('boards').child($uid).child('members').child(auth.uid).exists())",
+        ".write": "auth != null && (auth.token.email === 'guittk@hotmail.com' || auth.token.email === 'julialealdecamargo@hotmail.com') && (auth.uid === $uid || root.child('boards').child($uid).child('members').child(auth.uid).exists())",
 
         "Profile": {
           "Email":       { ".validate": "newData.isString() && newData.val().length <= 320" },
@@ -25,7 +25,7 @@
 
     "boards": {
       "$boardId": {
-        ".read": "auth != null && (auth.token.email === 'guittk@hotmail.com' || auth.token.email === 'guittkk@hotmail.com') && (auth.uid === $boardId || data.child('members').child(auth.uid).exists())",
+        ".read": "auth != null && (auth.token.email === 'guittk@hotmail.com' || auth.token.email === 'julialealdecamargo@hotmail.com') && (auth.uid === $boardId || data.child('members').child(auth.uid).exists())",
 
         "meta": {
           ".write": "auth != null && auth.uid === $boardId",
@@ -46,8 +46,8 @@
 
     "boardInvites": {
       "$emailKey": {
-        ".read":  "auth != null && (auth.token.email === 'guittk@hotmail.com' || auth.token.email === 'guittkk@hotmail.com')",
-        ".write": "auth != null && (auth.token.email === 'guittk@hotmail.com' || auth.token.email === 'guittkk@hotmail.com')"
+        ".read":  "auth != null && (auth.token.email === 'guittk@hotmail.com' || auth.token.email === 'julialealdecamargo@hotmail.com')",
+        ".write": "auth != null && (auth.token.email === 'guittk@hotmail.com' || auth.token.email === 'julialealdecamargo@hotmail.com')"
       }
     },
 

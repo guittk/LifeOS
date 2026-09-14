@@ -11,20 +11,17 @@
    Modelo: Claude Sonnet 5 com esforço alto.
 
    ---------------------------------------------------------------------------
-   COMO PUBLICAR (precisa ser você — envolve a sua conta e o plano de billing):
+   PUBLICADA em 14/09/2026 — secret ANTHROPIC_API_KEY setado, função no ar em
+   basehub-135f5, URL já em IA_PROXY_URL (js/app.js). Precisa validar o
+   idToken contra o anki-71f4f (getAnkiApp() abaixo), não contra o Admin SDK
+   padrão — sem isso toda chamada seria recusada por token de projeto errado.
 
-     cd functions
-     npm install
-     firebase functions:secrets:set ANTHROPIC_API_KEY   # cola a chave aqui
-     firebase deploy --only functions
+   Pra publicar de novo depois de mexer no código:
+     cd functions && firebase deploy --only functions:iaProxy --project basehub-135f5
 
-   Depois de publicar:
-     1. copie a URL que o deploy imprime;
-     2. cole em IA_PROXY_URL no js/app.js;
-     3. apague o nó /openAiKey do Realtime Database;
-     4. revogue a chave antiga da OpenAI — ela já circulou por navegadores.
-
-   Cloud Functions exige o plano Blaze (pago por uso).
+   Ainda pendente, sem urgência: apagar o nó /openAiKey do Realtime Database
+   e revogar a chave antiga da OpenAI (já circulou por navegadores antes
+   desta function existir).
    ---------------------------------------------------------------------------
    ============================================================================= */
 
@@ -35,6 +32,31 @@ const admin = require('firebase-admin');
 const Anthropic = require('@anthropic-ai/sdk');
 
 admin.initializeApp();
+
+/* Projeto cruzado: os dados de verdade (usuários, Despertadores, tokens de
+   notificação) vivem no projeto anki-71f4f, não neste projeto (basehub-135f5,
+   onde o Blaze já está ativo e onde as functions rodam). Por isso qualquer
+   função que precise validar login ou ler/escrever dados do app usa este app
+   secundário do Admin SDK, autenticado com uma conta de serviço DO anki-71f4f
+   — só assim ela enxerga aquele projeto (o Admin SDK padrão só enxerga o
+   projeto onde a function está publicada).
+
+   Secret ANKI_SERVICE_ACCOUNT já setado (14/09/2026), com a conta de serviço
+   gerada em console.firebase.google.com/project/anki-71f4f/settings/serviceaccounts/adminsdk.
+   Se precisar trocar a chave: firebase functions:secrets:set ANKI_SERVICE_ACCOUNT --project basehub-135f5 */
+const ANKI_SERVICE_ACCOUNT = defineSecret('ANKI_SERVICE_ACCOUNT');
+const ANKI_DATABASE_URL = 'https://anki-71f4f-default-rtdb.firebaseio.com';
+
+let ankiApp = null;
+function getAnkiApp(){
+  if(ankiApp) return ankiApp;
+  const cred = JSON.parse(ANKI_SERVICE_ACCOUNT.value());
+  ankiApp = admin.initializeApp(
+    { credential: admin.credential.cert(cred), databaseURL: ANKI_DATABASE_URL },
+    'anki'
+  );
+  return ankiApp;
+}
 
 const ANTHROPIC_API_KEY = defineSecret('ANTHROPIC_API_KEY');
 
@@ -65,20 +87,23 @@ function aplicarCors(req, res){
 }
 
 exports.iaProxy = onRequest(
-  { secrets: [ANTHROPIC_API_KEY], region: 'southamerica-east1', maxInstances: 5, timeoutSeconds: 120 },
+  { secrets: [ANTHROPIC_API_KEY, ANKI_SERVICE_ACCOUNT], region: 'southamerica-east1', maxInstances: 5, timeoutSeconds: 120 },
   async (req, res) => {
     aplicarCors(req, res);
     if(req.method === 'OPTIONS'){ res.status(204).send(''); return; }
     if(req.method !== 'POST'){ res.status(405).json({ error: 'Use POST.' }); return; }
 
-    // 1) Autenticação: sem idToken válido do Firebase, não passa.
+    // 1) Autenticação: sem idToken válido do Firebase, não passa. O token é
+    //    emitido pelo anki-71f4f (onde vive a Auth de verdade, não o projeto
+    //    onde esta função roda) — por isso valida no app secundário, não no
+    //    app padrão do Admin SDK. Ver getAnkiApp() no topo do arquivo.
     const header = req.get('authorization') || '';
     const idToken = header.startsWith('Bearer ') ? header.slice(7) : null;
     if(!idToken){ res.status(401).json({ error: 'Faltou o token de autenticação.' }); return; }
 
     let uid;
     try{
-      const decoded = await admin.auth().verifyIdToken(idToken);
+      const decoded = await getAnkiApp().auth().verifyIdToken(idToken);
       uid = decoded.uid;
     }catch(err){
       res.status(401).json({ error: 'Sessão inválida ou expirada. Entre novamente.' });
@@ -162,43 +187,9 @@ exports.iaProxy = onRequest(
    aberta. Esta função dispara notificações push (Firebase Cloud Messaging)
    que chegam mesmo com o app fechado ou o celular bloqueado.
 
-   IMPORTANTE — projeto cruzado: os dados de verdade (Despertadores, tokens de
-   notificação) vivem no projeto anki-71f4f, não neste projeto (basehub-135f5,
-   onde o Blaze já está ativo). Por isso esta função usa um app secundário do
-   Admin SDK autenticado com uma conta de serviço DO anki-71f4f — só assim ela
-   enxerga o Realtime Database e consegue mandar push em nome daquele projeto
-   (o token FCM do navegador está atrelado ao projeto de onde ele foi gerado).
-
-   ---------------------------------------------------------------------------
-   COMO PUBLICAR (precisa ser você):
-
-     1. Gere uma chave de conta de serviço EM anki-71f4f:
-        console.firebase.google.com/project/anki-71f4f/settings/serviceaccounts/adminsdk
-        → "Gerar nova chave privada" (baixa um .json)
-     2. Salve o conteúdo desse .json como secret NESTE projeto:
-        cd functions
-        firebase functions:secrets:set ANKI_SERVICE_ACCOUNT --project basehub-135f5
-        (cole o JSON inteiro quando pedir)
-     3. firebase deploy --only functions --project basehub-135f5
-
-   Sem push de verdade (Web Push) sem uma chave VAPID gerada em anki-71f4f —
-   isso é configurado do lado do cliente (js/app.js), não aqui.
-   ---------------------------------------------------------------------------
+   Usa o mesmo app secundário getAnkiApp() definido no topo do arquivo — ver
+   o comentário lá pra explicação do projeto cruzado.
    ============================================================================= */
-
-const ANKI_SERVICE_ACCOUNT = defineSecret('ANKI_SERVICE_ACCOUNT');
-const ANKI_DATABASE_URL = 'https://anki-71f4f-default-rtdb.firebaseio.com';
-
-let ankiApp = null;
-function getAnkiApp(){
-  if(ankiApp) return ankiApp;
-  const cred = JSON.parse(ANKI_SERVICE_ACCOUNT.value());
-  ankiApp = admin.initializeApp(
-    { credential: admin.credential.cert(cred), databaseURL: ANKI_DATABASE_URL },
-    'anki'
-  );
-  return ankiApp;
-}
 
 // A função roda em UTC por padrão — os horários configurados pelo usuário são
 // em horário de Brasília, então a hora "agora" precisa ser recalculada nesse
