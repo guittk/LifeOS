@@ -3826,7 +3826,7 @@
   }
   async function notasCreateNota(areaId, titulo){
     const now = new Date().toISOString();
-    const nota = { id:newId(), areaId: areaId || null, titulo: titulo || '', itens:{}, fixada:false, criadoEm:now, atualizadoEm:now, ordemManual: Date.now() };
+    const nota = { id:newId(), areaId: areaId || null, titulo: titulo || '', icone:'📝', itens:{}, fixada:false, criadoEm:now, atualizadoEm:now, ordemManual: Date.now() };
     notasState.notas[nota.id] = nota;
     await dbPutSilent(userPath('/Notas/' + nota.id), nota);
     return nota;
@@ -3837,7 +3837,7 @@
     const itens = {};
     itensArr.forEach((it, i) => { const id = newId(); itens[id] = { id, ordem:i, criadoEm:now, ...it }; });
     const primeiraLinha = String(textoBruto || '').split('\n').find(l => l.trim()) || '';
-    const nota = { id:newId(), areaId: areaId || null, titulo: notasTituloAutomatico(primeiraLinha), itens, fixada:false, criadoEm:now, atualizadoEm:now, ordemManual: Date.now() };
+    const nota = { id:newId(), areaId: areaId || null, titulo: notasTituloAutomatico(primeiraLinha), icone:'📝', itens, fixada:false, criadoEm:now, atualizadoEm:now, ordemManual: Date.now() };
     notasState.notas[nota.id] = nota;
     await dbPutSilent(userPath('/Notas/' + nota.id), nota);
     return nota;
@@ -3979,9 +3979,12 @@
       '<button type="button" class="board-card-pin-btn' + (nota.fixada ? ' on' : '') + '" data-pin="1" title="' + (nota.fixada ? 'Desfixar' : 'Fixar') + '">📌</button>' +
       '<button type="button" class="board-card-menu-btn" data-menu="1" title="Mais">⋯</button>' +
       '</div>' +
+      '<div class="board-card-titulo-row">' +
+      '<button type="button" class="board-card-icone-btn" data-icone-item="' + nota.id + '" title="Mudar ícone">' + escapeHtml(nota.icone || '📝') + '</button>' +
       (notasModoEdicao
         ? '<input class="board-card-titulo-input" data-titulo="1" placeholder="Sem título" value="' + escapeHtml(nota.titulo || '') + '">'
         : '<div class="board-card-titulo-texto">' + escapeHtml(nota.titulo || 'Sem título') + '</div>') +
+      '</div>' +
       (notasModoEdicao
         ? '<textarea class="board-card-textarea" data-corpo="1" rows="1">' + escapeHtml(notasParaMarkdown(nota)) + '</textarea>'
         : '<div class="board-card-corpo">' + notasCorpoVisualizacaoHtml(nota) + '</div>') +
@@ -4094,6 +4097,23 @@
 
   function notasFecharPops(){ document.querySelectorAll('.board-card-pop, .color-picker').forEach(el => el.remove()); }
 
+  const NOTAS_ICONES = ['📝','💡','📌','✅','📋','📚','🎯','💰','🏠','🍽️','🎬','🎮','💻','🔧','🌱','❤️','⭐','🗓️','✈️','🎨'];
+  function notasAbrirIconePopover(anchorEl, onEscolher){
+    notasFecharPops();
+    const pop = document.createElement('div');
+    pop.className = 'board-card-pop notas-icone-pop';
+    pop.innerHTML = NOTAS_ICONES.map(ic => '<button type="button" class="notas-icone-opcao" data-icone="' + ic + '">' + ic + '</button>').join('');
+    document.body.appendChild(pop);
+    const rect = anchorEl.getBoundingClientRect();
+    pop.style.left = Math.min(rect.left + window.scrollX, window.innerWidth - 210) + 'px';
+    pop.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    function fechar(){ pop.remove(); document.removeEventListener('click', onDoc); }
+    function onDoc(e){ if(!pop.contains(e.target) && e.target !== anchorEl) fechar(); }
+    pop.querySelectorAll('[data-icone]').forEach(btn => {
+      btn.addEventListener('click', () => { fechar(); onEscolher(btn.getAttribute('data-icone')); });
+    });
+    setTimeout(() => document.addEventListener('click', onDoc), 10);
+  }
   function notasAbrirCategoriaPopover(anchorEl, onEscolher){
     notasFecharPops();
     const areas = Object.values(notasState.areas).sort((a,b) => (a.ordem||0) - (b.ordem||0));
@@ -4179,6 +4199,11 @@
       if(menuBtn) menuBtn.addEventListener('click', (e) => { e.stopPropagation(); notasAbrirMenuCard(menuBtn, nota); });
       const pinBtn = card.querySelector('[data-pin]');
       if(pinBtn) pinBtn.addEventListener('click', (e) => { e.stopPropagation(); notasUpdateNota(notaId, { fixada: !nota.fixada }).then(notasRender); });
+      const iconeBtn = card.querySelector('[data-icone-item]');
+      if(iconeBtn) iconeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        notasAbrirIconePopover(iconeBtn, (icone) => { notasUpdateNota(notaId, { icone }).then(notasRender); });
+      });
 
       if(notasModoEdicao && !notasModoSelecao){
         const tituloInput = card.querySelector('[data-titulo]');
@@ -4532,7 +4557,7 @@
       });
       const novaNota = {
         id:novoId, areaId: n.areaId && mapaAreaId[n.areaId] ? mapaAreaId[n.areaId] : null,
-        titulo: n.titulo || '', itens: itensRemapeados, fixada: !!n.fixada,
+        titulo: n.titulo || '', icone: n.icone || '📝', itens: itensRemapeados, fixada: !!n.fixada,
         criadoEm: n.criadoEm || now, atualizadoEm: now, ordemManual: Date.now() + importadas
       };
       notasState.notas[novoId] = novaNota;

@@ -2093,12 +2093,23 @@
   .board-card.modo-selecao .board-card-icon-check{ display:block; cursor:pointer; }
   .board-card.selecionado .board-card-icon-check{ background:var(--sage); border-color:var(--sage); }
 
+  .board-card-titulo-row{ display:flex; align-items:flex-start; gap:8px; margin-bottom:8px; }
+  .board-card-icone-btn{
+    flex-shrink:0; border:none; background:none; cursor:pointer; font-size:16px; line-height:1;
+    padding:1px 2px; border-radius:6px; opacity:0.85;
+  }
+  .board-card-icone-btn:hover{ opacity:1; background:var(--hover); }
   .board-card-titulo-input, .board-card-titulo-texto{
     display:block; width:100%; font-family:var(--serif); font-size:15.5px; font-weight:600;
-    color:var(--text); line-height:1.35; margin-bottom:8px; border:none; background:none; padding:0;
+    color:var(--text); line-height:1.35; border:none; background:none; padding:0; margin:0;
   }
   .board-card-titulo-input::placeholder{ color:var(--text-dim); font-weight:500; }
   .board-card-titulo-input:focus{ outline:none; }
+  .notas-icone-pop{ display:grid; grid-template-columns:repeat(5, 1fr); gap:2px; padding:6px; min-width:auto; width:auto; }
+  .notas-icone-opcao{
+    border:none; background:none; cursor:pointer; font-size:18px; line-height:1; padding:6px; border-radius:7px;
+  }
+  .notas-icone-opcao:hover{ background:var(--hover); }
 
   .board-card-corpo{ font-family:var(--sans); font-size:13px; line-height:1.6; color:var(--text-mut); }
   .board-card-corpo .l-secao{ font-family:var(--serif); font-weight:600; color:var(--text); margin-top:10px; }
@@ -2353,5 +2364,8 @@
     flex-shrink:0; font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:0.3px;
     padding:4px 10px; border-radius:999px; white-space:nowrap;
   }
-  .obj-timeline-valor{ background:var(--sage-soft); color:var(--sage); }
+  /* Vermelho = valor a pagar (saída); verde = valor a receber/ganho (entrada) —
+     mesma leitura de qualquer extrato financeiro. */
+  .obj-timeline-valor{ background:var(--coral-soft); color:var(--coral); }
+  .obj-timeline-valor.obj-timeline-ganho{ background:var(--acid-soft); color:var(--acid); }
   .obj-timeline-prazo{ background:var(--gold-soft); color:var(--gold); }
