@@ -218,16 +218,21 @@ async function dispararParaUsuario(db, messaging, uid, despertador, dataStr){
   const tokens = Object.keys(tokensSnap.val() || {});
   if(!tokens.length) return;
 
+  // Lembrete é a mesma coleção, com tipo diferente: notificação só de aviso,
+  // sem o som/checklist do despertador (ver dispararLembrete em js/app.js e
+  // o notificationclick em sw.js, que decide pra onde o toque leva).
+  const ehLembrete = despertador.tipo === 'lembrete';
+
   // Só "data": deixa o service worker decidir como mostrar (evita a exibição
   // automática do navegador, que não dá pra tratar o clique do jeito que
-  // a gente quer — abrir direto na tela Acordar).
+  // a gente quer — abrir direto na tela Acordar, só quando for despertador).
   const resp = await messaging.sendEachForMulticast({
     tokens,
     data: {
-      tipo: 'despertador',
+      tipo: ehLembrete ? 'lembrete' : 'despertador',
       despertadorId: despertador.id,
-      titulo: 'Hora de acordar! ⏰',
-      corpo: 'Toque para abrir a checklist do Life OS.'
+      titulo: ehLembrete ? 'Life OS' : 'Hora de acordar! ⏰',
+      corpo: ehLembrete ? 'Hora de dar uma olhada na plataforma.' : 'Toque para abrir a checklist do Life OS.'
     }
   });
   const mortos = [];

@@ -1450,12 +1450,19 @@
 
     <div class="config-section" style="margin-bottom:16px;">
       <p class="config-section-title">Despertadores</p>
-      <p class="config-section-desc">Toca um alarme e abre uma checklist do que fazer depois de acordar. Sem servidor de push: só funciona com o app aberto (ou instalado, rodando em segundo plano) — não dá pra tocar com o celular travado ou o app fechado de vez.</p>
+      <p class="config-section-desc">Toca um alarme e abre uma checklist do que fazer depois de acordar. Com "Notificações" ativado (acima), chega mesmo com o app fechado ou o celular bloqueado — sem isso, só toca com o app aberto. Em ambos os casos é uma notificação, não um alarme que ignora o modo silencioso.</p>
       <div class="desp-list" id="despertadoresList"></div>
       <button type="button" class="catcfg-add-btn" id="despertadorAddBtn">+ Novo despertador</button>
       <p class="config-row-label" style="margin:18px 0 8px;">Checklist pós-acordar</p>
       <div class="catcfg-list" id="despertadorChecklistList"></div>
       <button type="button" class="catcfg-add-btn" id="despertadorChecklistAddBtn">+ Item</button>
+    </div>
+
+    <div class="config-section" style="margin-bottom:16px;">
+      <p class="config-section-title">Lembretes</p>
+      <p class="config-section-desc">Um empurrão pra dar uma olhada na plataforma, sem alarme nem checklist — só a notificação. Vêm com três horários prontos (08h, 12h e 18h, todo dia); edite ou apague os que não fizerem sentido.</p>
+      <div class="desp-list" id="lembretesList"></div>
+      <button type="button" class="catcfg-add-btn" id="lembreteAddBtn">+ Novo lembrete</button>
     </div>
 
     <div class="config-section" style="margin-bottom:16px;">

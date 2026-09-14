@@ -372,12 +372,28 @@
     ACORDAR_CHECKLIST_PADRAO.forEach((texto, i) => { const id = newId(); obj[id] = { id, texto, ordem:i }; });
     return obj;
   }
+  // Lembretes são a mesma coleção que os despertadores (tipo:'lembrete' em
+  // vez de 'despertador', que é o padrão quando o campo não existe — os
+  // despertadores criados antes desse campo existir continuam válidos).
+  // Diferem só no que acontece ao disparar: sem som, sem sequestrar a tela.
+  const LEMBRETES_PADRAO_HORAS = ['08:00', '12:00', '18:00'];
   async function carregarDespertadores(){
     const [desps, checklist] = await Promise.all([
       dbGet(userPath('/Despertadores')),
       dbGet(userPath('/AcordarChecklist'))
     ]);
     despertadores = desps || {};
+    if(!Object.values(despertadores).some(d => d.tipo === 'lembrete')){
+      const todosDias = [0, 1, 2, 3, 4, 5, 6];
+      let ordem = Object.keys(despertadores).length;
+      const novos = {};
+      LEMBRETES_PADRAO_HORAS.forEach(hora => {
+        const id = newId();
+        novos[id] = { id, tipo:'lembrete', hora, dias:[...todosDias], ativo:true, ordem: ordem++ };
+      });
+      despertadores = { ...despertadores, ...novos };
+      await Promise.all(Object.values(novos).map(d => dbPutSilent(userPath('/Despertadores/' + d.id), d)));
+    }
     if(!checklist){
       acordarChecklist = acordarChecklistSeed();
       await dbPutSilent(userPath('/AcordarChecklist'), acordarChecklist);
@@ -407,9 +423,15 @@
       Object.keys(disparados).forEach(k => { if(!k.startsWith(hoje)) delete disparados[k]; });
       disparados[marca] = 1;
       localStorage.setItem('lifeosDespertadoresDisparados', JSON.stringify(disparados));
-      dispararDespertador(d);
+      if(d.tipo === 'lembrete') dispararLembrete(d); else dispararDespertador(d);
       return true; // um por vez — se dois batem no mesmo minuto, o próximo pega no tick seguinte
     });
+  }
+  function dispararLembrete(d){
+    if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){
+      try{ new Notification('Life OS', { body:'Hora de dar uma olhada na plataforma.', icon:'icon.svg', tag:'lembrete_' + d.id }); }catch(e){ /* ignore */ }
+    }
+    showAppMessage('Hora de dar uma olhada no Life OS.', 'info');
   }
   function tocarSomDespertador(){
     pararSomDespertador();
@@ -481,11 +503,12 @@
     goToView('hoje');
   });
 
-  /* Config → lista de despertadores + checklist (CRUD simples, sem modal) */
+  /* Config → listas de despertadores e lembretes (mesma coleção, campo tipo
+     diferente) + checklist. CRUD simples, sem modal. */
   const DESP_DIAS_LABEL = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
-  async function criarDespertador(){
+  async function criarAlarme(tipo, defaults){
     const itens = Object.values(despertadores);
-    const d = { id:newId(), hora:'07:00', dias:[1,2,3,4,5], ativo:true, ordem:itens.length };
+    const d = { id:newId(), tipo, hora:'07:00', dias:[1,2,3,4,5], ativo:true, ordem:itens.length, ...defaults };
     despertadores[d.id] = d;
     await dbPutSilent(userPath('/Despertadores/' + d.id), d);
     return d;
@@ -499,12 +522,15 @@
     delete despertadores[id];
     await dbDeleteSilent(userPath('/Despertadores/' + id));
   }
-  function renderDespertadoresConfig(){
-    const list = document.getElementById('despertadoresList');
+  function renderListaDeAlarmes(tipo, containerId, vazioTexto, confirmTexto){
+    const list = document.getElementById(containerId);
     if(!list) return;
-    const itens = Object.values(despertadores).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+    const refazer = () => renderListaDeAlarmes(tipo, containerId, vazioTexto, confirmTexto);
+    const itens = Object.values(despertadores)
+      .filter(d => (d.tipo || 'despertador') === tipo)
+      .sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
     if(!itens.length){
-      list.innerHTML = '<p class="catcfg-vazio">Nenhum despertador ainda.</p>';
+      list.innerHTML = '<p class="catcfg-vazio">' + vazioTexto + '</p>';
       return;
     }
     list.innerHTML = itens.map(d => '<div class="desp-row' + (d.ativo === false ? ' desp-off' : '') + '" data-desp-id="' + d.id + '">' +
@@ -533,22 +559,33 @@
       btn.addEventListener('click', async () => {
         const id = btn.getAttribute('data-desp-toggle');
         await atualizarDespertador(id, { ativo: despertadores[id].ativo === false });
-        renderDespertadoresConfig();
+        refazer();
       });
     });
     list.querySelectorAll('[data-desp-del]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const id = btn.getAttribute('data-desp-del');
-        if(!await showConfirm('Excluir este despertador?')) return;
+        if(!await showConfirm(confirmTexto)) return;
         await excluirDespertador(id);
-        renderDespertadoresConfig();
+        refazer();
       });
     });
   }
+  function renderDespertadoresConfig(){
+    renderListaDeAlarmes('despertador', 'despertadoresList', 'Nenhum despertador ainda.', 'Excluir este despertador?');
+  }
+  function renderLembretesConfig(){
+    renderListaDeAlarmes('lembrete', 'lembretesList', 'Nenhum lembrete ainda.', 'Excluir este lembrete?');
+  }
   const despertadorAddBtn = document.getElementById('despertadorAddBtn');
   if(despertadorAddBtn) despertadorAddBtn.addEventListener('click', async () => {
-    await criarDespertador();
+    await criarAlarme('despertador');
     renderDespertadoresConfig();
+  });
+  const lembreteAddBtn = document.getElementById('lembreteAddBtn');
+  if(lembreteAddBtn) lembreteAddBtn.addEventListener('click', async () => {
+    await criarAlarme('lembrete', { dias:[0,1,2,3,4,5,6] }); // lembrete nasce todo dia, despertador nasce seg-sex
+    renderLembretesConfig();
   });
 
   async function criarAcordarChecklistItem(texto){
@@ -8713,6 +8750,7 @@
       ['os campos de responsável', populateCasaResponsavelSelects],
       ['os despertadores', carregarDespertadores],
       ['a lista de despertadores', renderDespertadoresConfig],
+      ['a lista de lembretes', renderLembretesConfig],
       ['a checklist de acordar', renderDespertadorChecklistConfig]
     ];
     for(const [rotulo, fn] of preludio){

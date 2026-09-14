@@ -58,13 +58,15 @@ messaging.onBackgroundMessage((payload) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  // Lembrete só abre o app normal; só o despertador sequestra pra tela Acordar.
+  const ehDespertador = (event.notification.data || {}).tipo !== 'lembrete';
   event.waitUntil((async () => {
     const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for(const client of clientList){
-      client.postMessage({ tipo: 'abrir-acordar' });
+      if(ehDespertador) client.postMessage({ tipo: 'abrir-acordar' });
       if('focus' in client) return client.focus();
     }
-    if(self.clients.openWindow) return self.clients.openWindow('./?despertador=1');
+    if(self.clients.openWindow) return self.clients.openWindow(ehDespertador ? './?despertador=1' : './');
   })());
 });
 
