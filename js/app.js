@@ -230,8 +230,48 @@
     localStorage.setItem(NOTIF_KEY, 'sim');
     atualizarBotaoNotificacoes();
     new Notification('Life OS', { body: 'Pronto — vou te avisar do essencial.', icon: 'icon.svg' });
+    registrarTokenFcm();
     return true;
   }
+
+  /* Registra este dispositivo pra receber despertadores por push (funciona
+     com o app fechado/celular bloqueado — ver functions/index.js). Sem chave
+     VAPID configurada, ou em navegador sem suporte, falha em silêncio: o
+     despertador continua funcionando do jeito antigo, só com a aba aberta. */
+  let fcmMessagingApp = null;
+  function getFcmMessaging(){
+    if(fcmMessagingApp) return fcmMessagingApp;
+    if(typeof firebase === 'undefined' || !firebase.messaging) return null;
+    try{
+      if(!firebase.apps.length) firebase.initializeApp(FCM_CONFIG);
+      fcmMessagingApp = firebase.messaging();
+      // Mensagens em primeiro plano são ignoradas de propósito: a checagem
+      // local (checarDespertadores, a cada 20s) já cobre a aba aberta —
+      // tratar as duas dispararia a tela Acordar duas vezes.
+      fcmMessagingApp.onMessage(() => {});
+      return fcmMessagingApp;
+    }catch(err){
+      console.warn('Push não suportado neste navegador:', err);
+      return null;
+    }
+  }
+  async function registrarTokenFcm(){
+    if(!FCM_VAPID_KEY || !notificacoesLigadas() || !session) return;
+    try{
+      const messaging = getFcmMessaging();
+      if(!messaging || !('serviceWorker' in navigator)) return;
+      const reg = await navigator.serviceWorker.ready;
+      const token = await messaging.getToken({ vapidKey: FCM_VAPID_KEY, serviceWorkerRegistration: reg });
+      if(token) await dbPutSilent(userPath('/FcmTokens/' + token), true);
+    }catch(err){
+      console.warn('Não consegui registrar este dispositivo pra despertadores por push:', err);
+    }
+  }
+  navigator.serviceWorker && navigator.serviceWorker.addEventListener('message', (event) => {
+    if(event.data && event.data.tipo === 'abrir-acordar') abrirTelaAcordar(
+      new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })
+    );
+  });
 
   function atualizarBotaoNotificacoes(){
     const btn = document.getElementById('notificacoesBtn');
@@ -396,6 +436,13 @@
     clearInterval(despertadorBeepTimer); despertadorBeepTimer = null;
     if(despertadorAudioCtx){ despertadorAudioCtx.close().catch(() => {}); despertadorAudioCtx = null; }
   }
+  function abrirTelaAcordar(horaLabel){
+    acordarFeitos = new Set();
+    const el = document.getElementById('acordarHora');
+    if(el) el.textContent = horaLabel;
+    goToView('acordar');
+    renderAcordarChecklist();
+  }
   function dispararDespertador(d){
     despertadorTocandoId = d.id;
     tocarSomDespertador();
@@ -404,10 +451,7 @@
     if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){
       try{ new Notification('Hora de acordar! ⏰', { body: 'Toque para abrir o Life OS.', icon:'icon.svg', tag:'despertador' }); }catch(e){ /* ignore */ }
     }
-    document.getElementById('acordarHora').textContent = d.hora;
-    acordarFeitos = new Set();
-    goToView('acordar');
-    renderAcordarChecklist();
+    abrirTelaAcordar(d.hora);
   }
   function renderAcordarChecklist(){
     const list = document.getElementById('acordarChecklistList');
@@ -1166,6 +1210,21 @@
   const FIREBASE_API_KEY = "AIzaSyAQqB__M-gKZWHS4zQ1eIA-X6rGqzVtr0I";
   const FIREBASE_DB_URL  = "https://anki-71f4f-default-rtdb.firebaseio.com";
   const SESSION_KEY = "lifeos_v5_session";
+
+  // Config do Firebase Cloud Messaging (despertadores por push) — mesmo
+  // projeto anki-71f4f de cima, precisa bater com o sw.js e com a Cloud
+  // Function que manda o push (ver functions/index.js).
+  const FCM_CONFIG = {
+    apiKey: FIREBASE_API_KEY,
+    projectId: 'anki-71f4f',
+    messagingSenderId: '319058865898',
+    appId: '1:319058865898:web:7766cd5d90cb2fdc203193'
+  };
+  // Chave VAPID gerada em console.firebase.google.com/project/anki-71f4f/settings/cloudmessaging
+  // (aba "Web configuration" → "Web Push certificates"). Sem ela, getToken()
+  // falha e os despertadores por push simplesmente não se registram — o resto
+  // do app funciona normal, só cai de volta no alarme local (app aberto).
+  const FCM_VAPID_KEY = '';
 
   let session = null;      // { idToken, uid, email, expiresAt }
   let activeDataUid = null; // uid cujos dados /users/{uid}/... estão sendo lidos (== session.uid, ou o dono do Quadro selecionado)
@@ -8464,10 +8523,20 @@
     globalLoadingEl.classList.remove('active');
 
     atualizarBotaoNotificacoes();
-    if(notificacoesLigadas()) iniciarAgendadorDeAvisos();
+    if(notificacoesLigadas()){
+      iniciarAgendadorDeAvisos();
+      registrarTokenFcm(); // token pode ter girado desde o último login — reforça a cada boot
+    }
     // Despertadores tocam independente do toggle de notificações — só
     // precisam da aba aberta, sem pedir permissão nenhuma pro som.
     iniciarChecagemDeDespertadores();
+
+    // Veio de um toque numa notificação de despertador (app fechado/em
+    // segundo plano) — abre direto na tela Acordar em vez do fluxo normal.
+    if(new URLSearchParams(location.search).get('despertador')){
+      abrirTelaAcordar(new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }));
+      history.replaceState(null, '', location.pathname);
+    }
   }
 
   (async function init(){

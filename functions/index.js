@@ -29,6 +29,7 @@
    ============================================================================= */
 
 const { onRequest } = require('firebase-functions/v2/https');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const Anthropic = require('@anthropic-ai/sdk');
@@ -151,5 +152,126 @@ exports.iaProxy = onRequest(
         res.status(502).json({ error: 'A IA não respondeu. Tente de novo em instantes.' });
       }
     }
+  }
+);
+
+/* =============================================================================
+   DESPERTADORES — Cloud Function agendada (roda a cada minuto)
+
+   Problema que isto resolve: o app só conseguia tocar o alarme com a aba
+   aberta. Esta função dispara notificações push (Firebase Cloud Messaging)
+   que chegam mesmo com o app fechado ou o celular bloqueado.
+
+   IMPORTANTE — projeto cruzado: os dados de verdade (Despertadores, tokens de
+   notificação) vivem no projeto anki-71f4f, não neste projeto (basehub-135f5,
+   onde o Blaze já está ativo). Por isso esta função usa um app secundário do
+   Admin SDK autenticado com uma conta de serviço DO anki-71f4f — só assim ela
+   enxerga o Realtime Database e consegue mandar push em nome daquele projeto
+   (o token FCM do navegador está atrelado ao projeto de onde ele foi gerado).
+
+   ---------------------------------------------------------------------------
+   COMO PUBLICAR (precisa ser você):
+
+     1. Gere uma chave de conta de serviço EM anki-71f4f:
+        console.firebase.google.com/project/anki-71f4f/settings/serviceaccounts/adminsdk
+        → "Gerar nova chave privada" (baixa um .json)
+     2. Salve o conteúdo desse .json como secret NESTE projeto:
+        cd functions
+        firebase functions:secrets:set ANKI_SERVICE_ACCOUNT --project basehub-135f5
+        (cole o JSON inteiro quando pedir)
+     3. firebase deploy --only functions --project basehub-135f5
+
+   Sem push de verdade (Web Push) sem uma chave VAPID gerada em anki-71f4f —
+   isso é configurado do lado do cliente (js/app.js), não aqui.
+   ---------------------------------------------------------------------------
+   ============================================================================= */
+
+const ANKI_SERVICE_ACCOUNT = defineSecret('ANKI_SERVICE_ACCOUNT');
+const ANKI_DATABASE_URL = 'https://anki-71f4f-default-rtdb.firebaseio.com';
+
+let ankiApp = null;
+function getAnkiApp(){
+  if(ankiApp) return ankiApp;
+  const cred = JSON.parse(ANKI_SERVICE_ACCOUNT.value());
+  ankiApp = admin.initializeApp(
+    { credential: admin.credential.cert(cred), databaseURL: ANKI_DATABASE_URL },
+    'anki'
+  );
+  return ankiApp;
+}
+
+// A função roda em UTC por padrão — os horários configurados pelo usuário são
+// em horário de Brasília, então a hora "agora" precisa ser recalculada nesse
+// fuso (Intl já cuida do horário de verão, se algum dia voltar a existir).
+function agoraEmSaoPaulo(){
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo', hour12: false,
+    hour: '2-digit', minute: '2-digit', weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit'
+  });
+  const partes = {};
+  fmt.formatToParts(new Date()).forEach(p => { if(p.type !== 'literal') partes[p.type] = p.value; });
+  const DIAS = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
+  return {
+    hhmm: partes.hour + ':' + partes.minute,
+    diaSemana: DIAS[partes.weekday],
+    dataStr: partes.year + '-' + partes.month + '-' + partes.day
+  };
+}
+
+async function dispararParaUsuario(db, messaging, uid, despertador, dataStr){
+  // Marca como disparado ANTES de mandar — evita reenviar se o push falhar
+  // no meio (melhor perder um push do que mandar em duplicidade).
+  await db.ref('/users/' + uid + '/Despertadores/' + despertador.id + '/ultimoDisparo').set(dataStr);
+
+  const tokensSnap = await db.ref('/users/' + uid + '/FcmTokens').once('value');
+  const tokens = Object.keys(tokensSnap.val() || {});
+  if(!tokens.length) return;
+
+  // Só "data": deixa o service worker decidir como mostrar (evita a exibição
+  // automática do navegador, que não dá pra tratar o clique do jeito que
+  // a gente quer — abrir direto na tela Acordar).
+  const resp = await messaging.sendEachForMulticast({
+    tokens,
+    data: {
+      tipo: 'despertador',
+      despertadorId: despertador.id,
+      titulo: 'Hora de acordar! ⏰',
+      corpo: 'Toque para abrir a checklist do Life OS.'
+    }
+  });
+  const mortos = [];
+  resp.responses.forEach((r, i) => {
+    const codigo = r.error && r.error.code;
+    if(!r.success && (codigo === 'messaging/registration-token-not-registered' || codigo === 'messaging/invalid-registration-token')){
+      mortos.push(db.ref('/users/' + uid + '/FcmTokens/' + tokens[i]).remove());
+    }
+  });
+  await Promise.allSettled(mortos);
+}
+
+exports.checarDespertadores = onSchedule(
+  { schedule: 'every 1 minutes', secrets: [ANKI_SERVICE_ACCOUNT], region: 'southamerica-east1', timeoutSeconds: 60 },
+  async () => {
+    const app = getAnkiApp();
+    const db = app.database();
+    const messaging = app.messaging();
+    const { hhmm, diaSemana, dataStr } = agoraEmSaoPaulo();
+
+    const usersSnap = await db.ref('/users').once('value');
+    const users = usersSnap.val() || {};
+
+    const disparos = [];
+    for(const [uid, dadosUser] of Object.entries(users)){
+      const despertadores = (dadosUser && dadosUser.Despertadores) || {};
+      for(const d of Object.values(despertadores)){
+        if(d.ativo === false || d.hora !== hhmm) continue;
+        if(d.dias && d.dias.length && !d.dias.includes(diaSemana)) continue;
+        if(d.ultimoDisparo === dataStr) continue; // já tocou hoje
+        disparos.push(dispararParaUsuario(db, messaging, uid, d, dataStr).catch(err =>
+          console.error('Falha ao disparar despertador ' + d.id + ' do uid ' + uid + ':', err)
+        ));
+      }
+    }
+    await Promise.allSettled(disparos);
   }
 );

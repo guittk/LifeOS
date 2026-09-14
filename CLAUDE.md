@@ -29,7 +29,9 @@ Sem servidor próprio. O app fala direto com APIs externas do navegador:
 - **Dados reais do app** (Realtime Database + Identity Toolkit/Auth): projeto **`anki-71f4f`** (nome de exibição "LifeOS", apesar do app registrado lá dentro se chamar "Anki" — sobra de uso anterior do projeto). É pra onde `FIREBASE_DB_URL`/`FIREBASE_API_KEY` em `js/app.js` apontam. **`database.rules.json` tem que ir pra cá**: `firebase deploy --only database --project anki-71f4f` (ou `--project dados`, alias em `.firebaserc`).
 - **Hosting do site** (`thurgh-lifeos.web.app`) e as Cloud Functions existentes (`api`, `mapearColunasIA`): projeto **`basehub-135f5`** (nome de exibição "Hube") — é o alias `default` do `.firebaserc`, usado por `firebase deploy --only hosting`.
 
-Ou seja: `firebase deploy --only hosting` (sem `--project`) está certo — vai pro `default` (`basehub-135f5`), que é onde o site é servido de fato. Mas qualquer deploy de **database rules** sem `--project anki-71f4f` vai pro projeto errado e não protege nada. Cloud Functions que precisem ler/escrever os dados do app (ex: um agendador de despertadores) também têm que ser publicadas em `anki-71f4f`, não em `basehub-135f5` — são projetos de Cloud Functions independentes, cada um com seu próprio plano Blaze/APIs habilitadas.
+Ou seja: `firebase deploy --only hosting` (sem `--project`) está certo — vai pro `default` (`basehub-135f5`), que é onde o site é servido de fato. Mas qualquer deploy de **database rules** sem `--project anki-71f4f` vai pro projeto errado e não protege nada.
+
+Cloud Functions rodam em `basehub-135f5` (onde o Blaze já está ativo — `anki-71f4f` não tem Cloud Functions habilitado). Uma função que precise ler/escrever os dados reais (ex: `checarDespertadores` em `functions/index.js`) usa um **app secundário do Admin SDK**, autenticado com uma conta de serviço gerada EM `anki-71f4f` (guardada como secret `ANKI_SERVICE_ACCOUNT`) — só assim ela enxerga aquele Realtime Database e consegue mandar push pros tokens FCM registrados lá. Ver o cabeçalho de `functions/index.js` pro passo a passo de publicação.
 
 ## Mapa de `js/app.js` (~4000 linhas)
 

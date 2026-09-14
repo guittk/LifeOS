@@ -24,6 +24,50 @@ const CACHE_VERSION = 'lifeos-v2';
 const SHELL_CACHE = CACHE_VERSION + '-shell';
 const DATA_CACHE  = CACHE_VERSION + '-dados';
 
+/* =============================================================================
+   DESPERTADORES — push em segundo plano (Firebase Cloud Messaging)
+
+   O projeto de dados é o anki-71f4f (não confundir com o de hosting, ver nota
+   em CLAUDE.md) — é o config abaixo que tem que apontar pra lá, senão o token
+   gerado não bate com o que a Cloud Function usa pra mandar o push.
+   ============================================================================= */
+importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
+
+firebase.initializeApp({
+  apiKey: 'AIzaSyAQqB__M-gKZWHS4zQ1eIA-X6rGqzVtr0I',
+  projectId: 'anki-71f4f',
+  messagingSenderId: '319058865898',
+  appId: '1:319058865898:web:7766cd5d90cb2fdc203193'
+});
+const messaging = firebase.messaging();
+
+// A Cloud Function manda só "data" (não "notification") de propósito: assim
+// quem decide como mostrar é este handler, não o comportamento padrão do
+// navegador — o que permite tratar o clique e abrir direto na tela Acordar.
+messaging.onBackgroundMessage((payload) => {
+  const d = payload.data || {};
+  self.registration.showNotification(d.titulo || 'Hora de acordar! ⏰', {
+    body: d.corpo || 'Toque para abrir o Life OS.',
+    icon: 'icon.svg',
+    tag: 'despertador',
+    requireInteraction: true,
+    data: d
+  });
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for(const client of clientList){
+      client.postMessage({ tipo: 'abrir-acordar' });
+      if('focus' in client) return client.focus();
+    }
+    if(self.clients.openWindow) return self.clients.openWindow('./?despertador=1');
+  })());
+});
+
 const SHELL = [
   './',
   './index.html',
