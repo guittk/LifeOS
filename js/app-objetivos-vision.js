@@ -556,16 +556,23 @@
       img.src = src;
     });
   }
-  async function visionBoardAutoLayout(srcs){
+  async function visionBoardAutoLayout(srcs, boardWidthPx, boardHeightPx){
     const count = srcs.length;
     if(count <= 0) return [];
     // Usa a proporção real de cada imagem (em vez de estimar) pra empacotar em
     // colunas (masonry) sem sobrar vão nem uma foto cobrir a outra por engano.
     const aspects = await Promise.all(srcs.map(loadImageAspect));
-    const cols = Math.max(2, Math.min(5, Math.round(Math.sqrt(count * 1.05))));
+    const avgAspect = aspects.reduce((a, b) => a + b, 0) / count;
+    // A proporção real do quadro (largo-e-baixo numa tela widescreen, mais
+    // quadrado numa janela pequena) — sem isso o algoritmo tratava largura e
+    // altura como a mesma unidade, e um quadro bem largo fazia ele achar que
+    // cada foto "ocupava pouco" de altura, empilhando fotos demais numa coluna
+    // curta (cobrindo umas às outras) ou espalhando poucas com vão enorme.
+    const boardRatio = (boardWidthPx > 0 && boardHeightPx > 0) ? boardWidthPx / boardHeightPx : 1.6;
+    const cols = Math.max(2, Math.min(7, Math.round(Math.sqrt(count * avgAspect * boardRatio * 0.75))));
     const cellW = 100 / cols;
     const widthPct = Math.min(40, cellW * 0.94);
-    const colHeights = new Array(cols).fill(0);
+    const colHeights = new Array(cols).fill(0); // acumulado em % da ALTURA do quadro
     const order = [...Array(count).keys()];
     for(let i = order.length - 1; i > 0; i--){
       const j = Math.floor(Math.random() * (i + 1));
@@ -577,17 +584,25 @@
       // sem vãos grandes nem uma foto avançando sobre a coluna vizinha.
       const col = colHeights.indexOf(Math.min(...colHeights));
       const w = widthPct * (0.9 + Math.random() * 0.2);
-      const heightEst = w * Math.min(1.6, Math.max(0.55, aspects[i]));
+      // w é % da LARGURA; a altura real da foto precisa virar % da ALTURA —
+      // daí multiplicar pela razão largura/altura do próprio quadro.
+      const heightEst = w * boardRatio * Math.min(1.6, Math.max(0.55, aspects[i]));
       const jitterX = (Math.random() - 0.5) * cellW * 0.08;
       const left = col * cellW + cellW / 2 + jitterX;
       const top = colHeights[col] + heightEst / 2;
-      colHeights[col] += heightEst + 3;
+      colHeights[col] += heightEst + 1.5;
       const rotate = Math.round((Math.random() - 0.5) * 8);
       positions[i] = { left: Math.min(98, Math.max(2, left)), top, widthPct: w, rotate };
     });
+    // Reescala posição E tamanho juntos, pelo mesmo fator — só esticar/encolher
+    // a posição (como era antes) deixava o vão entre fotos maior ou menor sem
+    // que o tamanho delas acompanhasse, sobrando espaço vazio ou uma cobrindo
+    // a outra quando o cálculo de altura errava a mão.
     const maxHeight = Math.max(...colHeights, 1);
+    const scale = 94 / maxHeight;
     positions.forEach((p, i) => {
-      p.top = Math.min(97, Math.max(3, (p.top / maxHeight) * 94 + 3));
+      p.top = Math.min(97, Math.max(3, p.top * scale + 3));
+      p.widthPct = Math.max(VISION_MIN_WIDTH, Math.min(VISION_MAX_WIDTH, p.widthPct * scale));
       p.z = i + 1;
     });
     return positions;
@@ -759,7 +774,8 @@
     // só nela; as outras fotos ficam onde estavam.
     const entries = visionEntriesVisiveis(visionData);
     if(!entries.length) return;
-    const layout = await visionBoardAutoLayout(entries.map(([, v]) => v.src));
+    const dims = visionBoardDims();
+    const layout = await visionBoardAutoLayout(entries.map(([, v]) => v.src), dims.w, dims.h);
     visionPendingShuffle = {};
     entries.forEach(([id], i) => { visionPendingShuffle[id] = layout[i]; });
     paintVisionBoard();
@@ -796,6 +812,13 @@
     const top = el.getBoundingClientRect().top;
     return Math.max(460, Math.round(window.innerHeight - top - 28));
   }
+  // Dimensões reais do quadro, pra visionBoardAutoLayout calcular o
+  // empacotamento mirando no espaço de verdade (não um quadrado imaginário).
+  function visionBoardDims(){
+    const el = document.getElementById('visionBoard');
+    if(!el) return { w: 0, h: 0 };
+    return { w: el.clientWidth, h: visionAlturaDisponivel(el) };
+  }
   function paintVisionBoard(){
     const el = document.getElementById('visionBoard');
     if(!el) return;
@@ -812,12 +835,10 @@
         '</p>';
       return;
     }
-    // A posição de cada foto é uma % da altura do board — se o board for mais
-    // alto que o necessário pro conteúdo, essa % estica e as fotos ficam com
-    // vão enorme entre si. Por isso a altura aqui segue só a quantidade de
-    // fotos (empacotamento real), nunca a altura da tela: encher a tela é bom
-    // só quando o board está vazio (ver acima), não quando já tem conteúdo.
-    el.style.minHeight = Math.min(1100, Math.max(360, 130 + entries.length * 110)) + 'px';
+    // O quadro sempre ocupa a altura disponível da tela, com ou sem conteúdo —
+    // "Embaralhar" (visionBoardAutoLayout) já calcula o layout mirando nessa
+    // altura real, então preencher a tela aqui não deixa vão nem pede scroll.
+    el.style.minHeight = visionAlturaDisponivel(el) + 'px';
     el.classList.toggle('layers-mode', visionLayersOpen());
     const visibleEntries = entries.filter(([, v]) => !v.hidden);
     const handlesHtml = visionLayersOpen() ? `
@@ -896,6 +917,7 @@
           visionManualSelectedId = id;
           paintVisionBoard();
           renderVisionSelectedControls();
+          renderVisionLayers(); // reflete a seleção também na lista do painel "Editar"
           return;
         }
         e.preventDefault();
@@ -1103,7 +1125,8 @@
       ? 'Isso restaura o tamanho e a posição de TODAS as fotos pro arranjo automático, desfazendo ajustes manuais. Continuar?'
       : 'Isso restaura o tamanho e a posição das fotos DESTA CATEGORIA pro arranjo automático, desfazendo ajustes manuais. Continuar?';
     if(!await showConfirm(msg)) return;
-    const layout = await visionBoardAutoLayout(entries.map(([, v]) => v.src));
+    const dims = visionBoardDims();
+    const layout = await visionBoardAutoLayout(entries.map(([, v]) => v.src), dims.w, dims.h);
     const updates = { ...visionData };
     entries.forEach(([id], i) => { updates[id] = { ...visionData[id], ...layout[i] }; });
     await dbPutSilent(userPath('/VisionBoard'), updates);
@@ -1159,15 +1182,28 @@
     '<circle cx="255" cy="188" r="8" fill="#fff"/>' +
     '</svg>'
   );
-  // Busca a imagem de capa de verdade de um post/reel do Instagram, lendo o
-  // og:image (metadado público que o próprio Instagram expõe pra qualquer
-  // link-preview — o mesmo que WhatsApp/Slack/Discord usam) via um serviço
-  // gratuito de unfurling, já que o navegador não pode ler isso direto
-  // (CORS bloqueia um fetch cru pro instagram.com). Sem login, sem token.
-  // Se o serviço estiver fora do ar ou o post não tiver preview, tenta o
-  // atalho antigo como plano B; se os dois falharem, quem chamou usa o
-  // cartão-placeholder.
+  // Busca a imagem de capa de verdade de um post/reel do Instagram.
+  //
+  // 14/09/2026: era api.microlink.io primeiro, com o endpoint direto do
+  // Instagram só como plano B. Invertido depois de confirmar (testando os
+  // links contra o Instagram direto, fora da app) que microlink estava
+  // sistematicamente derrubando TODOS os links de Instagram: a conta grátis
+  // deles tem cota diária baixa e some com erro "ERATE" assim que estoura —
+  // qualquer sessão que cole vários links de Instagram de uma vez (comum,
+  // já que é assim que a tela convida a colar) esgota a cota na hora, e a
+  // partir daí NENHUM link de Instagram vira card, mesmo os que continuam
+  // no ar. O endpoint direto do Instagram não depende de terceiro nem tem
+  // cota — funcionou em 10 de 13 links reais testados; os outros 3 já
+  // devolvem 404 direto do Instagram (post removido/privado de verdade,
+  // não tem o que fazer do nosso lado). microlink continua como plano B,
+  // pro raro caso do endpoint direto falhar num post que ainda existe.
   async function buscarThumbInstagram(url){
+    const ig = url.match(VISION_INSTAGRAM_RE);
+    if(ig){
+      const tipo = ig[1].toLowerCase() === 'reels' ? 'reel' : ig[1].toLowerCase();
+      const thumbReal = 'https://www.instagram.com/' + tipo + '/' + ig[2] + '/media/?size=l';
+      if(await testarUrlImagem(thumbReal)) return thumbReal;
+    }
     try{
       const res = await fetchWithTimeout('https://api.microlink.io/?url=' + encodeURIComponent(url), undefined, 7000);
       if(res.ok){
@@ -1175,13 +1211,7 @@
         const img = json && json.data && json.data.image && json.data.image.url;
         if(img && await testarUrlImagem(img)) return img;
       }
-    }catch(err){ /* segue pro plano B */ }
-    const ig = url.match(VISION_INSTAGRAM_RE);
-    if(ig){
-      const tipo = ig[1].toLowerCase() === 'reels' ? 'reel' : ig[1].toLowerCase();
-      const thumbReal = 'https://www.instagram.com/' + tipo + '/' + ig[2] + '/media/?size=l';
-      if(await testarUrlImagem(thumbReal)) return thumbReal;
-    }
+    }catch(err){ /* nenhum dos dois deu certo */ }
     return null;
   }
   // Devolve null quando não dá pra confirmar que o vídeo existe de verdade —
@@ -1484,7 +1514,8 @@
       // fotos novas entram (e reorganizam) só ela, sem tocar nas outras.
       const existingEntries = visionEntriesVisiveis(data);
       const allSrcs = existingEntries.map(([, v]) => v.src).concat(novosItens.map(it => it.src));
-      const layout = await visionBoardAutoLayout(allSrcs);
+      const dims = visionBoardDims();
+      const layout = await visionBoardAutoLayout(allSrcs, dims.w, dims.h);
       const updates = {};
       existingEntries.forEach(([id], i) => { updates[id] = { ...data[id], ...layout[i] }; });
       const novasEntries = novosItens.map((it, i) => {
