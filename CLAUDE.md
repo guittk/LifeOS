@@ -25,6 +25,12 @@ Sem servidor próprio. O app fala direto com APIs externas do navegador:
 
 ⚠️ Nota de segurança: a `FIREBASE_API_KEY` está hardcoded em `js/app.js` (linha ~218) — normal para Firebase (a segurança real vem das Database Rules, não da chave). Já a chave da OpenAI trafega para o navegador do usuário depois do login, o que a expõe a quem abrir o DevTools — vale revisar se isso é aceitável antes de expor o app publicamente.
 
+⚠️ **Dois projetos Firebase diferentes — não confundir:**
+- **Dados reais do app** (Realtime Database + Identity Toolkit/Auth): projeto **`anki-71f4f`** (nome de exibição "LifeOS", apesar do app registrado lá dentro se chamar "Anki" — sobra de uso anterior do projeto). É pra onde `FIREBASE_DB_URL`/`FIREBASE_API_KEY` em `js/app.js` apontam. **`database.rules.json` tem que ir pra cá**: `firebase deploy --only database --project anki-71f4f` (ou `--project dados`, alias em `.firebaserc`).
+- **Hosting do site** (`thurgh-lifeos.web.app`) e as Cloud Functions existentes (`api`, `mapearColunasIA`): projeto **`basehub-135f5`** (nome de exibição "Hube") — é o alias `default` do `.firebaserc`, usado por `firebase deploy --only hosting`.
+
+Ou seja: `firebase deploy --only hosting` (sem `--project`) está certo — vai pro `default` (`basehub-135f5`), que é onde o site é servido de fato. Mas qualquer deploy de **database rules** sem `--project anki-71f4f` vai pro projeto errado e não protege nada. Cloud Functions que precisem ler/escrever os dados do app (ex: um agendador de despertadores) também têm que ser publicadas em `anki-71f4f`, não em `basehub-135f5` — são projetos de Cloud Functions independentes, cada um com seu próprio plano Blaze/APIs habilitadas.
+
 ## Mapa de `js/app.js` (~4000 linhas)
 
 Cada bloco já vem marcado com um comentário `/* ---------- Nome ---------- */`. Ao pedir uma
