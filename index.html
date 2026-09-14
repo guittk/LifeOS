@@ -609,8 +609,10 @@
         <input type="checkbox" id="visionManageSelectAll">
         Selecionar todas
       </label>
-      <button type="button" class="btn btn-ghost btn-sm" id="visionManageDeleteBtn" disabled>Excluir selecionadas (<span id="visionManageSelectedCount">0</span>)</button>
-      <button type="button" class="btn btn-ghost btn-sm" id="visionRefreshThumbsBtn">🔄 Atualizar thumbnails do Instagram</button>
+      <div class="vision-manage-actions">
+        <button type="button" class="btn btn-ghost btn-sm" id="visionManageDeleteBtn" disabled>Excluir selecionadas (<span id="visionManageSelectedCount">0</span>)</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="visionRefreshThumbsBtn">🔄 Atualizar thumbnails</button>
+      </div>
     </div>
     <div class="vision-manage-list" id="visionManageList"></div>
     <div id="visionLinksQuebradosWrap" style="display:none;">
@@ -634,6 +636,9 @@
   <div class="vision-video-panel">
     <button type="button" class="vision-video-close" id="visionVideoCloseBtn" title="Fechar">×</button>
     <div class="vision-video-frame" id="visionVideoFrame"></div>
+    <div class="vision-video-fallback">
+      <button type="button" class="btn btn-ghost btn-sm" id="visionVideoRemoveBtn" title="Use se a tela acima disser que o post/vídeo foi removido">🗑 Não abriu? Remover este card</button>
+    </div>
   </div>
 </div>
 

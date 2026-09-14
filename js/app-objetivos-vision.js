@@ -654,6 +654,7 @@
       if(document.getElementById('visionLayersPanel').classList.contains('open')) renderVisionLayers();
     }));
   }
+  let visionCatDragId = null;
   function visionRenderCategoriasModal(){
     const list = document.getElementById('visionCategoriasList');
     const cats = Object.values(visionCategorias).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
@@ -664,11 +665,42 @@
     list.innerHTML = cats.map(c => {
       const count = Object.values(visionData).filter(v => v.categoria === c.id).length;
       return '<div class="catcfg-row" data-cat-row="' + c.id + '">' +
+        '<span class="catcfg-drag" draggable="true" title="Arrastar pra reordenar">⠿</span>' +
         '<input class="catcfg-nome" data-nome-cat="' + c.id + '" value="' + escapeHtml(c.nome) + '">' +
         '<span class="catcfg-count">' + count + (count === 1 ? ' foto' : ' fotos') + '</span>' +
         '<button type="button" class="catcfg-del" data-excluir-cat="' + c.id + '" title="Excluir">🗑</button>' +
         '</div>';
     }).join('');
+    // Arrastar pela alça reordena — mesmo padrão da Timeline e do painel de Camadas.
+    list.querySelectorAll('.catcfg-drag').forEach(handle => {
+      handle.addEventListener('dragstart', (e) => {
+        const row = handle.closest('.catcfg-row');
+        visionCatDragId = row.getAttribute('data-cat-row');
+        row.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      handle.addEventListener('dragend', async () => {
+        const row = handle.closest('.catcfg-row');
+        row.classList.remove('dragging');
+        visionCatDragId = null;
+        const rows = Array.from(list.querySelectorAll('.catcfg-row'));
+        await Promise.all(rows.map((r, i) => visionUpdateCategoria(r.getAttribute('data-cat-row'), { ordem: i })));
+        visionRenderChips();
+      });
+    });
+    list.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if(!visionCatDragId) return;
+      const dragEl = list.querySelector('.catcfg-row.dragging');
+      if(!dragEl) return;
+      const after = Array.from(list.querySelectorAll('.catcfg-row:not(.dragging)')).reduce((closest, row) => {
+        const box = row.getBoundingClientRect();
+        const offset = e.clientY - box.top - box.height / 2;
+        if(offset < 0 && offset > closest.offset) return { offset, element: row };
+        return closest;
+      }, { offset: -Infinity, element: null }).element;
+      if(after == null) list.appendChild(dragEl); else list.insertBefore(dragEl, after);
+    });
     list.querySelectorAll('[data-nome-cat]').forEach(inp => {
       inp.addEventListener('blur', async () => {
         const id = inp.getAttribute('data-nome-cat');
@@ -806,7 +838,7 @@
         e.stopPropagation();
         const id = btn.getAttribute('data-vision-play');
         const v = visionData[id];
-        if(v && v.embedSrc) abrirVisionVideo(v.embedSrc);
+        if(v && v.embedSrc) abrirVisionVideo(v.embedSrc, id);
       });
     });
     // Alças de escalar (cantos) e girar (topo), no estilo Canva — só aparecem na foto selecionada.
@@ -1183,7 +1215,9 @@
     }
     return null;
   }
-  function abrirVisionVideo(embedSrc){
+  let visionVideoAbertoId = null;
+  function abrirVisionVideo(embedSrc, id){
+    visionVideoAbertoId = id || null;
     document.getElementById('visionVideoFrame').innerHTML =
       '<iframe src="' + escapeHtml(embedSrc) + '" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen frameborder="0"></iframe>';
     document.getElementById('visionVideoModal').classList.add('active');
@@ -1191,11 +1225,44 @@
   function fecharVisionVideo(){
     document.getElementById('visionVideoModal').classList.remove('active');
     document.getElementById('visionVideoFrame').innerHTML = ''; // limpa o iframe pra parar o vídeo
+    visionVideoAbertoId = null;
   }
   document.getElementById('visionVideoCloseBtn').addEventListener('click', fecharVisionVideo);
+  // O JS não consegue ler o que aparece dentro do iframe do Instagram/YouTube
+  // (cross-origin) — não dá pra detectar sozinho quando o post foi removido
+  // depois de adicionado. Esse botão é o atalho manual pra quando isso acontece.
+  document.getElementById('visionVideoRemoveBtn').addEventListener('click', async () => {
+    if(!visionVideoAbertoId) return;
+    const id = visionVideoAbertoId;
+    fecharVisionVideo();
+    await dbDeleteSilent(userPath('/VisionBoard/' + id));
+    await renderVisionBoard();
+    await renderVisionManageList();
+  });
   document.getElementById('visionVideoModal').addEventListener('click', (e) => {
     if(e.target.id === 'visionVideoModal') fecharVisionVideo();
   });
+
+  // Pra vídeo, `src` é só a miniatura — o link de verdade se reconstrói a
+  // partir do embedSrc (mesmo truque já usado no botão "Atualizar thumbnails").
+  function visionOriginalUrl(v){
+    if(v.tipoVideo === 'youtube'){
+      const m = (v.embedSrc || '').match(/\/embed\/([^?]+)/);
+      return m ? 'https://www.youtube.com/watch?v=' + m[1] : (v.embedSrc || v.src);
+    }
+    if(v.tipoVideo === 'instagram'){
+      return (v.embedSrc || '').replace(/\/embed$/, '/') || v.src;
+    }
+    return v.src;
+  }
+  async function copiarLinkVision(url){
+    try{
+      await navigator.clipboard.writeText(url);
+      showAppMessage('Link copiado.', 'success');
+    }catch(err){
+      showAppMessage('Não consegui copiar o link automaticamente — copie direto: ' + url, 'error');
+    }
+  }
 
   /* Modal "Gerenciar imagens": lista tudo que já está no board (com seleção múltipla pra
      excluir em lote) e permite adicionar várias imagens de uma vez, por link ou upload. */
@@ -1224,6 +1291,7 @@
         <input type="checkbox" class="vision-manage-check" data-check-vision="${id}"${visionManageSelecionadas.has(id) ? ' checked' : ''}>
         <img src="${escapeHtml(v.src)}" alt="" loading="lazy">
         ${v.tipoVideo ? '<span class="vision-manage-play">▶</span>' : ''}
+        <button type="button" class="vision-manage-copy" data-copy-vision="${id}" title="Copiar link">🔗</button>
         <button type="button" data-del-vision="${id}" title="Remover">×</button>
       </div>`;
     const cats = Object.values(visionCategorias).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
@@ -1259,6 +1327,10 @@
       await renderVisionManageList();
       await renderVisionBoard();
     }));
+    wrap.querySelectorAll('[data-copy-vision]').forEach(btn => btn.addEventListener('click', () => {
+      const v = data[btn.getAttribute('data-copy-vision')];
+      if(v) copiarLinkVision(visionOriginalUrl(v));
+    }));
     renderVisionManageBar();
   }
   async function renderVisionLinksQuebrados(){
@@ -1268,11 +1340,15 @@
     const entries = Object.values(data).sort((a, b) => (a.criadoEm || '').localeCompare(b.criadoEm || ''));
     wrap.style.display = entries.length ? '' : 'none';
     if(!entries.length) return;
-    list.innerHTML = entries.map(l => `
+    list.innerHTML = entries.map(l => {
+      const cat = l.categoria && visionCategorias[l.categoria];
+      return `
       <div class="vision-broken-item" data-broken-id="${l.id}">
         <a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.url)}</a>
+        <span class="vision-broken-cat">${escapeHtml(cat ? cat.nome : 'Sem categoria')}</span>
         <button type="button" data-del-broken="${l.id}" title="Remover da lista">×</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
     list.querySelectorAll('[data-del-broken]').forEach(btn => btn.addEventListener('click', async () => {
       await dbDeleteSilent(userPath('/VisionLinksQuebrados/' + btn.getAttribute('data-del-broken')));
       await renderVisionLinksQuebrados();
@@ -1359,6 +1435,10 @@
     btn.disabled = true;
     btn.textContent = 'Adicionando...';
     try{
+      // Calculado cedo (antes de qualquer link ser testado) porque os links
+      // quebrados também precisam registrar em qual categoria estava filtrado
+      // quando a tentativa foi feita.
+      const categoriaAlvo = (visionFiltroCategoria && visionFiltroCategoria !== '__sem__') ? visionFiltroCategoria : null;
       // Links de vídeo (YouTube/Instagram) usam a thumb oficial direto, sem passar
       // pelo teste de <img> — só o resto (link de imagem de verdade) precisa provar
       // que carrega antes de entrar, porque um link de página (ex: post do
@@ -1382,7 +1462,7 @@
           // aqui pra você poder abrir e checar depois, sem precisar colar de novo.
           await Promise.all(urlsInvalidas.map(url => {
             const id = newId();
-            return dbPutSilent(userPath('/VisionLinksQuebrados/' + id), { id, url, criadoEm: new Date().toISOString() });
+            return dbPutSilent(userPath('/VisionLinksQuebrados/' + id), { id, url, categoria: categoriaAlvo, criadoEm: new Date().toISOString() });
           }));
         }
       }
@@ -1403,7 +1483,6 @@
       // Reempacota só o que está visível agora — dentro de uma categoria, as
       // fotos novas entram (e reorganizam) só ela, sem tocar nas outras.
       const existingEntries = visionEntriesVisiveis(data);
-      const categoriaAlvo = (visionFiltroCategoria && visionFiltroCategoria !== '__sem__') ? visionFiltroCategoria : null;
       const allSrcs = existingEntries.map(([, v]) => v.src).concat(novosItens.map(it => it.src));
       const layout = await visionBoardAutoLayout(allSrcs);
       const updates = {};
