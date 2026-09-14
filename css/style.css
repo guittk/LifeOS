@@ -2380,7 +2380,7 @@
     overflow-x:auto; padding:4px 4px 18px; scroll-snap-type:x proximity;
   }
   .fin-mes{
-    flex:0 0 330px; scroll-snap-align:start;
+    flex:0 0 350px; scroll-snap-align:start;
     background:var(--surface); border:var(--bw) solid var(--outline); border-radius:14px;
     box-shadow:4px 4px 0 var(--shadow); padding:14px 14px 12px;
   }
@@ -2393,16 +2393,33 @@
   }
   .fin-mes-x:hover{ color:var(--coral); background:var(--hover); }
 
-  .fin-sec{ border-top:1px solid var(--line); padding:10px 0 4px; }
-  .fin-sec:first-of-type{ border-top:none; padding-top:0; }
+  /* Cada bloco (Dia 10, Dia 20, Mercado Pago, Cartão) vira um cartão próprio,
+     com uma faixa de cor na borda esquerda pra identificar de longe qual é qual. */
+  .fin-sec{
+    background:var(--surface-hi); border:1px solid var(--line); border-left:3px solid var(--line-strong);
+    border-radius:10px; padding:10px 11px 9px; margin-bottom:10px;
+  }
+  .fin-sec:last-of-type{ margin-bottom:0; }
+  .fin-sec-dia10, .fin-sec-dia20{ border-left-color:var(--fin-entrada); }
+  .fin-sec-mp{ border-left-color:var(--fin-estimativa); }
+  .fin-sec-cartao{ border-left-color:var(--fin-cartao); }
+
+  .fin-sec-head{
+    font-family:var(--mono); font-size:11px; letter-spacing:1.4px; text-transform:uppercase;
+    margin:0 0 8px; font-weight:700; color:var(--text);
+  }
+  .fin-sec-dia10 .fin-sec-head, .fin-sec-dia20 .fin-sec-head{ color:var(--fin-entrada); }
+  .fin-sec-mp .fin-sec-head{ color:var(--fin-estimativa); }
+  .fin-sec-cartao .fin-sec-head{ color:var(--fin-cartao); }
+
+  /* Dentro do bloco Cartão, cada subseção (Estimativas, Parcelas...) ganha um
+     divisor tracejado — sem isso viravam uma lista só, difícil de escanear. */
+  .fin-sub + .fin-sub{ border-top:1px dashed var(--line); margin-top:6px; padding-top:8px; }
   .fin-sec-titulo{
     font-family:var(--mono); font-size:10px; letter-spacing:1px; text-transform:uppercase;
-    color:var(--text-dim); margin:8px 0 6px;
+    color:var(--text-dim); margin:0 0 6px; font-weight:600;
   }
-  .fin-sec-head{
-    font-family:var(--mono); font-size:10.5px; letter-spacing:1.4px; text-transform:uppercase;
-    color:var(--fin-cartao); margin:0 0 2px; font-weight:700;
-  }
+  .fin-sec-dia10 .fin-sec-titulo, .fin-sec-dia20 .fin-sec-titulo{ display:none; }
 
   .fin-linha{ display:flex; align-items:center; gap:6px; margin-bottom:3px; }
   .fin-in-nome, .fin-in-valor{
@@ -2412,7 +2429,7 @@
   .fin-in-nome{ flex:1; }
   .fin-in-valor{ width:92px; text-align:right; font-family:var(--mono); font-size:11.5px; }
   .fin-in-nome:hover, .fin-in-valor:hover{ border-color:var(--line); }
-  .fin-in-nome:focus, .fin-in-valor:focus{ outline:none; border-color:var(--sage); background:var(--surface-hi); }
+  .fin-in-nome:focus, .fin-in-valor:focus{ outline:none; border-color:var(--sage); background:var(--surface); }
   .fin-in-valor.pos{ color:var(--fin-entrada); }
   .fin-in-valor.neg{ color:var(--text-mut); }
 

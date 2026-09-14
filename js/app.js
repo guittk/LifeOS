@@ -2081,9 +2081,11 @@
   }
   function finSecaoHtml(mes, secaoId, titulo){
     const itens = finItensDaSecao(mes, secaoId);
-    return '<p class="fin-sec-titulo">' + escapeHtml(titulo) + '</p>' +
+    return '<div class="fin-sub" data-sub="' + secaoId + '">' +
+      '<p class="fin-sec-titulo">' + escapeHtml(titulo) + '</p>' +
       itens.map(i => finLinhaHtml(i, { parcelas: secaoId === 'parcelas' })).join('') +
-      '<button type="button" class="fin-add" data-fin-add="' + secaoId + '">+ linha</button>';
+      '<button type="button" class="fin-add" data-fin-add="' + secaoId + '">+ linha</button>' +
+      '</div>';
   }
   function finMesHtml(mes){
     const nome = FIN_MES_NOMES[mes.mes] || '';
@@ -2091,20 +2093,22 @@
       '<header class="fin-mes-head"><h2>' + escapeHtml(nome) + ' <span>' + mes.ano + '</span></h2>' +
       '<button type="button" class="fin-mes-x" data-fin-del-mes title="Excluir mês">×</button></header>' +
 
-      '<section class="fin-sec">' +
+      '<section class="fin-sec fin-sec-dia10">' +
+      '<p class="fin-sec-head">Dia 10</p>' +
       finAutoHtml('Sobra do mês passado', mes.id, 'sobraAnterior', 't-entrada') +
-      finSecaoHtml(mes, 'dia10', 'Dia 10') +
+      finSecaoHtml(mes, 'dia10', 'Contas') +
       finAutoHtml('Cartão Santander', mes.id, 'cartaoTotal', 't-cartao') +
       '<div class="fin-total">Total pós fatura <b data-calc="' + mes.id + '|posFatura"></b></div>' +
       '</section>' +
 
-      '<section class="fin-sec">' +
-      finSecaoHtml(mes, 'dia20', 'Dia 20') +
+      '<section class="fin-sec fin-sec-dia20">' +
+      '<p class="fin-sec-head">Dia 20</p>' +
+      finSecaoHtml(mes, 'dia20', 'Contas') +
       '<div class="fin-total">Total pós vale <b data-calc="' + mes.id + '|posVale"></b></div>' +
       '</section>' +
 
       '<section class="fin-sec fin-sec-mp">' +
-      '<p class="fin-sec-titulo">Mercado Pago</p>' +
+      '<p class="fin-sec-head">Mercado Pago</p>' +
       finAutoHtml('Fatura', mes.id, 'fatura') +
       finAutoHtml('Empréstimo', mes.id, 'emprestimo') +
       finAutoHtml('Taxa', mes.id, 'taxa', 't-taxa') +
@@ -2534,6 +2538,14 @@
     finMarcarAlterado();
     showAppMessage(FIN_MES_NOMES[mes.mes] + ' criado a partir do mês anterior.', 'success');
   });
+
+  // Segurar Shift e usar a rodinha rola os meses na horizontal — sem depender
+  // do navegador converter o gesto sozinho, que era inconsistente.
+  document.getElementById('finMesesList').addEventListener('wheel', (e) => {
+    if(!e.shiftKey) return;
+    e.preventDefault();
+    e.currentTarget.scrollLeft += (e.deltaY || e.deltaX);
+  }, { passive:false });
 
   /* ---------- OBJETIVOS (objetivo grande + pontos menores que dependem dele) ---------- */
   let objEditingId = null; // null = criando um novo objetivo
