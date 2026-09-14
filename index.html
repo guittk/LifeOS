@@ -771,10 +771,7 @@
         <p class="view-desc">Um mural de notas: jogue qualquer coisa na captura lá embaixo, organize em categorias, arraste pra reordenar.</p>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <div class="board-toggle" id="notasModoToggle">
-          <button type="button" id="notasModoVerBtn" class="on">Ver</button>
-          <button type="button" id="notasModoEditarBtn">Editar</button>
-        </div>
+        <button type="button" class="board-toggle-btn" id="notasModoToggleBtn" title="Alternar entre ver e editar as notas">👁️ Ver</button>
         <button class="btn btn-ghost btn-sm" id="notasSelecionarBtn">Selecionar</button>
         <button class="btn btn-ghost btn-sm" id="notasCategoriasBtn">🗂️ Categorias</button>
         <button class="btn btn-ghost btn-sm" id="notasExportarBtn" title="Baixa um arquivo .json com todas as notas e categorias">⬇️ Exportar</button>
@@ -931,7 +928,9 @@
       </div>
       <div style="display:flex; align-items:center; gap:10px;">
         <span id="finSaveStatus" style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">Tudo salvo</span>
-        <button class="btn btn-primary btn-sm" id="finAddMesBtn">+ Próximo mês</button>
+        <button class="btn btn-ghost btn-sm" id="finCancelarBtn" style="display:none;">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="finSalvarBtn" style="display:none;">Salvar</button>
+        <button class="btn btn-ghost btn-sm" id="finAddMesBtn">+ Próximo mês</button>
       </div>
     </div>
 

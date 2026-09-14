@@ -1842,7 +1842,8 @@
   const FIN_ORCAMENTO_PADRAO = 300; // teto mensal de gasto aleatório, se nunca foi definido
 
   let finState = null;
-  let finSaveTimer = null;
+  let finStateSalvo = null; // último estado gravado no Firebase — pra onde "Cancelar" volta
+  function finClone(obj){ return JSON.parse(JSON.stringify(obj)); }
 
   const finMoeda = new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' });
   function finFmt(v){ return finMoeda.format(Number(v) || 0); }
@@ -1994,19 +1995,57 @@
     const el = document.getElementById('finSaveStatus');
     if(el) el.textContent = texto;
   }
-  function finSalvar(){
-    clearTimeout(finSaveTimer);
-    finSetStatus('Salvando...');
-    finSaveTimer = setTimeout(async () => {
-      try{
-        await dbPutSilent(userPath(FIN_PATH), finState);
-        finSetStatus('Tudo salvo');
-      }catch(err){
-        console.error('Falha ao salvar as Finanças:', err);
-        finSetStatus('Não salvou — sem conexão?');
-      }
-    }, 700);
+  /* Sem autosave: uma edição só marca "alterações não salvas" e libera Salvar/
+     Cancelar. finPersistirAgora só grava no Firebase quando alguém pede — pelo
+     botão Salvar, ou pelo preenchimento automático de meses (que não é uma
+     edição do usuário, então não passa pelo fluxo de cancelar). */
+  let finDirty = false;
+  function finMarcarAlterado(){
+    finDirty = true;
+    finSetStatus('Alterações não salvas');
+    const salvarBtn = document.getElementById('finSalvarBtn');
+    const cancelarBtn = document.getElementById('finCancelarBtn');
+    if(salvarBtn) salvarBtn.style.display = '';
+    if(cancelarBtn) cancelarBtn.style.display = '';
   }
+  async function finPersistirAgora(){
+    finSetStatus('Salvando...');
+    try{
+      await dbPutSilent(userPath(FIN_PATH), finState);
+      finStateSalvo = finClone(finState);
+      finDirty = false;
+      finSetStatus('Tudo salvo');
+      return true;
+    }catch(err){
+      console.error('Falha ao salvar as Finanças:', err);
+      finSetStatus('Não salvou — sem conexão?');
+      return false;
+    }
+  }
+  document.getElementById('finSalvarBtn').addEventListener('click', async () => {
+    const ok = await finPersistirAgora();
+    if(ok){
+      document.getElementById('finSalvarBtn').style.display = 'none';
+      document.getElementById('finCancelarBtn').style.display = 'none';
+    }
+  });
+  document.getElementById('finCancelarBtn').addEventListener('click', () => {
+    finState = finClone(finStateSalvo);
+    finDirty = false;
+    finSetStatus('Tudo salvo');
+    document.getElementById('finSalvarBtn').style.display = 'none';
+    document.getElementById('finCancelarBtn').style.display = 'none';
+    finRenderMeses();
+    finRenderValores();
+    finRenderCustoVida();
+    finRenderSimulador();
+  });
+  // Fechar/recarregar a aba com edição pendente em Finanças perderia o que não foi salvo.
+  window.addEventListener('beforeunload', (e) => {
+    if(!finDirty) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
 
   /* ---------- Render ---------- */
   function finLinhaHtml(item, opts){
@@ -2278,8 +2317,8 @@
     document.getElementById('finSimParcelas').value = 1;
     finRenderMeses();
     finSimular();
-    finSalvar();
-    showAppMessage(nome + ' lançado em ' + FIN_MES_NOMES[meses[idx].mes] + '.', 'success');
+    finMarcarAlterado();
+    showAppMessage(nome + ' lançado em ' + FIN_MES_NOMES[meses[idx].mes] + '. Clique em Salvar pra confirmar.', 'success');
   }
 
   /* Monta o próximo mês a partir do anterior (contas que se repetem, parcelas
@@ -2333,7 +2372,11 @@
     ['valores', 'custoVida', 'custoVidaBase', 'meses'].forEach(k => { finState[k] = finState[k] || {}; });
     const criouMeses = finGarantirMesesFuturos();
     if(!dados || criouMeses) await dbPutSilent(userPath(FIN_PATH), finState);
+    finStateSalvo = finClone(finState);
+    finDirty = false;
     finSetStatus('Tudo salvo');
+    document.getElementById('finSalvarBtn').style.display = 'none';
+    document.getElementById('finCancelarBtn').style.display = 'none';
     finRenderMeses();
     finRenderValores();
     finRenderCustoVida();
@@ -2357,7 +2400,7 @@
     if(alvo.id === 'finTaxaInput'){
       finState.taxaEmprestimo = Math.max(0, Number(alvo.value) || 0);
       finAtualizarCalculados();
-      finSalvar();
+      finMarcarAlterado();
       return;
     }
     if(alvo.id === 'finOrcamentoInput'){
@@ -2368,7 +2411,7 @@
         if(mes && teto && mes.orcamentoAleatorio == null) teto.value = finFmtNum(finOrcamentoDoMes(mes));
       });
       finAtualizarCalculados();
-      finSalvar();
+      finMarcarAlterado();
       return;
     }
     if(alvo.id && alvo.id.indexOf('finSim') === 0){
@@ -2379,7 +2422,7 @@
       const mes = finState.meses[alvo.closest('[data-mes-id]').getAttribute('data-mes-id')];
       mes.orcamentoAleatorio = Math.abs(finParseNum(alvo.value));
       finAtualizarCalculados();
-      finSalvar();
+      finMarcarAlterado();
       return;
     }
     const achado = finItemPorEvento(alvo);
@@ -2397,7 +2440,7 @@
     }
     finAtualizarCalculados();
     if(alvo.classList.contains('fin-in-valor')) finRenderValoresRefs();
-    finSalvar();
+    finMarcarAlterado();
   });
 
   /* Um valor de "Valores" aparece em várias linhas: quando ele muda, as linhas
@@ -2426,7 +2469,7 @@
       mes.itens[id] = { id, secao: addSec.getAttribute('data-fin-add'), nome:'', valor:0, refId:null, ordem: finProxOrdem(mes.itens) };
       if(mes.itens[id].secao === 'parcelas'){ mes.itens[id].parcela = 1; mes.itens[id].parcelas = 1; }
       finRenderMeses();
-      finSalvar();
+      finMarcarAlterado();
       return;
     }
 
@@ -2436,7 +2479,7 @@
       const id = newId();
       finState[colecao][id] = { id, nome:'', valor:0, refId:null, ordem: finProxOrdem(finState[colecao]) };
       finRenderCustoVida();
-      finSalvar();
+      finMarcarAlterado();
       return;
     }
 
@@ -2448,7 +2491,7 @@
       finRenderMeses();
       finRenderValores();
       finRenderCustoVida();
-      finSalvar();
+      finMarcarAlterado();
       return;
     }
 
@@ -2459,7 +2502,7 @@
       finRenderMeses();
       finRenderValores();
       finRenderCustoVida();
-      finSalvar();
+      finMarcarAlterado();
       return;
     }
 
@@ -2470,7 +2513,7 @@
       if(!ok) return;
       delete finState.meses[mes.id];
       finRenderMeses();
-      finSalvar();
+      finMarcarAlterado();
     }
   });
 
@@ -2478,7 +2521,7 @@
     const id = newId();
     finState.valores[id] = { id, nome:'', valor:0, ordem: finProxOrdem(finState.valores) };
     finRenderValores();
-    finSalvar();
+    finMarcarAlterado();
   });
 
   /* O mês novo nasce do anterior: as contas que se repetem vêm junto, as parcelas
@@ -2488,7 +2531,7 @@
     const ultimo = finMesesOrdenados().pop();
     const mes = finProximoMesDados(ultimo);
     finRenderMeses();
-    finSalvar();
+    finMarcarAlterado();
     showAppMessage(FIN_MES_NOMES[mes.mes] + ' criado a partir do mês anterior.', 'success');
   });
 
@@ -4102,11 +4145,17 @@
     }
   });
 
+  const AUTH_EMAILS_PERMITIDOS = ['guittk@hotmail.com', 'guittkk@hotmail.com'];
   authSubmitBtn.addEventListener('click', async () => {
     const email = authEmail.value.trim();
     const password = authPassword.value;
     authError.classList.remove('active'); authNote.classList.remove('active');
     if(!email){ authError.textContent = 'Digite seu e-mail.'; authError.classList.add('active'); return; }
+    if(!AUTH_EMAILS_PERMITIDOS.includes(email.toLowerCase())){
+      authError.textContent = 'Este e-mail não tem acesso a este app.';
+      authError.classList.add('active');
+      return;
+    }
     authSubmitBtn.disabled = true;
     try{
       if(authMode === 'login' || authMode === 'signup'){
@@ -4985,14 +5034,19 @@
       ativo.blur();
     }
   }
+  function notasAtualizarBotaoModo(){
+    const btn = document.getElementById('notasModoToggleBtn');
+    if(!btn) return;
+    btn.textContent = notasModoEdicao ? '✏️ Editar' : '👁️ Ver';
+    btn.classList.toggle('on', notasModoEdicao);
+  }
   async function notasAlternarModo(querEdicao){
     const alvo = querEdicao === undefined ? !notasModoEdicao : querEdicao;
     if(alvo === notasModoEdicao) return;
     if(notasModoEdicao) await notasSalvarFocoAtivo();
     notasModoEdicao = alvo;
     localStorage.setItem(NOTAS_MODO_KEY, notasModoEdicao ? 'edicao' : 'visualizacao');
-    document.getElementById('notasModoVerBtn').classList.toggle('on', !notasModoEdicao);
-    document.getElementById('notasModoEditarBtn').classList.toggle('on', notasModoEdicao);
+    notasAtualizarBotaoModo();
     notasRender();
   }
   async function notasAlternarSelecao(){
@@ -5009,8 +5063,7 @@
     const nota = await notasCreateNota(areaId, '');
     notasModoEdicao = true;
     localStorage.setItem(NOTAS_MODO_KEY, 'edicao');
-    document.getElementById('notasModoVerBtn').classList.remove('on');
-    document.getElementById('notasModoEditarBtn').classList.add('on');
+    notasAtualizarBotaoModo();
     notasModoSelecao = false;
     notasFocarId = nota.id;
     notasRender();
@@ -5133,8 +5186,8 @@
   });
 
   /* ---------- Toolbar da view (Ver/Editar, Selecionar, Nova nota) ---------- */
-  document.getElementById('notasModoVerBtn').addEventListener('click', () => notasAlternarModo(false));
-  document.getElementById('notasModoEditarBtn').addEventListener('click', () => notasAlternarModo(true));
+  notasAtualizarBotaoModo();
+  document.getElementById('notasModoToggleBtn').addEventListener('click', () => notasAlternarModo());
   document.getElementById('notasSelecionarBtn').addEventListener('click', () => notasAlternarSelecao());
   document.getElementById('notasNovaBtn').addEventListener('click', () => notasNovaNota());
 

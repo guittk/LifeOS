@@ -179,6 +179,10 @@
     outline-offset: 2px;
     border-radius: 6px;
   }
+  /* Botões não ficam "selecionados" visualmente ao navegar com TAB. */
+  button:focus-visible{
+    outline: none;
+  }
 
   @media (prefers-reduced-motion: reduce){
     *{ animation-duration:0.001ms !important; transition-duration:0.001ms !important; }
@@ -2032,9 +2036,8 @@
   #abrirFechamentoBtn{ margin-left:auto; }
 
   /* ---------- ARQUIVO — mural de notas (portado do projeto Organizer) ---------- */
-  .board-toggle{ display:inline-flex; border:var(--bw) solid var(--outline); border-radius:9px; overflow:hidden; flex:none; }
-  .board-toggle button{ border:none; background:var(--surface); color:var(--text-mut); padding:7px 13px; font-size:12.5px; font-weight:600; cursor:pointer; }
-  .board-toggle button.on{ background:var(--sage); color:var(--on-accent); }
+  .board-toggle-btn{ display:inline-flex; align-items:center; flex:none; border:var(--bw) solid var(--outline); border-radius:9px; background:var(--surface); color:var(--text-mut); padding:7px 13px; font-size:12.5px; font-weight:600; cursor:pointer; }
+  .board-toggle-btn.on{ background:var(--sage); color:var(--on-accent); border-color:var(--sage); }
 
   .notas-chips{ display:flex; flex-wrap:wrap; gap:7px; margin-bottom:16px; }
   .notas-chip{
