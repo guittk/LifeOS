@@ -584,91 +584,6 @@
   .inbox-item .item-meta{ padding-top:5px; flex-shrink:0; }
   .inbox-item > .btn{ flex-shrink:0; }
 
-  /* ---------- Revisão IA (comparação lado a lado, documento único) ---------- */
-  .revisao-diff-grid{ display:grid; grid-template-columns:1fr 1fr 0.8fr; gap:16px; margin-bottom:16px; }
-  @media (max-width:1180px){ .revisao-diff-grid{ grid-template-columns:1fr 1fr; } }
-  @media (max-width:880px){ .revisao-diff-grid{ grid-template-columns:1fr; } }
-  .revisao-diff-col{ display:flex; flex-direction:column; min-width:0; }
-  .revisao-diff-label{
-    font-size:11px; text-transform:uppercase; letter-spacing:0.8px; color:var(--text-mut);
-    margin:0 0 8px; display:flex; align-items:center; gap:8px;
-  }
-  .revisao-diff-editable-tag{
-    font-family:var(--mono); font-size:9.5px; letter-spacing:0.5px; text-transform:none; color:var(--sage);
-    background:var(--sage-soft); padding:2px 7px; border-radius:20px;
-  }
-  .revisao-diff-pane{
-    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-sm);
-    padding:14px 16px; height:60vh; overflow-y:auto; font-family:var(--mono); font-size:12.5px;
-    line-height:1.7; color:var(--text); white-space:pre-wrap; word-break:break-word;
-  }
-  .revisao-diff-pane-editable{ outline:none; }
-  .revisao-diff-pane-editable:focus{ border-color:var(--sage-line); box-shadow:0 0 0 2px var(--sage-soft); }
-  .diff-line{ min-height:1.7em; }
-  .diff-line-removed{ background:rgba(248,81,73,0.15); color:#f85149; text-decoration:line-through; }
-  .diff-line-added{ background:rgba(63,185,80,0.15); color:#3fb950; }
-  .diff-line-empty{
-    background:repeating-linear-gradient(135deg, rgba(255,255,255,0.035) 0 6px, transparent 6px 12px);
-  }
-  .diff-line-target-flash{ outline:2px solid var(--gold); outline-offset:-2px; border-radius:3px; }
-  .revisao-doc-actions{ display:flex; justify-content:flex-end; gap:10px; }
-
-  /* Coluna "Capturas originais" — lista clicável, cada linha diz se já foi
-     localizada na versão atualizada (bolinha verde) ou não (bolinha âmbar). */
-  .revisao-capturas-pane{ padding:8px; display:flex; flex-direction:column; gap:2px; }
-  .capture-check-divider{
-    font-size:10px; text-transform:uppercase; letter-spacing:0.6px; color:var(--text-dim);
-    padding:8px 8px 4px; margin-top:4px;
-  }
-  .capture-check-divider:first-child{ margin-top:0; }
-  .capture-check-row{
-    display:flex; align-items:flex-start; gap:8px; padding:6px 8px; border-radius:7px;
-    cursor:pointer; font-size:12.5px; line-height:1.5;
-  }
-  .capture-check-row:hover{ background:var(--surface-hi); }
-  .capture-check-dot{ flex-shrink:0; width:8px; height:8px; border-radius:50%; margin-top:6px; }
-  .capture-check-row.found .capture-check-dot{ background:#3fb950; }
-  .capture-check-row.missing .capture-check-dot{ background:var(--gold); }
-  .capture-check-text{ flex:1; word-break:break-word; }
-  .capture-check-row.missing .capture-check-text{ color:var(--text-mut); }
-
-  /* ---------- Evoluir / Dashboard ---------- */
-  .stat-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:22px; }
-  @media (max-width:880px){ .stat-grid{ grid-template-columns:repeat(2,1fr);} }
-  .stat-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-sm); padding:16px 18px; }
-  .stat-num{ font-family:var(--serif); font-size:26px; font-weight:600; }
-  .stat-label{ font-size:11.5px; color:var(--text-mut); margin-top:3px; }
-
-  .progress-panel{
-    display:flex; align-items:center; gap:20px; background:var(--surface); border:1px solid var(--line);
-    border-radius:var(--radius); padding:20px 22px; margin-bottom:18px;
-  }
-  .ring-lg{ width:64px; height:64px; }
-  .dash-cols-3{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:14px; }
-  .dash-cols-2{ display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
-  @media (max-width:880px){ .dash-cols-3, .dash-cols-2{ grid-template-columns:1fr; } .progress-panel{ flex-direction:column; align-items:flex-start; } }
-  .mini-item{ padding:9px 0; border-bottom:1px solid var(--line); }
-  .mini-item:last-child{ border-bottom:none; padding-bottom:0; }
-  .mini-item-top{ display:flex; justify-content:space-between; font-size:12.5px; margin-bottom:6px; }
-  .mini-item-top span:last-child{ font-family:var(--mono); color:var(--text-dim); font-size:11px; }
-  .health-row{ display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); font-size:12.5px; }
-  .health-row:last-child{ border-bottom:none; padding-bottom:0; }
-  .health-dot{ font-family:var(--mono); font-size:10.5px; padding:2px 8px; border-radius:20px; white-space:nowrap; }
-  .health-ok{ background:var(--sage-soft); color:var(--sage); }
-  .health-atencao{ background:var(--gold-soft); color:var(--gold); }
-  .health-risco{ background:rgba(180,106,92,0.14); color:var(--coral); }
-
-  .wellbeing-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:18px; }
-  @media (max-width:880px){ .wellbeing-grid{ grid-template-columns:repeat(2,1fr); } }
-  .wellbeing-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-sm); padding:16px 14px; text-align:center; }
-  .wellbeing-icon{ font-size:19px; margin-bottom:8px; }
-  .wellbeing-label{ font-size:11px; color:var(--text-mut); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:4px; }
-  .wellbeing-value{ font-family:var(--serif); font-size:17px; font-weight:600; }
-
-  .proj-meta{ display:flex; flex-direction:column; gap:6px; padding-top:12px; border-top:1px solid var(--line); }
-  .proj-meta-item{ display:flex; justify-content:space-between; gap:10px; font-size:11.5px; color:var(--text-dim); }
-  .proj-meta-item strong{ color:var(--text-mut); font-weight:500; text-align:right; }
-
   .obj-detail-list{ display:grid; grid-template-columns:repeat(auto-fill, minmax(360px, 1fr)); gap:18px; align-items:start; }
   .obj-card-detail{ background:var(--surface); border:1px solid var(--line); border-top:3px solid var(--obj-cat-color, var(--sage)); border-radius:var(--radius); padding:22px 24px; }
 
@@ -913,12 +828,6 @@
   .habit-day-dot.done{ background:var(--sage); border-color:var(--sage); }
   .habit-day-dot.missed{ background:rgba(180,106,92,0.14); border-color:rgba(180,106,92,0.4); }
   .habit-day-dot.today{ box-shadow:0 0 0 2px var(--sage-soft); }
-
-  /* ---------- Estatísticas ---------- */
-  .bar-chart{ display:flex; align-items:flex-end; gap:10px; height:120px; padding-top:10px; }
-  .bar-col{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; gap:6px; }
-  .bar-fill{ width:100%; max-width:34px; border-radius:6px 6px 2px 2px; background:linear-gradient(180deg, #9cc296, var(--sage)); }
-  .bar-label{ font-family:var(--mono); font-size:10px; color:var(--text-dim); }
 
   /* ---------- Configurações ---------- */
   .config-section{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:22px 24px; margin-bottom:16px; }

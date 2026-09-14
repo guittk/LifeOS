@@ -3,7 +3,7 @@
   "description": "Proxy de IA do Life OS — Claude Sonnet 5, com a chave fora do navegador",
   "main": "index.js",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.72.0",

@@ -34,7 +34,7 @@ Sem servidor próprio pra dados/auth. O app fala direto com APIs externas:
 - **Firebase Cloud Messaging** — push dos despertadores/lembretes, mesmo com o app fechado/celular bloqueado (ver `sw.js` e `checarDespertadores` abaixo).
 - **Claude (Anthropic)** via Cloud Function própria (`iaProxy`) — a chave nunca chega ao navegador.
 
-⚠️ Pendência de segurança conhecida, sem urgência: o nó `/openAiKey` no Realtime Database ainda existe de uma versão anterior (antes da `iaProxy`) e não é mais lido pelo cliente — dá pra apagar, e revogar a chave OpenAI antiga, quando sobrar tempo.
+⚠️ Pendência de segurança real, ainda em aberto: a chave `/openAiKey` que existia no Realtime Database (sobra de antes da `iaProxy`) circulou pelo navegador de qualquer pessoa logada antes de o node ser apagado (14/09/2026). O node já foi removido do banco, mas **a chave em si ainda não foi revogada em platform.openai.com** — isso só o dono da conta OpenAI pode fazer.
 
 ### ⚠️ Dois projetos Firebase diferentes — a armadilha mais recorrente deste repo
 
@@ -75,7 +75,8 @@ salva neste aparelho, o app abre direto no Quadro dele (não no dela, vazio) —
 `initBoards()`. `config` e `busca` ficam sempre visíveis pra um membro, mesmo sem
 permissão explícita — são utilitários da própria conta, não dados de um Quadro.
 
-⚠️ Bug conhecido, não corrigido: as Database Rules só deixam o **dono** escrever em
-`/boards/{id}/members` — o fluxo de aceitar convite (`checkPendingInvites`) tenta
-escrever como o convidado e falharia. Não afeta Júlia (foi adicionada direto no
-banco), mas travaria um convite de verdade feito pela tela.
+Aceitar convite (`checkPendingInvites`) grava a entrada do próprio convidado em
+`/boards/{id}/members/{uid}` — as Database Rules permitem isso só se existir um
+convite válido em `/boardInvites/{emailSanitizado}/{ownerUid}` (por isso o convite
+é salvo com `ownerUid` como chave, não um id aleatório — a regra precisa achar o
+convite sem iterar). Não testado de ponta a ponta com um convite real.

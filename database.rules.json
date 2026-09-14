@@ -36,6 +36,7 @@
         "members": {
           ".write": "auth != null && auth.uid === $boardId",
           "$memberUid": {
+            ".write": "auth != null && $memberUid === auth.uid && root.child('boardInvites').child(auth.token.email.replace('.', '_')).child($boardId).exists()",
             "email":       { ".validate": "newData.isString()" },
             "role":        { ".validate": "newData.val() === 'owner' || newData.val() === 'member'" },
             "permissions": { "$view": { ".validate": "newData.isBoolean()" } }

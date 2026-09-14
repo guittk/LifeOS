@@ -572,10 +572,10 @@
     });
   }
   function renderDespertadoresConfig(){
-    renderListaDeAlarmes('despertador', 'despertadoresList', 'Nenhum despertador ainda.', 'Excluir este despertador?');
+    renderListaDeAlarmes('despertador', 'despertadoresList', 'Nenhum despertador configurado — toque em "+ Novo despertador" pra escolher horário e dias.', 'Excluir este despertador?');
   }
   function renderLembretesConfig(){
-    renderListaDeAlarmes('lembrete', 'lembretesList', 'Nenhum lembrete ainda.', 'Excluir este lembrete?');
+    renderListaDeAlarmes('lembrete', 'lembretesList', 'Nenhum lembrete configurado — toque em "+ Novo lembrete" pra criar um.', 'Excluir este lembrete?');
   }
   const despertadorAddBtn = document.getElementById('despertadorAddBtn');
   if(despertadorAddBtn) despertadorAddBtn.addEventListener('click', async () => {
@@ -604,7 +604,7 @@
     if(!list) return;
     const itens = Object.values(acordarChecklist).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
     if(!itens.length){
-      list.innerHTML = '<p class="catcfg-vazio">Nenhum item ainda — crie o primeiro abaixo.</p>';
+      list.innerHTML = '<p class="catcfg-vazio">Nenhum item na checklist de acordar — toque em "+ Item" pra criar o primeiro (ex: tomar remédio, beber água).</p>';
       return;
     }
     list.innerHTML = itens.map(it => '<div class="catcfg-row" data-check-row="' + it.id + '">' +
@@ -1138,7 +1138,7 @@
   function renderFlowList(){
     const nextIdx = getNextIndex();
     if(!activities.length){
-      flowListEl.innerHTML = '<p class="empty-state">Nenhuma tarefa ou treino para hoje.</p>';
+      flowListEl.innerHTML = '<p class="empty-state">Nenhuma tarefa ou treino puxado pra hoje. Adicione em Tarefas ou marque um dia de treino na Academia.</p>';
       return;
     }
     flowListEl.innerHTML = activities.map((a, idx) => {
@@ -1811,7 +1811,7 @@
     const permissions = {};
     document.querySelectorAll('#boardInvitePermList [data-perm-key]').forEach(cb => { permissions[cb.getAttribute('data-perm-key')] = cb.checked; });
     const emailKey = sanitizeEmailKey(email);
-    const inviteId = newId();
+    const inviteId = session.uid; // chave = dono do Quadro, não aleatória — as Database Rules precisam achar o convite sem conhecer o id
     await dbPut('/boardInvites/' + emailKey + '/' + inviteId, {
       ownerUid: session.uid,
       ownerEmail: session.email,
@@ -1887,7 +1887,7 @@
     const nomes = Object.entries(casaMembros)
       .filter(([, nome]) => nome != null && typeof nome !== 'object')
       .sort((a,b) => String(a[1]).localeCompare(String(b[1])));
-    if(!nomes.length){ wrap.innerHTML = '<p class="empty-state" style="margin:0;">Nenhuma pessoa cadastrada ainda.</p>'; return; }
+    if(!nomes.length){ wrap.innerHTML = '<p class="empty-state" style="margin:0;">Nenhuma pessoa cadastrada — adicione quem mora na casa aqui pra poder atribuir atividades e regras a alguém.</p>'; return; }
     wrap.innerHTML = nomes.map(([id, nome]) => `
       <div class="config-tag"><span>${escapeHtml(nome)}</span><button data-del-membro="${id}" title="Remover">×</button></div>
     `).join('');
@@ -1987,7 +1987,7 @@
       const pb = casaAtividadeStatus(b[1]).pendente ? 0 : 1;
       return pa - pb || (a[1].criadoEm||'').localeCompare(b[1].criadoEm||'');
     });
-    if(!entries.length){ el.innerHTML = '<p class="empty-state">Nenhuma atividade cadastrada ainda.</p>'; return; }
+    if(!entries.length){ el.innerHTML = '<p class="empty-state">Nenhuma atividade da casa cadastrada. Toque em "+ Nova atividade" pra criar uma tarefa recorrente (ex: tirar o lixo, lavar louça).</p>'; return; }
     el.innerHTML = entries.map(([id, a]) => {
       const st = casaAtividadeStatus(a);
       return `
@@ -2050,7 +2050,7 @@
     const el = document.getElementById('casaRegrasList');
     const data = await dbGet(userPath('/casa/regras')) || {};
     const entries = Object.entries(data).sort((a,b) => (a[1].criadoEm||'').localeCompare(b[1].criadoEm||''));
-    if(!entries.length){ el.innerHTML = '<p class="empty-state">Nenhuma regra cadastrada ainda.</p>'; return; }
+    if(!entries.length){ el.innerHTML = '<p class="empty-state">Nenhuma regra da casa cadastrada. Toque em "+ Nova regra" pra registrar algo combinado entre vocês.</p>'; return; }
     el.innerHTML = entries.map(([id, r]) => `
       <div class="casa-card" data-id="${id}">
         <div class="casa-card-main">
@@ -3844,7 +3844,7 @@
     const list = document.getElementById('visionLayersList');
     const entries = visionEntriesVisiveis(visionData);
     if(!entries.length){
-      list.innerHTML = '<p class="empty-state" style="margin:0;">Nenhuma imagem ainda.</p>';
+      list.innerHTML = '<p class="empty-state" style="margin:0;">Nenhuma imagem no quadro ainda — adicione fotos em "Gerenciar imagens" pra ver as camadas aqui.</p>';
       return;
     }
     const cats = Object.values(visionCategorias).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
@@ -4129,7 +4129,7 @@
     const idsValidos = new Set(entries.map(([id]) => id));
     Array.from(visionManageSelecionadas).forEach(id => { if(!idsValidos.has(id)) visionManageSelecionadas.delete(id); });
     if(!entries.length){
-      wrap.innerHTML = '<p class="empty-state" style="margin:0 0 8px;">Nenhuma imagem ainda.</p>';
+      wrap.innerHTML = '<p class="empty-state" style="margin:0 0 8px;">Nenhuma imagem no Vision Board ainda. Cole links de imagens ou vídeo abaixo pra começar a montar.</p>';
       renderVisionManageBar();
       return;
     }
@@ -6128,7 +6128,7 @@
       .sort((a,b) => (a[1].horario||'').localeCompare(b[1].horario||''));
 
     if(!refeicoes.length){
-      el.innerHTML = '<p class="empty-state">Nenhuma refeição configurada para hoje ainda.</p>';
+      el.innerHTML = '<p class="empty-state">Nenhuma refeição configurada pra hoje. Monte o cardápio do dia na tela Plano Alimentar.</p>';
       return;
     }
 
@@ -6195,7 +6195,7 @@
       return pa - pb || (a[1].criadoEm||'').localeCompare(b[1].criadoEm||'');
     });
     if(!entries.length){
-      el.innerHTML = '<p class="empty-state">Nenhum objetivo cadastrado ainda.</p>';
+      el.innerHTML = '<p class="empty-state">Nenhum objetivo cadastrado ainda. Crie o primeiro na tela Objetivos.</p>';
       return;
     }
     el.innerHTML = entries.slice(0, 4).map(([id, o]) => {
@@ -7497,7 +7497,7 @@
                 <td><button class="task-del-btn" data-del-task="${id}">excluir</button></td>
               </tr>`).join('')}
             </tbody>
-          </table>` : '<p class="gaveta-empty">Nenhuma tarefa neste grupo ainda.</p>'}
+          </table>` : '<p class="gaveta-empty">Nenhuma tarefa neste grupo ainda. Use "+ Nova tarefa" e escolha este grupo.</p>'}
         </div>
       </div>`;
     }
@@ -8031,7 +8031,7 @@
       <div class="plan-modal-sub-row" data-sub-row="${s.id}">
         <input type="text" data-sub-nome="${s.id}" value="${escapeHtml(s.nome || '')}">
         <button type="button" data-sub-del="${s.id}" title="Excluir">×</button>
-      </div>`).join('') || '<p class="empty-state" style="margin:6px 0;">Nenhum subelemento ainda.</p>';
+      </div>`).join('') || '<p class="empty-state" style="margin:6px 0;">Nenhum subelemento ainda. Adicione abaixo pra quebrar este item em passos menores.</p>';
     document.querySelectorAll('#planItemSubsList [data-sub-nome]').forEach(inp => {
       inp.addEventListener('blur', async () => {
         const id = inp.getAttribute('data-sub-nome');
