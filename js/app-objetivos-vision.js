@@ -1168,6 +1168,16 @@
   // O link de um reel/post pode vir com o @usuário no meio (ex: instagram.com/fulano/reel/XYZ/),
   // não só na forma "curta" instagram.com/reel/XYZ/ — o grupo de usuário é opcional.
   const VISION_INSTAGRAM_RE = /instagram\.com\/(?:[a-zA-Z0-9_.]+\/)?(p|reel|reels|tv)\/([a-zA-Z0-9_-]+)/i;
+  // Reel, vídeo de página (usuario/videos/ID), link de "Compartilhar" (share/r
+  // ou share/v) e o encurtador fb.watch — as formas mais comuns de link de
+  // vídeo do Facebook que alguém cola de verdade.
+  const VISION_FACEBOOK_RE = /facebook\.com\/(?:reel\/\d+|share\/(?:r|v)\/[\w-]+|[^/?#]+\/videos\/\d+|watch\/?\?v=\d+)|fb\.watch\/[\w-]+/i;
+  const VISION_FACEBOOK_PLACEHOLDER = 'data:image/svg+xml,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500">' +
+    '<rect width="400" height="500" fill="#0866FF"/>' +
+    '<text x="200" y="300" font-family="Arial, sans-serif" font-size="220" font-weight="700" fill="#fff" text-anchor="middle">f</text>' +
+    '</svg>'
+  );
   // Instagram não tem uma API pública de thumbnail sem token — em vez de tentar
   // buscar e falhar silenciosamente, usa um cartão-placeholder identificável (o
   // play visível já deixa claro que é um vídeo a abrir).
@@ -1214,6 +1224,25 @@
     }catch(err){ /* nenhum dos dois deu certo */ }
     return null;
   }
+  // Facebook não tem um endpoint público de thumbnail por ID como o do YouTube,
+  // nem um atalho direto tipo o do Instagram — só resta tentar o microlink (que
+  // lê o og:image da própria página) e, se falhar (cota estourada ou o post
+  // exigir login pra mostrar preview), usar um cartão-placeholder. Por isso,
+  // ao contrário do YouTube/Instagram, um vídeo do Facebook SEMPRE vira card
+  // (não dá pra confirmar de antemão que ele existe) — se o link estiver
+  // quebrado de verdade, isso só aparece ao tentar abrir (aí o botão "Não
+  // abriu? Remover este card" do lightbox resolve).
+  async function buscarThumbFacebook(url){
+    try{
+      const res = await fetchWithTimeout('https://api.microlink.io/?url=' + encodeURIComponent(url), undefined, 7000);
+      if(res.ok){
+        const json = await res.json();
+        const img = json && json.data && json.data.image && json.data.image.url;
+        if(img && await testarUrlImagem(img)) return img;
+      }
+    }catch(err){ /* usa o placeholder */ }
+    return VISION_FACEBOOK_PLACEHOLDER;
+  }
   // Devolve null quando não dá pra confirmar que o vídeo existe de verdade —
   // nesse caso quem chama trata o link como inválido e não adiciona nada
   // (pedido explícito: vídeo removido/privado não deve virar card nenhum).
@@ -1241,6 +1270,16 @@
         tipoVideo: 'instagram',
         embedSrc: 'https://www.instagram.com/' + tipo + '/' + ig[2] + '/embed',
         thumb
+      };
+    }
+    if(VISION_FACEBOOK_RE.test(url)){
+      // O plugin oficial do Facebook recebe o link ORIGINAL inteiro (não um id
+      // extraído) e resolve tudo do lado deles — funciona pra reel, vídeo de
+      // página e link de "Compartilhar" sem precisar diferenciar o formato.
+      return {
+        tipoVideo: 'facebook',
+        embedSrc: 'https://www.facebook.com/plugins/video.php?href=' + encodeURIComponent(url) + '&show_text=false',
+        thumb: await buscarThumbFacebook(url)
       };
     }
     return null;
@@ -1282,6 +1321,12 @@
     }
     if(v.tipoVideo === 'instagram'){
       return (v.embedSrc || '').replace(/\/embed$/, '/') || v.src;
+    }
+    if(v.tipoVideo === 'facebook'){
+      try{
+        const href = new URL(v.embedSrc).searchParams.get('href');
+        return href ? decodeURIComponent(href) : v.src;
+      }catch(err){ return v.src; }
     }
     return v.src;
   }
