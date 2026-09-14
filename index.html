@@ -637,7 +637,12 @@
     <button type="button" class="vision-video-close" id="visionVideoCloseBtn" title="Fechar">×</button>
     <div class="vision-video-frame" id="visionVideoFrame"></div>
     <div class="vision-video-fallback">
-      <button type="button" class="btn btn-ghost btn-sm" id="visionVideoRemoveBtn" title="Use se a tela acima disser que o post/vídeo foi removido">🗑 Não abriu? Remover este card</button>
+      <p class="vision-video-fallback-hint">Não abriu? Se o vídeo existe mas o player não carrega, tire um print e use como capa — o play passa a abrir o link original em vez de tentar embutir de novo.</p>
+      <div class="vision-video-fallback-actions">
+        <button type="button" class="btn btn-ghost btn-sm" id="visionVideoPrintBtn">📸 Adicionar print</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="visionVideoRemoveBtn">🗑 Remover este card</button>
+      </div>
+      <input type="file" id="visionVideoPrintInput" accept="image/*" style="display:none;">
     </div>
   </div>
 </div>

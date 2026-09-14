@@ -858,7 +858,7 @@
     el.innerHTML = visibleEntries.map(([id, v]) => `
       <div class="vision-item${id === visionManualSelectedId ? ' selected' : ''}" data-vision-id="${id}" style="left:${v.left}%; top:${v.top}%; width:${v.widthPct}%; --v-rot:${v.rotate}deg; z-index:${v.z || 1};">
         <img src="${escapeHtml(v.src)}" alt="" loading="lazy" draggable="false">
-        ${v.tipoVideo ? `<button type="button" class="vision-play-btn" data-vision-play="${id}" title="Assistir vídeo">▶</button>` : ''}
+        ${v.tipoVideo ? `<button type="button" class="vision-play-btn" data-vision-play="${id}" title="${v.linkDireto ? 'Abrir o link original' : 'Assistir vídeo'}">▶</button>` : ''}
         ${id === visionManualSelectedId ? handlesHtml : ''}
       </div>`).join('');
     el.querySelectorAll('[data-vision-play]').forEach(btn => {
@@ -867,7 +867,11 @@
         e.stopPropagation();
         const id = btn.getAttribute('data-vision-play');
         const v = visionData[id];
-        if(v && v.embedSrc) abrirVisionVideo(v.embedSrc, id);
+        if(!v) return;
+        // Depois de um print manual (linkDireto), não tenta mais embutir — o
+        // player já se provou pouco confiável nesse card, só abre o link.
+        if(v.linkDireto) window.open(visionOriginalUrl(v), '_blank', 'noopener');
+        else if(v.embedSrc) abrirVisionVideo(v.embedSrc, id);
       });
     });
     // Alças de escalar (cantos) e girar (topo), no estilo Canva — só aparecem na foto selecionada.
@@ -1318,6 +1322,29 @@
   });
   document.getElementById('visionVideoModal').addEventListener('click', (e) => {
     if(e.target.id === 'visionVideoModal') fecharVisionVideo();
+  });
+  // Quando o player não carrega mas o vídeo existe de verdade, a saída é
+  // manual: um print vira a capa do card, e o play passa a só abrir o link
+  // original numa aba nova em vez de tentar embutir de novo (flag `linkDireto`).
+  document.getElementById('visionVideoPrintBtn').addEventListener('click', () => {
+    document.getElementById('visionVideoPrintInput').click();
+  });
+  document.getElementById('visionVideoPrintInput').addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if(!file || !visionVideoAbertoId) return;
+    const id = visionVideoAbertoId;
+    try{
+      const src = await resizeImageDataUrl(file, 900);
+      visionData[id] = { ...visionData[id], src, linkDireto: true };
+      await dbPatchSilent(userPath('/VisionBoard/' + id), { src, linkDireto: true });
+      fecharVisionVideo();
+      await renderVisionBoard();
+      await renderVisionManageList();
+      showAppMessage('Print salvo — o play agora abre o link direto.', 'success');
+    }catch(err){
+      showAppMessage('Não consegui ler essa imagem. Tente outro arquivo.', 'error');
+    }
   });
 
   // Pra vídeo, `src` é só a miniatura — o link de verdade se reconstrói a
