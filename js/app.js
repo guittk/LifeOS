@@ -1224,7 +1224,7 @@
   // (aba "Web configuration" → "Web Push certificates"). Sem ela, getToken()
   // falha e os despertadores por push simplesmente não se registram — o resto
   // do app funciona normal, só cai de volta no alarme local (app aberto).
-  const FCM_VAPID_KEY = '';
+  const FCM_VAPID_KEY = 'BFip5vnWtU3URsAt79xTbGwmirNZw7y7HjL4zCQ9SsgP-Qivrp_joa84Y-yaqujmBj2qB8QjpAsTATGL20wN9vM';
 
   let session = null;      // { idToken, uid, email, expiresAt }
   let activeDataUid = null; // uid cujos dados /users/{uid}/... estão sendo lidos (== session.uid, ou o dono do Quadro selecionado)
