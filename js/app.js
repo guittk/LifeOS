@@ -2282,12 +2282,57 @@
     showAppMessage(nome + ' lançado em ' + FIN_MES_NOMES[meses[idx].mes] + '.', 'success');
   }
 
+  /* Monta o próximo mês a partir do anterior (contas que se repetem, parcelas
+     que andam uma casa e somem quando acabam, compras do mês passado ficam
+     pra trás). Só monta os dados — quem chama decide quando salvar/renderizar. */
+  function finProximoMesDados(ultimo){
+    const base = ultimo
+      ? { ano: ultimo.mes === 11 ? ultimo.ano + 1 : ultimo.ano, mes: (ultimo.mes + 1) % 12 }
+      : { ano: new Date().getFullYear(), mes: new Date().getMonth() };
+    const id = newId();
+    const itens = {};
+    let ordem = 0;
+    if(ultimo){
+      finLista(ultimo.itens).forEach(item => {
+        if(item.secao === 'compras') return;
+        if(item.secao === 'aleatorios' && item.parcelas == null) return;
+        const proxima = (item.parcela || 0) + 1;
+        if(item.parcelas != null && proxima > item.parcelas) return;
+        const novoId = newId();
+        itens[novoId] = Object.assign({}, item, { id: novoId, ordem: ordem++ });
+        if(item.parcelas != null) itens[novoId].parcela = proxima;
+      });
+    }
+    const mes = { id, ano: base.ano, mes: base.mes, ordem: finProxOrdem(finState.meses), itens };
+    if(ultimo && ultimo.orcamentoAleatorio != null) mes.orcamentoAleatorio = ultimo.orcamentoAleatorio;
+    finState.meses[id] = mes;
+    return mes;
+  }
+
+  /* Ninguém precisa clicar em "+ Próximo mês": sempre mantém os 12 meses a
+     partir do atual já criados, e some sozinho quando um mês termina — o mês
+     seguinte já existe da próxima vez que a tela é aberta. */
+  function finGarantirMesesFuturos(){
+    const hoje = new Date();
+    const alvoIdx = hoje.getFullYear() * 12 + hoje.getMonth() + 11;
+    let ultimo = finMesesOrdenados().pop();
+    let ultimoIdx = ultimo ? ultimo.ano * 12 + ultimo.mes : -Infinity;
+    let criou = false;
+    while(ultimoIdx < alvoIdx){
+      ultimo = finProximoMesDados(ultimo);
+      ultimoIdx = ultimo.ano * 12 + ultimo.mes;
+      criou = true;
+    }
+    return criou;
+  }
+
   async function renderFinancas(){
     const dados = await dbGet(userPath(FIN_PATH));
     finState = dados || finSeedInicial();
     // O Firebase não guarda objeto vazio: uma coleção zerada volta como undefined.
     ['valores', 'custoVida', 'custoVidaBase', 'meses'].forEach(k => { finState[k] = finState[k] || {}; });
-    if(!dados) await dbPutSilent(userPath(FIN_PATH), finState);
+    const criouMeses = finGarantirMesesFuturos();
+    if(!dados || criouMeses) await dbPutSilent(userPath(FIN_PATH), finState);
     finSetStatus('Tudo salvo');
     finRenderMeses();
     finRenderValores();
@@ -2440,31 +2485,11 @@
      andam uma casa (e somem quando acabam) e as compras do mês passado ficam
      pra trás. É o que se faz na mão na planilha, sem fazer na mão. */
   document.getElementById('finAddMesBtn').addEventListener('click', () => {
-    const meses = finMesesOrdenados();
-    const ultimo = meses[meses.length - 1];
-    const base = ultimo
-      ? { ano: ultimo.mes === 11 ? ultimo.ano + 1 : ultimo.ano, mes: (ultimo.mes + 1) % 12 }
-      : { ano: new Date().getFullYear(), mes: new Date().getMonth() };
-    const id = newId();
-    const itens = {};
-    let ordem = 0;
-    if(ultimo){
-      finLista(ultimo.itens).forEach(item => {
-        // Compras e gastos aleatórios são do mês que passou; parcelas seguem em frente.
-        if(item.secao === 'compras') return;
-        if(item.secao === 'aleatorios' && item.parcelas == null) return;
-        const proxima = (item.parcela || 0) + 1;
-        if(item.parcelas != null && proxima > item.parcelas) return;
-        const novoId = newId();
-        itens[novoId] = Object.assign({}, item, { id: novoId, ordem: ordem++ });
-        if(item.parcelas != null) itens[novoId].parcela = proxima;
-      });
-    }
-    finState.meses[id] = { id, ano: base.ano, mes: base.mes, ordem: finProxOrdem(finState.meses), itens };
-    if(ultimo && ultimo.orcamentoAleatorio != null) finState.meses[id].orcamentoAleatorio = ultimo.orcamentoAleatorio;
+    const ultimo = finMesesOrdenados().pop();
+    const mes = finProximoMesDados(ultimo);
     finRenderMeses();
     finSalvar();
-    showAppMessage(FIN_MES_NOMES[base.mes] + ' criado a partir do mês anterior.', 'success');
+    showAppMessage(FIN_MES_NOMES[mes.mes] + ' criado a partir do mês anterior.', 'success');
   });
 
   /* ---------- OBJETIVOS (objetivo grande + pontos menores que dependem dele) ---------- */
