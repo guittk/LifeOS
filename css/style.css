@@ -2424,7 +2424,7 @@
   .plan-modal-sub-row button{ border:none; background:none; color:var(--text-dim); font-size:16px; cursor:pointer; padding:2px 6px; }
   .plan-modal-sub-row button:hover{ color:var(--coral); }
 
-  /* ---------- Timeline de Objetivos (estática, só leitura) ---------- */
+  /* ---------- Timeline de Objetivos (editável, dados em /TimelineMarcos) ---------- */
   .obj-timeline{ list-style:none; margin:0; padding:4px 0 4px 4px; max-width:560px; position:relative; }
   .obj-timeline-item{
     position:relative; display:flex; align-items:center; flex-wrap:wrap; gap:10px 16px; padding:0 0 22px 0;
