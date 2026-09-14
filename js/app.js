@@ -777,7 +777,8 @@
     ['agenda','Agenda'], ['rotina','Rotina'], ['casa','Casa'], ['financas','Finanças'],
     ['fluencia','Fluência'], ['bateria','Bateria'], ['academia','Academia'], ['diario','Diário'],
     ['planoalimentar','Plano Alimentar'], ['objetivos','Objetivos'], ['timelineobjetivos','Timeline'], ['decisoes','Decisões'],
-    ['visionboard','Vision Board']
+    ['visionboard','Vision Board'], ['supermercado','Supermercado'], ['calculos','Cálculos'],
+    ['empreendedorismo','Empreendedorismo'], ['apice','Ápice']
   ].map(([v, nome]) => ({
     rotulo: 'Ir para ' + nome, chaves: 'ir abrir ' + nome + ' ' + v, run: () => goToView(v)
   }));
@@ -1600,7 +1601,11 @@
     { key:'decisoes', label:'Decisões' },
     { key:'timelineobjetivos', label:'Timeline' },
     { key:'fluencia', label:'Fluência' },
-    { key:'bateria', label:'Bateria' }
+    { key:'bateria', label:'Bateria' },
+    { key:'supermercado', label:'Supermercado' },
+    { key:'calculos', label:'Cálculos' },
+    { key:'empreendedorismo', label:'Empreendedorismo' },
+    { key:'apice', label:'Ápice' }
   ];
   const BOARD_ID_STORAGE_KEY = 'lifeos_currentBoardId';
 
@@ -3256,6 +3261,142 @@
     }
     document.getElementById('pontoModal').classList.remove('active');
     await renderObjetivos();
+  });
+
+  /* ---------- Timeline de Objetivos (marcos em ordem, editável) ---------- */
+  // Migração do que existia hardcoded no HTML — só usado se a coleção nunca
+  // foi criada (mesmo padrão do seed de Finanças/checklist de Acordar).
+  const TIMELINE_SEED = [
+    { nome:'Pagar dívidas', prazo:'Dezembro' },
+    { nome:'Tirar CNH da Julia', valor:1000 },
+    { nome:'Arrumar notebook', valor:1000 },
+    { nome:'Comprar apartamento', valor:5330 },
+    { nome:'Comprar microondas', valor:800 },
+    { nome:'Comprar lava-louças', valor:1800 },
+    { nome:'Reformar apartamento' },
+    { nome:'Comprar uma moto', valor:8000 },
+    { nome:'Vender apartamento', valor:140000, ganho:true },
+    { nome:'Comprar uma chácara' },
+    { nome:'Comprar um carro' },
+    { nome:'Ter filho' }
+  ];
+  let timelineMarcos = {};
+  let timelineDragId = null;
+  function timelineOrdenados(){
+    return Object.values(timelineMarcos).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  }
+  async function renderTimelineObjetivos(){
+    const list = document.getElementById('timelineList');
+    if(!list) return;
+    const dados = await dbGet(userPath('/TimelineMarcos'));
+    if(!dados){
+      timelineMarcos = {};
+      TIMELINE_SEED.forEach((m, i) => { const id = newId(); timelineMarcos[id] = { id, ordem:i, ...m }; });
+      await dbPutSilent(userPath('/TimelineMarcos'), timelineMarcos);
+    } else {
+      timelineMarcos = dados;
+    }
+    const itens = timelineOrdenados();
+    if(!itens.length){
+      list.innerHTML = '<p class="empty-state">Nenhum marco ainda. Clique em "+ Novo marco" pra começar a traçar o caminho.</p>';
+      return;
+    }
+    list.innerHTML = itens.map((m, i) => `
+      <li class="obj-timeline-item" data-marco-id="${m.id}">
+        <span class="obj-timeline-num">${i + 1}</span>
+        <input class="obj-timeline-nome-input" data-marco-nome="${m.id}" value="${escapeHtml(m.nome || '')}" placeholder="Nome do marco">
+        <div class="obj-timeline-actions">
+          <span class="obj-timeline-drag" draggable="true" title="Arrastar pra reordenar">⠿</span>
+          <button type="button" class="obj-timeline-del" data-marco-del="${m.id}" title="Excluir">×</button>
+        </div>
+        <div class="obj-timeline-meta">
+          <input class="obj-timeline-prazo-input" data-marco-prazo="${m.id}" value="${escapeHtml(m.prazo || '')}" placeholder="prazo (ex: Dezembro)">
+          <input class="obj-timeline-valor-input${m.ganho ? ' ganho' : ''}" data-marco-valor="${m.id}" inputmode="decimal" value="${m.valor != null ? finFmtNum(m.valor) : ''}" placeholder="valor">
+          ${m.valor != null ? `<button type="button" class="obj-timeline-ganho-toggle${m.ganho ? ' on' : ''}" data-marco-ganho="${m.id}" title="Alternar entre valor a pagar e a receber">${m.ganho ? '↑ recebe' : '↓ paga'}</button>` : ''}
+        </div>
+      </li>`).join('');
+
+    list.querySelectorAll('[data-marco-nome]').forEach(inp => {
+      inp.addEventListener('change', () => timelineAtualizar(inp.getAttribute('data-marco-nome'), { nome: inp.value }));
+    });
+    list.querySelectorAll('[data-marco-prazo]').forEach(inp => {
+      inp.addEventListener('change', () => timelineAtualizar(inp.getAttribute('data-marco-prazo'), { prazo: inp.value || null }));
+    });
+    list.querySelectorAll('[data-marco-valor]').forEach(inp => {
+      inp.addEventListener('change', async () => {
+        const id = inp.getAttribute('data-marco-valor');
+        const texto = inp.value.trim();
+        await timelineAtualizar(id, { valor: texto ? finParseNum(texto) : null });
+        await renderTimelineObjetivos(); // o botão de ganho/paga aparece ou some
+      });
+    });
+    list.querySelectorAll('[data-marco-ganho]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-marco-ganho');
+        const ganho = !timelineMarcos[id].ganho;
+        btn.classList.toggle('on', ganho);
+        btn.textContent = ganho ? '↑ recebe' : '↓ paga';
+        btn.closest('.obj-timeline-item').querySelector('[data-marco-valor]').classList.toggle('ganho', ganho);
+        timelineAtualizar(id, { ganho });
+      });
+    });
+    list.querySelectorAll('[data-marco-del]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-marco-del');
+        if(!await showConfirm('Excluir "' + (timelineMarcos[id].nome || 'este marco') + '"?')) return;
+        delete timelineMarcos[id];
+        await dbDeleteSilent(userPath('/TimelineMarcos/' + id));
+        await renderTimelineObjetivos();
+      });
+    });
+    // Arrastar pela alça reordena — mesmo padrão do painel de Camadas do Vision Board.
+    list.querySelectorAll('.obj-timeline-drag').forEach(handle => {
+      handle.addEventListener('dragstart', (e) => {
+        const li = handle.closest('.obj-timeline-item');
+        timelineDragId = li.getAttribute('data-marco-id');
+        li.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      handle.addEventListener('dragend', async () => {
+        const li = handle.closest('.obj-timeline-item');
+        li.classList.remove('dragging');
+        timelineDragId = null;
+        const rows = Array.from(list.querySelectorAll('.obj-timeline-item'));
+        await Promise.all(rows.map((row, i) => {
+          const id = row.getAttribute('data-marco-id');
+          timelineMarcos[id].ordem = i;
+          return dbPatchSilent(userPath('/TimelineMarcos/' + id), { ordem: i });
+        }));
+        await renderTimelineObjetivos();
+      });
+    });
+    list.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if(!timelineDragId) return;
+      const dragEl = list.querySelector('.obj-timeline-item.dragging');
+      if(!dragEl) return;
+      const after = Array.from(list.querySelectorAll('.obj-timeline-item:not(.dragging)')).reduce((closest, row) => {
+        const box = row.getBoundingClientRect();
+        const offset = e.clientY - box.top - box.height / 2;
+        if(offset < 0 && offset > closest.offset) return { offset, element: row };
+        return closest;
+      }, { offset: -Infinity, element: null }).element;
+      if(after == null) list.appendChild(dragEl); else list.insertBefore(dragEl, after);
+    });
+  }
+  async function timelineAtualizar(id, patch){
+    if(!timelineMarcos[id]) return;
+    timelineMarcos[id] = { ...timelineMarcos[id], ...patch };
+    await dbPatchSilent(userPath('/TimelineMarcos/' + id), patch);
+  }
+  document.getElementById('timelineAddBtn').addEventListener('click', async () => {
+    const id = newId();
+    const ordem = timelineOrdenados().length;
+    timelineMarcos[id] = { id, nome:'', ordem };
+    await dbPutSilent(userPath('/TimelineMarcos/' + id), timelineMarcos[id]);
+    await renderTimelineObjetivos();
+    const novoInput = document.querySelector('[data-marco-nome="' + id + '"]');
+    if(novoInput) novoInput.focus();
   });
 
   /* ---------- VISION BOARD (colagem automática, com imagens por URL ou upload) ---------- */
@@ -8530,8 +8671,12 @@
     diario:         [[renderDiario, 'o Diário', 'diarioEntriesList']],
     planoalimentar: [[renderPlanoAlimentar, 'o Plano Alimentar', 'paDaysGrid']],
     busca:          [],
-    timelineobjetivos: [],
+    timelineobjetivos: [[renderTimelineObjetivos, 'a Timeline', 'timelineList']],
     acordar:        [[renderAcordarChecklist, 'a checklist de Acordar', 'acordarChecklistList']],
+    supermercado:   [],
+    calculos:       [],
+    empreendedorismo: [],
+    apice:          [],
     config:         []
   };
 

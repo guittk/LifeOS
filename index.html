@@ -108,6 +108,16 @@
     <div class="nav-item nav-item-dim" data-view="bateria" title="Bateria"><span class="nav-icon">🔋</span><span class="nav-label">Bateria</span></div>
   </nav>
 
+  <!-- Telas ainda não construídas: o lugar já existe pra não esquecer, o
+       conteúdo vem depois. -->
+  <nav class="nav-level">
+    <div class="nav-level-label">Em breve</div>
+    <div class="nav-item nav-item-dim" data-view="supermercado" title="Supermercado"><span class="nav-icon">🛒</span><span class="nav-label">Supermercado</span></div>
+    <div class="nav-item nav-item-dim" data-view="calculos" title="Cálculos"><span class="nav-icon">🧮</span><span class="nav-label">Cálculos</span></div>
+    <div class="nav-item nav-item-dim" data-view="empreendedorismo" title="Empreendedorismo"><span class="nav-icon">💡</span><span class="nav-label">Empreendedorismo</span></div>
+    <div class="nav-item nav-item-dim" data-view="apice" title="Ápice"><span class="nav-icon">🏔️</span><span class="nav-label">Ápice</span></div>
+  </nav>
+
   <div class="sidebar-foot">
     <div class="nav-item" data-view="config" title="Configurações"><span class="nav-icon">⚙️</span><span class="nav-label">Configurações</span></div>
     <div class="nav-item" id="logoutBtn" title="Sair"><span class="nav-icon">🚪</span><span class="nav-label">Sair</span></div>
@@ -1032,24 +1042,86 @@
       <div>
         <p class="eyebrow">Evoluir</p>
         <h1 class="view-title">Timeline de Objetivos</h1>
-        <p class="view-desc">A ordem dos grandes marcos, um depois do outro.</p>
+        <p class="view-desc">A ordem dos grandes marcos, um depois do outro. Arraste pela alça pra reordenar.</p>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-primary btn-sm" id="timelineAddBtn">+ Novo marco</button>
       </div>
     </div>
 
-    <ol class="obj-timeline">
-      <li class="obj-timeline-item"><span class="obj-timeline-num">1</span><span class="obj-timeline-nome">Pagar dívidas</span><span class="obj-timeline-prazo">Dezembro</span></li>
-      <li class="obj-timeline-item"><span class="obj-timeline-num">2</span><span class="obj-timeline-nome">Tirar CNH da Julia</span><span class="obj-timeline-valor">R$ 1.000,00</span></li>
-      <li class="obj-timeline-item"><span class="obj-timeline-num">3</span><span class="obj-timeline-nome">Arrumar notebook</span><span class="obj-timeline-valor">R$ 1.000,00</span></li>
-      <li class="obj-timeline-item"><span class="obj-timeline-num">4</span><span class="obj-timeline-nome">Comprar apartamento</span><span class="obj-timeline-valor">R$ 5.330,00</span></li>
-      <li class="obj-timeline-item"><span class="obj-timeline-num">5</span><span class="obj-timeline-nome">Comprar microondas</span><span class="obj-timeline-valor">R$ 800,00</span></li>
-      <li class="obj-timeline-item"><span class="obj-timeline-num">6</span><span class="obj-timeline-nome">Comprar lava-louças</span><span class="obj-timeline-valor">R$ 1.800,00</span></li>
-      <li class="obj-timeline-item"><span class="obj-timeline-num">7</span><span class="obj-timeline-nome">Reformar apartamento</span></li>
-      <li class="obj-timeline-item"><span class="obj-timeline-num">8</span><span class="obj-timeline-nome">Comprar uma moto</span><span class="obj-timeline-valor">R$ 8.000,00</span></li>
-      <li class="obj-timeline-item"><span class="obj-timeline-num">9</span><span class="obj-timeline-nome">Vender apartamento</span><span class="obj-timeline-valor obj-timeline-ganho">R$ 140.000,00</span></li>
-      <li class="obj-timeline-item"><span class="obj-timeline-num">10</span><span class="obj-timeline-nome">Comprar uma chácara</span></li>
-      <li class="obj-timeline-item"><span class="obj-timeline-num">11</span><span class="obj-timeline-nome">Comprar um carro</span></li>
-      <li class="obj-timeline-item"><span class="obj-timeline-num">12</span><span class="obj-timeline-nome">Ter filho</span></li>
-    </ol>
+    <ol class="obj-timeline" id="timelineList"><li class="empty-state">Carregando...</li></ol>
+  </section>
+
+  <!-- SUPERMERCADO (em breve) -->
+  <section class="view" id="view-supermercado">
+    <div class="view-head">
+      <div>
+        <p class="eyebrow">Em breve</p>
+        <h1 class="view-title">Supermercado</h1>
+        <p class="view-desc">Lista de compras a partir do cardápio da semana.</p>
+      </div>
+    </div>
+    <div class="em-breve-box">
+      <p class="em-breve-icone">🛒</p>
+      <p class="em-breve-titulo">Ainda não construída</p>
+      <p class="em-breve-texto">O plano é montar a lista de compras automaticamente a partir dos alimentos do Plano Alimentar da semana.</p>
+    </div>
+  </section>
+
+  <!-- CÁLCULOS (em breve) -->
+  <section class="view" id="view-calculos">
+    <div class="view-head">
+      <div>
+        <p class="eyebrow">Em breve</p>
+        <h1 class="view-title">Cálculos</h1>
+        <p class="view-desc">Calculadoras do dia a dia — a primeira é a de rescisão.</p>
+      </div>
+    </div>
+    <div class="subtabs">
+      <button class="subtab active" data-sub="calculos" data-target="calculos-rescisao">Rescisão</button>
+    </div>
+    <div class="subview active" id="calculos-rescisao">
+      <div class="em-breve-box">
+        <p class="em-breve-icone">🧮</p>
+        <p class="em-breve-titulo">Ainda não construída</p>
+        <p class="em-breve-texto">Cálculo de rescisão trabalhista — aviso prévio, férias, 13º proporcional e FGTS.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- EMPREENDEDORISMO (em breve) -->
+  <section class="view" id="view-empreendedorismo">
+    <div class="view-head">
+      <div>
+        <p class="eyebrow">Em breve</p>
+        <h1 class="view-title">Empreendedorismo</h1>
+        <p class="view-desc">Ideias e projetos próprios, num lugar só.</p>
+      </div>
+    </div>
+    <div class="em-breve-box">
+      <p class="em-breve-icone">💡</p>
+      <p class="em-breve-titulo">Ainda não construída</p>
+      <p class="em-breve-texto">O conteúdo dessa tela ainda vai ser definido.</p>
+    </div>
+  </section>
+
+  <!-- ÁPICE (em breve) -->
+  <section class="view" id="view-apice">
+    <div class="view-head">
+      <div>
+        <p class="eyebrow">Em breve</p>
+        <h1 class="view-title">Ápice</h1>
+        <p class="view-desc">Ápice Soluções Digitais.</p>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <a class="btn btn-primary btn-sm" href="https://apicesolucoesdigitais.com.br" target="_blank" rel="noopener">Abrir Ápice ↗</a>
+      </div>
+    </div>
+    <div class="em-breve-box">
+      <p class="em-breve-icone">🏔️</p>
+      <p class="em-breve-titulo">Tela ainda não construída</p>
+      <p class="em-breve-texto">Por enquanto, o botão acima já leva direto pro site.</p>
+    </div>
   </section>
 
   <!-- DECISÕES -->
