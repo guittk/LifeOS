@@ -1219,7 +1219,31 @@
   }
   .vision-manage-bar{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 10px; margin-bottom:10px; }
   .vision-manage-selectall{ display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text-mut); cursor:pointer; }
-  .vision-manage-list{ display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:10px; margin-bottom:16px; max-height:340px; overflow-y:auto; }
+  .vision-manage-list{ display:flex; flex-direction:column; gap:16px; margin-bottom:16px; max-height:340px; overflow-y:auto; }
+  .vision-manage-grupo-titulo{
+    font-family:var(--mono); font-size:10px; letter-spacing:1px; text-transform:uppercase;
+    color:var(--text-dim); margin:0 0 8px; display:flex; align-items:baseline; gap:6px;
+  }
+  .vision-manage-grupo-titulo span{ font-weight:400; opacity:.7; }
+  .vision-manage-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:10px; }
+
+  /* Links que falharam no teste de imagem: não viram card, mas ficam aqui
+     pra abrir e conferir depois — em vez de simplesmente sumirem. */
+  .vision-broken-list{ display:flex; flex-direction:column; gap:4px; margin-bottom:14px; max-height:120px; overflow-y:auto; }
+  .vision-broken-item{
+    display:flex; align-items:center; gap:8px; background:var(--surface-hi);
+    border:1px solid var(--line); border-radius:6px; padding:6px 8px;
+  }
+  .vision-broken-item a{
+    flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font-family:var(--mono); font-size:11px; color:var(--text-mut);
+  }
+  .vision-broken-item a:hover{ color:var(--sage); }
+  .vision-broken-item button{
+    flex:none; border:none; background:none; color:var(--text-dim); cursor:pointer;
+    font-size:13px; line-height:1; padding:2px 5px; border-radius:4px;
+  }
+  .vision-broken-item button:hover{ color:var(--coral); background:var(--hover); }
   .vision-manage-item{ position:relative; border-radius:6px; overflow:hidden; background:var(--surface); border:1px solid var(--line); }
   .vision-manage-item img{ display:block; width:100%; height:96px; object-fit:cover; }
   .vision-manage-item.broken img{ opacity:0; }

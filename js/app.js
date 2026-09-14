@@ -3955,13 +3955,30 @@
       renderVisionManageBar();
       return;
     }
-    wrap.innerHTML = entries.map(([id, v]) => `
+    const itemHtml = ([id, v]) => `
       <div class="vision-manage-item${visionManageSelecionadas.has(id) ? ' selected' : ''}" data-manage-id="${id}">
         <input type="checkbox" class="vision-manage-check" data-check-vision="${id}"${visionManageSelecionadas.has(id) ? ' checked' : ''}>
         <img src="${escapeHtml(v.src)}" alt="" loading="lazy">
         ${v.tipoVideo ? '<span class="vision-manage-play">▶</span>' : ''}
         <button type="button" data-del-vision="${id}" title="Remover">×</button>
-      </div>`).join('');
+      </div>`;
+    const cats = Object.values(visionCategorias).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+    if(!cats.length){
+      // Sem categorias criadas ainda: um grid só, sem títulos de grupo.
+      wrap.innerHTML = '<div class="vision-manage-grid">' + entries.map(itemHtml).join('') + '</div>';
+    }else{
+      const grupos = cats.map(c => ({ id: c.id, nome: c.nome, itens: [] }));
+      const semCategoria = { id: null, nome: 'Sem categoria', itens: [] };
+      entries.forEach(([id, v]) => {
+        const grupo = v.categoria && grupos.find(g => g.id === v.categoria);
+        (grupo || semCategoria).itens.push([id, v]);
+      });
+      wrap.innerHTML = [...grupos, semCategoria].filter(g => g.itens.length).map(g => `
+        <div class="vision-manage-grupo">
+          <p class="vision-manage-grupo-titulo">${escapeHtml(g.nome)} <span>${g.itens.length}</span></p>
+          <div class="vision-manage-grid">${g.itens.map(itemHtml).join('')}</div>
+        </div>`).join('');
+    }
     wrap.querySelectorAll('img').forEach(img => {
       img.addEventListener('error', () => img.closest('.vision-manage-item').classList.add('broken'), { once: true });
     });
@@ -3979,6 +3996,23 @@
       await renderVisionBoard();
     }));
     renderVisionManageBar();
+  }
+  async function renderVisionLinksQuebrados(){
+    const wrap = document.getElementById('visionLinksQuebradosWrap');
+    const list = document.getElementById('visionLinksQuebradosList');
+    const data = await dbGet(userPath('/VisionLinksQuebrados')) || {};
+    const entries = Object.values(data).sort((a, b) => (a.criadoEm || '').localeCompare(b.criadoEm || ''));
+    wrap.style.display = entries.length ? '' : 'none';
+    if(!entries.length) return;
+    list.innerHTML = entries.map(l => `
+      <div class="vision-broken-item" data-broken-id="${l.id}">
+        <a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.url)}</a>
+        <button type="button" data-del-broken="${l.id}" title="Remover da lista">×</button>
+      </div>`).join('');
+    list.querySelectorAll('[data-del-broken]').forEach(btn => btn.addEventListener('click', async () => {
+      await dbDeleteSilent(userPath('/VisionLinksQuebrados/' + btn.getAttribute('data-del-broken')));
+      await renderVisionLinksQuebrados();
+    }));
   }
   document.getElementById('visionManageSelectAll').addEventListener('change', (e) => {
     const ids = Array.from(document.querySelectorAll('#visionManageList [data-manage-id]')).map(el => el.getAttribute('data-manage-id'));
@@ -4037,6 +4071,7 @@
     document.getElementById('visionAddError').style.display = 'none';
     visionManageSelecionadas.clear();
     await renderVisionManageList();
+    await renderVisionLinksQuebrados();
     document.getElementById('visionAddModal').classList.add('active');
   });
   document.getElementById('visionAddCancelBtn').addEventListener('click', () => {
@@ -4078,7 +4113,13 @@
         testesUrl.filter(t => t.ok).forEach(t => novosItens.push({ src: t.url, tipoVideo: null, embedSrc: null }));
         const urlsInvalidas = testesUrl.filter(t => !t.ok).map(t => t.url);
         if(urlsInvalidas.length){
-          avisos.push(`${urlsInvalidas.length} link(s) não carregaram como imagem e foram ignorados — confira se é o link direto do ARQUIVO da imagem, não da página onde ela aparece (ex: no Instagram, abra a foto e use "Copiar endereço da imagem", não o link do post). Se for um vídeo do YouTube/Instagram, também pode ser que ele tenha sido removido ou esteja privado.`);
+          avisos.push(`${urlsInvalidas.length} link(s) não carregaram como imagem e não viraram card — confira se é o link direto do ARQUIVO da imagem, não da página onde ela aparece (ex: no Instagram, abra a foto e use "Copiar endereço da imagem", não o link do post). Se for um vídeo do YouTube/Instagram, também pode ser que ele tenha sido removido ou esteja privado. Eles ficam listados em "Links que não abriram", embaixo, pra você conferir.`);
+          // O link em si não vira card, mas não desaparece — fica guardado
+          // aqui pra você poder abrir e checar depois, sem precisar colar de novo.
+          await Promise.all(urlsInvalidas.map(url => {
+            const id = newId();
+            return dbPutSilent(userPath('/VisionLinksQuebrados/' + id), { id, url, criadoEm: new Date().toISOString() });
+          }));
         }
       }
       for(const file of files){
@@ -4091,6 +4132,7 @@
       if(!novosItens.length){
         errorEl.textContent = avisos.join(' ') || 'Nenhuma imagem válida pra adicionar.';
         errorEl.style.display = 'block';
+        await renderVisionLinksQuebrados();
         return;
       }
       const data = await dbGet(userPath('/VisionBoard')) || {};
@@ -4115,6 +4157,7 @@
         errorEl.style.display = 'block';
       }
       await renderVisionManageList();
+      await renderVisionLinksQuebrados();
       await renderVisionBoard();
     } finally {
       btn.disabled = false;
