@@ -311,6 +311,16 @@
   </div>
 </div>
 
+<!-- MODAL — CATEGORIAS DO VISION BOARD -->
+<div class="confirm-modal" id="visionCategoriasModal">
+  <div class="confirm-modal-panel" style="max-width:460px;">
+    <div class="catcfg-head"><h3>Categorias do Vision Board</h3><button class="btn btn-ghost btn-sm" id="visionCategoriasFecharBtn">Fechar</button></div>
+    <p class="view-desc" style="margin:-8px 0 12px;">O quadro <strong>Geral</strong> sempre mostra tudo, junto. As categorias abaixo são quadros à parte — cada foto entra em no máximo uma.</p>
+    <div class="catcfg-list" id="visionCategoriasList"></div>
+    <button type="button" class="catcfg-add-btn" id="visionCategoriasAddBtn">+ Nova categoria</button>
+  </div>
+</div>
+
 <!-- MODAL — CONVIDAR PARA O QUADRO -->
 <div class="confirm-modal" id="boardInviteModal">
   <div class="confirm-modal-panel">
@@ -957,7 +967,7 @@
     </div>
 
     <div class="subview active" id="fin-meses">
-      <div class="fin-meses" id="finMesesList"><p class="empty-state">Carregando...</p></div>
+      <div class="fin-meses-scroll" id="finMesesScroll"><div class="fin-meses" id="finMesesList"><p class="empty-state">Carregando...</p></div></div>
     </div>
 
     <div class="subview" id="fin-valores">
@@ -1098,9 +1108,12 @@
         <p class="view-desc">Adicione imagens que representam onde você quer chegar — o board se monta sozinho, em colagem, com tamanhos e ângulos variados.</p>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" id="visionCategoriasBtn">🗂️ Categorias</button>
         <button class="btn btn-ghost btn-sm" id="visionLayersBtn">✏️ Editar</button>
       </div>
     </div>
+
+    <div class="notas-chips vision-chips" id="visionChips"></div>
 
     <div class="vision-shuffle-bar" id="visionShuffleBar">
       <span>Novo arranjo — salvar essa mudança?</span>
@@ -1360,6 +1373,16 @@
     </div>
 
     <div class="config-section" style="margin-bottom:16px;">
+      <p class="config-section-title">Despertadores</p>
+      <p class="config-section-desc">Toca um alarme e abre uma checklist do que fazer depois de acordar. Sem servidor de push: só funciona com o app aberto (ou instalado, rodando em segundo plano) — não dá pra tocar com o celular travado ou o app fechado de vez.</p>
+      <div class="desp-list" id="despertadoresList"></div>
+      <button type="button" class="catcfg-add-btn" id="despertadorAddBtn">+ Novo despertador</button>
+      <p class="config-row-label" style="margin:18px 0 8px;">Checklist pós-acordar</p>
+      <div class="catcfg-list" id="despertadorChecklistList"></div>
+      <button type="button" class="catcfg-add-btn" id="despertadorChecklistAddBtn">+ Item</button>
+    </div>
+
+    <div class="config-section" style="margin-bottom:16px;">
       <p class="config-section-title">Quadro</p>
       <p class="config-section-desc">Troque de Quadro, convide pessoas ou renomeie o seu.</p>
       <div class="config-row">
@@ -1414,6 +1437,18 @@
         </div>
       </div>
       <div class="config-tag-list" id="configCasaMembrosList"></div>
+    </div>
+  </section>
+
+  <!-- ACORDAR — tela de takeover quando um despertador toca, sem entrada na sidebar -->
+  <section class="view" id="view-acordar">
+    <div class="acordar-wrap">
+      <p class="acordar-hora" id="acordarHora">07:00</p>
+      <h1 class="acordar-titulo">Bom dia! ☀️</h1>
+      <p class="acordar-sub">Marque o que já fez antes de sair de casa.</p>
+      <button type="button" class="btn btn-ghost btn-sm" id="acordarSilenciarBtn">🔕 Desligar o som</button>
+      <div class="acordar-checklist" id="acordarChecklistList"></div>
+      <button type="button" class="btn btn-primary" id="acordarProntoBtn">Comecei o dia ✓</button>
     </div>
   </section>
 

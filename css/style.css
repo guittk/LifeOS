@@ -173,6 +173,18 @@
   }
   ::selection{ background: var(--sage-soft); color: var(--text); }
 
+  /* Scrollbar única para o app inteiro — no mesmo idioma visual do resto
+     (contorno cartoon, cantos redondos), em vez da barra padrão do navegador. */
+  *{ scrollbar-width:thin; scrollbar-color: var(--line-strong) transparent; }
+  *::-webkit-scrollbar{ width:10px; height:10px; }
+  *::-webkit-scrollbar-track{ background:transparent; }
+  *::-webkit-scrollbar-thumb{
+    background-color: var(--line-strong); border-radius:20px;
+    border:2px solid transparent; background-clip:padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover{ background-color: var(--sage); }
+  *::-webkit-scrollbar-corner{ background:transparent; }
+
   /* Foco visível de teclado em tudo que é operável — antes não existia nenhum. */
   :focus-visible{
     outline: 3px solid var(--blue);
@@ -921,6 +933,46 @@
   .config-tag button{ background:none; border:none; color:var(--sage); cursor:pointer; font-size:13px; line-height:1; padding:0 2px; opacity:0.75; }
   .config-tag button:hover{ opacity:1; }
 
+  /* ---------- Despertadores ---------- */
+  .desp-list{ display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
+  .desp-row{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    background:var(--surface-hi); border:1px solid var(--line); border-radius:10px; padding:9px 10px;
+  }
+  .desp-row.desp-off{ opacity:.55; }
+  .desp-hora{
+    font-family:var(--mono); font-size:13px; color:var(--text); background:var(--surface);
+    border:1px solid var(--line-strong); border-radius:7px; padding:5px 7px;
+  }
+  .desp-dias{ display:flex; gap:3px; }
+  .desp-dia{
+    width:24px; height:24px; border-radius:50%; border:1px solid var(--line-strong); background:var(--surface);
+    color:var(--text-dim); font-family:var(--mono); font-size:10.5px; cursor:pointer; padding:0;
+  }
+  .desp-dia.on{ background:var(--sage); border-color:var(--sage); color:var(--on-accent); }
+  .desp-toggle{
+    margin-left:auto; border:none; background:none; font-size:17px; line-height:1; cursor:pointer;
+    color:var(--text-dim); padding:2px 4px;
+  }
+  .desp-toggle.on{ color:var(--sage); }
+  .desp-del{ border:none; background:none; color:var(--text-dim); opacity:.6; cursor:pointer; padding:2px 6px; border-radius:6px; }
+  .desp-del:hover{ opacity:1; color:var(--coral); background:var(--coral-soft); }
+
+  /* ---------- Acordar (takeover quando um despertador toca) ---------- */
+  #view-acordar.view.active{ display:flex; align-items:center; justify-content:center; }
+  .acordar-wrap{ max-width:420px; width:100%; text-align:center; margin:0 auto; padding:40px 20px; }
+  .acordar-hora{ font-family:var(--mono); font-size:14px; color:var(--text-dim); margin:0 0 6px; letter-spacing:1px; }
+  .acordar-titulo{ font-family:var(--serif); font-size:32px; font-weight:600; margin:0 0 6px; }
+  .acordar-sub{ font-size:13.5px; color:var(--text-mut); margin:0 0 18px; }
+  .acordar-checklist{ display:flex; flex-direction:column; gap:8px; margin:20px 0 26px; text-align:left; }
+  .acordar-item{
+    display:flex; align-items:center; gap:10px; background:var(--surface); border:1px solid var(--line);
+    border-radius:10px; padding:12px 14px; cursor:pointer; font-size:14px;
+  }
+  .acordar-item input{ width:18px; height:18px; accent-color:var(--sage); flex:none; }
+  .acordar-item.feito{ background:var(--sage-soft); border-color:var(--sage-line); color:var(--text-dim); text-decoration:line-through; }
+  #acordarProntoBtn{ width:100%; justify-content:center; padding:14px; font-size:15px; }
+
   .flow-strip{ display:flex; align-items:center; gap:0; margin: 4px 0 26px; }
   .flow-node{ font-family:var(--mono); font-size:11.5px; color:var(--text-mut); border:1px solid var(--line); padding:6px 14px; border-radius:20px; background:var(--surface); }
   .flow-arrow{ color:var(--text-dim); padding:0 10px; font-size:13px; }
@@ -1133,9 +1185,15 @@
   .vision-layers-close:hover{ color:var(--text); }
   .vision-layers-list{ list-style:none; margin:0; padding:0 10px 14px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:6px; }
   .vision-layer-row{
-    display:flex; align-items:center; gap:8px; background:var(--surface-hi); border:1px solid var(--line);
+    display:flex; align-items:center; flex-wrap:wrap; gap:8px; background:var(--surface-hi); border:1px solid var(--line);
     border-radius:8px; padding:7px 8px; cursor:pointer;
   }
+  .vision-layer-cat{
+    flex:1 1 100%; max-width:calc(100% - 42px); margin-left:42px;
+    border:1px solid var(--line); background:var(--surface); color:var(--text-mut);
+    font-family:var(--sans); font-size:11px; padding:3px 6px; border-radius:6px; cursor:pointer;
+  }
+  .vision-layer-cat:hover{ border-color:var(--line-strong); }
   .vision-layer-row.dragging{ opacity:0.4; }
   .vision-layer-row.vision-layer-hidden{ opacity:0.5; }
   .vision-layer-row.vision-layer-hidden .vision-layer-thumb{ filter:grayscale(1); }
@@ -2375,9 +2433,15 @@
     --fin-cartao:#c55a11;
     --fin-taxa:#c62b4a;
   }
+  /* Barra de rolagem em cima em vez de embaixo (útil porque os cartões dos meses
+     são altos): inverte o eixo do wrapper, o que joga a scrollbar nativa pro topo,
+     e desinverte o conteúdo pra ele continuar de pé. */
+  .fin-meses-scroll{
+    overflow-x:auto; overflow-y:hidden; transform:rotateX(180deg);
+  }
   .fin-meses{
-    display:flex; gap:18px; align-items:flex-start;
-    overflow-x:auto; padding:4px 4px 18px; scroll-snap-type:x proximity;
+    display:flex; gap:18px; align-items:flex-start; transform:rotateX(180deg);
+    padding:4px 4px 18px; scroll-snap-type:x proximity;
   }
   .fin-mes{
     flex:0 0 350px; scroll-snap-align:start;

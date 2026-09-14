@@ -308,6 +308,254 @@
     checarAvisos();
   }
 
+  /* ---------- Despertadores ----------
+     Mesmo LIMITE HONESTO dos avisos acima: sem servidor de push, só tocam com
+     o app aberto. Ao contrário dos avisos, não dependem do toggle de
+     notificações — o som e a tela de Acordar funcionam só com a aba aberta,
+     sem precisar de permissão nenhuma do navegador (a Notification do sistema,
+     quando ligada, é só um reforço a mais). */
+  let despertadores = {};
+  let acordarChecklist = {};
+  let despertadorTimer = null;
+  let despertadorTocandoId = null;
+  let despertadorAudioCtx = null;
+  let despertadorBeepTimer = null;
+  let despertadorAutoStopTimer = null;
+  let acordarFeitos = new Set();
+
+  const ACORDAR_CHECKLIST_PADRAO = [
+    'Fazer café', 'Tomar banho', 'Escovar os dentes', 'Tomar café', 'Pegar marmita',
+    'Pegar lanche da tarde', 'Pegar headset', 'Água', 'Cabos'
+  ];
+  function acordarChecklistSeed(){
+    const obj = {};
+    ACORDAR_CHECKLIST_PADRAO.forEach((texto, i) => { const id = newId(); obj[id] = { id, texto, ordem:i }; });
+    return obj;
+  }
+  async function carregarDespertadores(){
+    const [desps, checklist] = await Promise.all([
+      dbGet(userPath('/Despertadores')),
+      dbGet(userPath('/AcordarChecklist'))
+    ]);
+    despertadores = desps || {};
+    if(!checklist){
+      acordarChecklist = acordarChecklistSeed();
+      await dbPutSilent(userPath('/AcordarChecklist'), acordarChecklist);
+    } else {
+      acordarChecklist = checklist;
+    }
+  }
+
+  function iniciarChecagemDeDespertadores(){
+    clearInterval(despertadorTimer);
+    despertadorTimer = setInterval(checarDespertadores, 20000);
+    checarDespertadores();
+  }
+  function checarDespertadores(){
+    if(!session || despertadorTocandoId) return;
+    const agora = new Date();
+    const hhmm = String(agora.getHours()).padStart(2, '0') + ':' + String(agora.getMinutes()).padStart(2, '0');
+    const diaSemana = agora.getDay();
+    const hoje = todayStr();
+    let disparados = {};
+    try{ disparados = JSON.parse(localStorage.getItem('lifeosDespertadoresDisparados') || '{}'); }catch(e){ /* ignore */ }
+    Object.values(despertadores).some(d => {
+      if(d.ativo === false || d.hora !== hhmm) return false;
+      if(d.dias && d.dias.length && !d.dias.includes(diaSemana)) return false;
+      const marca = hoje + '_' + d.id;
+      if(disparados[marca]) return false;
+      Object.keys(disparados).forEach(k => { if(!k.startsWith(hoje)) delete disparados[k]; });
+      disparados[marca] = 1;
+      localStorage.setItem('lifeosDespertadoresDisparados', JSON.stringify(disparados));
+      dispararDespertador(d);
+      return true; // um por vez — se dois batem no mesmo minuto, o próximo pega no tick seguinte
+    });
+  }
+  function tocarSomDespertador(){
+    pararSomDespertador();
+    try{
+      despertadorAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const bipar = () => {
+        if(!despertadorAudioCtx) return;
+        if(despertadorAudioCtx.state === 'suspended') despertadorAudioCtx.resume().catch(() => {});
+        const t = despertadorAudioCtx.currentTime;
+        const osc = despertadorAudioCtx.createOscillator();
+        const gain = despertadorAudioCtx.createGain();
+        osc.type = 'sine'; osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(0.28, t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+        osc.connect(gain); gain.connect(despertadorAudioCtx.destination);
+        osc.start(t); osc.stop(t + 0.45);
+      };
+      bipar();
+      despertadorBeepTimer = setInterval(bipar, 800);
+    }catch(e){ console.warn('Não consegui tocar o som do despertador:', e); }
+  }
+  function pararSomDespertador(){
+    clearInterval(despertadorBeepTimer); despertadorBeepTimer = null;
+    if(despertadorAudioCtx){ despertadorAudioCtx.close().catch(() => {}); despertadorAudioCtx = null; }
+  }
+  function dispararDespertador(d){
+    despertadorTocandoId = d.id;
+    tocarSomDespertador();
+    clearTimeout(despertadorAutoStopTimer);
+    despertadorAutoStopTimer = setTimeout(pararSomDespertador, 120000); // não toca pra sempre se ninguém mexer
+    if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){
+      try{ new Notification('Hora de acordar! ⏰', { body: 'Toque para abrir o Life OS.', icon:'icon.svg', tag:'despertador' }); }catch(e){ /* ignore */ }
+    }
+    document.getElementById('acordarHora').textContent = d.hora;
+    acordarFeitos = new Set();
+    goToView('acordar');
+    renderAcordarChecklist();
+  }
+  function renderAcordarChecklist(){
+    const list = document.getElementById('acordarChecklistList');
+    if(!list) return;
+    const itens = Object.values(acordarChecklist).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+    if(!itens.length){
+      list.innerHTML = '<p class="empty-state">Nenhum item na checklist ainda — adicione em Configurações → Despertadores.</p>';
+      return;
+    }
+    list.innerHTML = itens.map(it => '<label class="acordar-item' + (acordarFeitos.has(it.id) ? ' feito' : '') + '">' +
+      '<input type="checkbox" data-acordar-item="' + it.id + '"' + (acordarFeitos.has(it.id) ? ' checked' : '') + '>' +
+      '<span>' + escapeHtml(it.texto) + '</span></label>').join('');
+    list.querySelectorAll('[data-acordar-item]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = cb.getAttribute('data-acordar-item');
+        if(cb.checked) acordarFeitos.add(id); else acordarFeitos.delete(id);
+        cb.closest('.acordar-item').classList.toggle('feito', cb.checked);
+      });
+    });
+  }
+  document.getElementById('acordarSilenciarBtn').addEventListener('click', () => {
+    pararSomDespertador();
+  });
+  document.getElementById('acordarProntoBtn').addEventListener('click', () => {
+    pararSomDespertador();
+    despertadorTocandoId = null;
+    goToView('hoje');
+  });
+
+  /* Config → lista de despertadores + checklist (CRUD simples, sem modal) */
+  const DESP_DIAS_LABEL = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+  async function criarDespertador(){
+    const itens = Object.values(despertadores);
+    const d = { id:newId(), hora:'07:00', dias:[1,2,3,4,5], ativo:true, ordem:itens.length };
+    despertadores[d.id] = d;
+    await dbPutSilent(userPath('/Despertadores/' + d.id), d);
+    return d;
+  }
+  async function atualizarDespertador(id, patch){
+    if(!despertadores[id]) return;
+    despertadores[id] = { ...despertadores[id], ...patch };
+    await dbPatchSilent(userPath('/Despertadores/' + id), patch);
+  }
+  async function excluirDespertador(id){
+    delete despertadores[id];
+    await dbDeleteSilent(userPath('/Despertadores/' + id));
+  }
+  function renderDespertadoresConfig(){
+    const list = document.getElementById('despertadoresList');
+    if(!list) return;
+    const itens = Object.values(despertadores).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+    if(!itens.length){
+      list.innerHTML = '<p class="catcfg-vazio">Nenhum despertador ainda.</p>';
+      return;
+    }
+    list.innerHTML = itens.map(d => '<div class="desp-row' + (d.ativo === false ? ' desp-off' : '') + '" data-desp-id="' + d.id + '">' +
+      '<input type="time" class="desp-hora" data-desp-hora="' + d.id + '" value="' + (d.hora || '07:00') + '">' +
+      '<div class="desp-dias">' + DESP_DIAS_LABEL.map((lbl, i) =>
+        '<button type="button" class="desp-dia' + ((d.dias || []).includes(i) ? ' on' : '') + '" data-desp-dia="' + d.id + '" data-dia-idx="' + i + '">' + lbl + '</button>'
+      ).join('') + '</div>' +
+      '<button type="button" class="desp-toggle' + (d.ativo === false ? '' : ' on') + '" data-desp-toggle="' + d.id + '" title="' + (d.ativo === false ? 'Ativar' : 'Desativar') + '">' + (d.ativo === false ? '○' : '●') + '</button>' +
+      '<button type="button" class="desp-del" data-desp-del="' + d.id + '" title="Excluir">🗑</button>' +
+      '</div>').join('');
+    list.querySelectorAll('[data-desp-hora]').forEach(inp => {
+      inp.addEventListener('change', () => atualizarDespertador(inp.getAttribute('data-desp-hora'), { hora: inp.value }));
+    });
+    list.querySelectorAll('[data-desp-dia]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-desp-dia');
+        const idx = Number(btn.getAttribute('data-dia-idx'));
+        const dias = new Set(despertadores[id].dias || []);
+        dias.has(idx) ? dias.delete(idx) : dias.add(idx);
+        const novoDias = [...dias].sort();
+        btn.classList.toggle('on', dias.has(idx));
+        await atualizarDespertador(id, { dias: novoDias });
+      });
+    });
+    list.querySelectorAll('[data-desp-toggle]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-desp-toggle');
+        await atualizarDespertador(id, { ativo: despertadores[id].ativo === false });
+        renderDespertadoresConfig();
+      });
+    });
+    list.querySelectorAll('[data-desp-del]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-desp-del');
+        if(!await showConfirm('Excluir este despertador?')) return;
+        await excluirDespertador(id);
+        renderDespertadoresConfig();
+      });
+    });
+  }
+  const despertadorAddBtn = document.getElementById('despertadorAddBtn');
+  if(despertadorAddBtn) despertadorAddBtn.addEventListener('click', async () => {
+    await criarDespertador();
+    renderDespertadoresConfig();
+  });
+
+  async function criarAcordarChecklistItem(texto){
+    const itens = Object.values(acordarChecklist);
+    const it = { id:newId(), texto: texto || 'Novo item', ordem:itens.length };
+    acordarChecklist[it.id] = it;
+    await dbPutSilent(userPath('/AcordarChecklist/' + it.id), it);
+    return it;
+  }
+  async function excluirAcordarChecklistItem(id){
+    delete acordarChecklist[id];
+    await dbDeleteSilent(userPath('/AcordarChecklist/' + id));
+  }
+  function renderDespertadorChecklistConfig(){
+    const list = document.getElementById('despertadorChecklistList');
+    if(!list) return;
+    const itens = Object.values(acordarChecklist).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+    if(!itens.length){
+      list.innerHTML = '<p class="catcfg-vazio">Nenhum item ainda — crie o primeiro abaixo.</p>';
+      return;
+    }
+    list.innerHTML = itens.map(it => '<div class="catcfg-row" data-check-row="' + it.id + '">' +
+      '<input class="catcfg-nome" data-nome-check="' + it.id + '" value="' + escapeHtml(it.texto) + '">' +
+      '<button type="button" class="catcfg-del" data-excluir-check="' + it.id + '" title="Excluir">🗑</button>' +
+      '</div>').join('');
+    list.querySelectorAll('[data-nome-check]').forEach(inp => {
+      inp.addEventListener('blur', async () => {
+        const id = inp.getAttribute('data-nome-check');
+        const texto = inp.value.trim();
+        if(!texto){ inp.value = acordarChecklist[id].texto; return; }
+        if(texto === acordarChecklist[id].texto) return;
+        acordarChecklist[id] = { ...acordarChecklist[id], texto };
+        await dbPatchSilent(userPath('/AcordarChecklist/' + id), { texto });
+      });
+      inp.addEventListener('keydown', (e) => { if(e.key === 'Enter') inp.blur(); });
+    });
+    list.querySelectorAll('[data-excluir-check]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-excluir-check');
+        if(!await showConfirm('Excluir este item da checklist?')) return;
+        await excluirAcordarChecklistItem(id);
+        renderDespertadorChecklistConfig();
+      });
+    });
+  }
+  const despertadorChecklistAddBtn = document.getElementById('despertadorChecklistAddBtn');
+  if(despertadorChecklistAddBtn) despertadorChecklistAddBtn.addEventListener('click', async () => {
+    await criarAcordarChecklistItem('Novo item');
+    renderDespertadorChecklistConfig();
+  });
+
   /* ---------- Navegação principal ---------- */
   const navItems = document.querySelectorAll('.nav-item[data-view]');
 
@@ -1876,6 +2124,7 @@
     };
     const rSalario = val('Salário', 2512);
     const rVale = val('Vale', 1943);
+    const rAlelo = val('Alelo', 186);
     const rRemedios = val('Remédios', -120);
     const rMercado = val('Supermercado', -600);
     const rGasolina = val('Gasolina', -400);
@@ -1892,7 +2141,7 @@
       itens[id] = Object.assign({ id, secao, nome, valor:0, refId:null, ordem: ordemItem++ }, extra || {});
     };
     item('dia10', 'Salário', { refId: rSalario });
-    item('dia10', 'Alelo', { valor: 186 });
+    item('dia10', 'Alelo', { refId: rAlelo });
     item('dia10', 'Condomínio', { refId: rCondominio });
     item('dia10', 'Aluguel', { refId: rAluguel });
     item('dia10', 'Luz', { refId: rLuz });
@@ -2541,7 +2790,7 @@
 
   // Segurar Shift e usar a rodinha rola os meses na horizontal — sem depender
   // do navegador converter o gesto sozinho, que era inconsistente.
-  document.getElementById('finMesesList').addEventListener('wheel', (e) => {
+  document.getElementById('finMesesScroll').addEventListener('wheel', (e) => {
     if(!e.shiftKey) return;
     e.preventDefault();
     e.currentTarget.scrollLeft += (e.deltaY || e.deltaX);
@@ -3011,10 +3260,124 @@
   const VISION_MAX_WIDTH = 45;
   let visionData = {};
   let visionPendingShuffle = null; // { id: {left,top,widthPct,rotate,z} } — só em memória até salvar
+  // Categorias são quadros à parte: cada foto entra em no máximo uma. "Geral"
+  // (visionFiltroCategoria === null) é sempre a soma de tudo, sem exceção.
+  let visionCategorias = {};
+  let visionFiltroCategoria = null; // null = Geral | '__sem__' = sem categoria | id de categoria
 
   function visionSortedEntries(data){
     return Object.entries(data).sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
   }
+  function visionEntriesVisiveis(data){
+    const entries = visionSortedEntries(data);
+    if(visionFiltroCategoria == null) return entries;
+    if(visionFiltroCategoria === '__sem__') return entries.filter(([, v]) => !v.categoria);
+    return entries.filter(([, v]) => v.categoria === visionFiltroCategoria);
+  }
+  /* ---------- Categorias do Vision Board (quadros à parte + o Geral, que soma tudo) ---------- */
+  async function visionCreateCategoria(nome){
+    const cats = Object.values(visionCategorias);
+    const cat = { id: newId(), nome: nome || 'Nova categoria', ordem: cats.length };
+    visionCategorias[cat.id] = cat;
+    await dbPutSilent(userPath('/VisionCategorias/' + cat.id), cat);
+    return cat;
+  }
+  async function visionUpdateCategoria(id, patch){
+    if(!visionCategorias[id]) return;
+    visionCategorias[id] = { ...visionCategorias[id], ...patch };
+    await dbPatchSilent(userPath('/VisionCategorias/' + id), patch);
+  }
+  async function visionDeleteCategoria(id){
+    delete visionCategorias[id];
+    await dbDeleteSilent(userPath('/VisionCategorias/' + id));
+  }
+  function visionRenderChips(){
+    const el = document.getElementById('visionChips');
+    if(!el) return;
+    const cats = Object.values(visionCategorias).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+    const semCategoria = Object.values(visionData).filter(v => !v.categoria).length;
+    let html = '<button type="button" class="notas-chip' + (visionFiltroCategoria == null ? ' active' : '') + '" data-vision-cat="">' +
+      '<span class="notas-chip-dot" style="background:var(--text-dim)"></span>Geral <span class="notas-chip-count">' + Object.keys(visionData).length + '</span></button>';
+    html += cats.map(c => {
+      const count = Object.values(visionData).filter(v => v.categoria === c.id).length;
+      return '<button type="button" class="notas-chip' + (visionFiltroCategoria === c.id ? ' active' : '') + '" data-vision-cat="' + c.id + '">' +
+        escapeHtml(c.nome) + ' <span class="notas-chip-count">' + count + '</span></button>';
+    }).join('');
+    if(semCategoria && cats.length){
+      html += '<button type="button" class="notas-chip' + (visionFiltroCategoria === '__sem__' ? ' active' : '') + '" data-vision-cat="__sem__">' +
+        'Sem categoria <span class="notas-chip-count">' + semCategoria + '</span></button>';
+    }
+    el.innerHTML = html;
+    el.querySelectorAll('[data-vision-cat]').forEach(btn => btn.addEventListener('click', () => {
+      visionFiltroCategoria = btn.getAttribute('data-vision-cat') || null;
+      visionManualSelectedId = null;
+      visionRenderChips();
+      paintVisionBoard();
+      if(document.getElementById('visionLayersPanel').classList.contains('open')) renderVisionLayers();
+    }));
+  }
+  function visionRenderCategoriasModal(){
+    const list = document.getElementById('visionCategoriasList');
+    const cats = Object.values(visionCategorias).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+    if(!cats.length){
+      list.innerHTML = '<p class="catcfg-vazio">Nenhuma categoria ainda — crie a primeira abaixo.</p>';
+      return;
+    }
+    list.innerHTML = cats.map(c => {
+      const count = Object.values(visionData).filter(v => v.categoria === c.id).length;
+      return '<div class="catcfg-row" data-cat-row="' + c.id + '">' +
+        '<input class="catcfg-nome" data-nome-cat="' + c.id + '" value="' + escapeHtml(c.nome) + '">' +
+        '<span class="catcfg-count">' + count + (count === 1 ? ' foto' : ' fotos') + '</span>' +
+        '<button type="button" class="catcfg-del" data-excluir-cat="' + c.id + '" title="Excluir">🗑</button>' +
+        '</div>';
+    }).join('');
+    list.querySelectorAll('[data-nome-cat]').forEach(inp => {
+      inp.addEventListener('blur', async () => {
+        const id = inp.getAttribute('data-nome-cat');
+        const nome = inp.value.trim();
+        if(!nome){ inp.value = visionCategorias[id].nome; return; }
+        if(nome === visionCategorias[id].nome) return;
+        await visionUpdateCategoria(id, { nome });
+        visionRenderChips();
+      });
+      inp.addEventListener('keydown', (e) => { if(e.key === 'Enter') inp.blur(); });
+    });
+    list.querySelectorAll('[data-excluir-cat]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-excluir-cat');
+        const cat = visionCategorias[id];
+        const presas = Object.entries(visionData).filter(([, v]) => v.categoria === id);
+        if(presas.length){
+          if(!await showConfirm(presas.length + ' foto(s) usam "' + cat.nome + '" — excluir mesmo assim? Elas ficam sem categoria.')) return;
+          await Promise.all(presas.map(([pid]) => dbPatchSilent(userPath('/VisionBoard/' + pid), { categoria: null })));
+          presas.forEach(([pid]) => { visionData[pid] = { ...visionData[pid], categoria: null }; });
+        } else if(!await showConfirm('Excluir "' + cat.nome + '"?')){
+          return;
+        }
+        await visionDeleteCategoria(id);
+        if(visionFiltroCategoria === id) visionFiltroCategoria = null;
+        visionRenderCategoriasModal();
+        visionRenderChips();
+        paintVisionBoard();
+      });
+    });
+  }
+  document.getElementById('visionCategoriasBtn').addEventListener('click', () => {
+    visionRenderCategoriasModal();
+    document.getElementById('visionCategoriasModal').classList.add('active');
+  });
+  document.getElementById('visionCategoriasFecharBtn').addEventListener('click', () => {
+    document.getElementById('visionCategoriasModal').classList.remove('active');
+  });
+  document.getElementById('visionCategoriasModal').addEventListener('click', (e) => {
+    if(e.target.id === 'visionCategoriasModal') document.getElementById('visionCategoriasModal').classList.remove('active');
+  });
+  document.getElementById('visionCategoriasAddBtn').addEventListener('click', async () => {
+    await visionCreateCategoria('Nova categoria');
+    visionRenderCategoriasModal();
+    visionRenderChips();
+  });
+
   function visionShowShuffleBar(show){
     document.getElementById('visionShuffleBar').classList.toggle('active', show);
     document.getElementById('visionLayersBtn').disabled = show;
@@ -3022,7 +3385,9 @@
   }
   async function shuffleVisionBoard(){
     visionData = await dbGet(userPath('/VisionBoard')) || {};
-    const entries = visionSortedEntries(visionData);
+    // Embaralha só o que está visível agora — dentro de uma categoria, mexe
+    // só nela; as outras fotos ficam onde estavam.
+    const entries = visionEntriesVisiveis(visionData);
     if(!entries.length) return;
     const layout = await visionBoardAutoLayout(entries.map(([, v]) => v.src));
     visionPendingShuffle = {};
@@ -3064,13 +3429,17 @@
   function paintVisionBoard(){
     const el = document.getElementById('visionBoard');
     if(!el) return;
-    const entries = visionSortedEntries(visionData).map(([id, v]) => {
+    const entries = visionEntriesVisiveis(visionData).map(([id, v]) => {
       const override = visionPendingShuffle && visionPendingShuffle[id];
       return [id, override ? { ...v, ...override } : v];
     });
     if(!entries.length){
       el.style.minHeight = visionAlturaDisponivel(el) + 'px';
-      el.innerHTML = '<p class="empty-state" style="padding:40px;">Seu Vision Board está vazio. Clique em "Gerenciar imagens" pra começar a montar.</p>';
+      el.innerHTML = '<p class="empty-state" style="padding:40px;">' +
+        (visionFiltroCategoria == null
+          ? 'Seu Vision Board está vazio. Clique em "Gerenciar imagens" pra começar a montar.'
+          : 'Nenhuma foto nesta categoria ainda.') +
+        '</p>';
       return;
     }
     // A posição de cada foto é uma % da altura do board — se o board for mais
@@ -3192,10 +3561,16 @@
   }
   async function renderVisionBoard(){
     if(!document.getElementById('visionBoard')) return;
-    visionData = await dbGet(userPath('/VisionBoard')) || {};
+    const [dados, categorias] = await Promise.all([
+      dbGet(userPath('/VisionBoard')),
+      dbGet(userPath('/VisionCategorias'))
+    ]);
+    visionData = dados || {};
+    visionCategorias = categorias || {};
     visionPendingShuffle = null;
     visionManualSelectedId = null;
     visionShowShuffleBar(false);
+    visionRenderChips();
     paintVisionBoard();
     renderVisionSelectedControls();
     if(document.getElementById('visionLayersPanel').classList.contains('open')) renderVisionLayers();
@@ -3215,11 +3590,12 @@
   }
   function renderVisionLayers(){
     const list = document.getElementById('visionLayersList');
-    const entries = visionSortedEntries(visionData);
+    const entries = visionEntriesVisiveis(visionData);
     if(!entries.length){
       list.innerHTML = '<p class="empty-state" style="margin:0;">Nenhuma imagem ainda.</p>';
       return;
     }
+    const cats = Object.values(visionCategorias).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
     // topo da lista = maior z-index (mais na frente), como nas Camadas do Canva
     const byZDesc = [...entries].sort((a, b) => (b[1].z || 0) - (a[1].z || 0));
     list.innerHTML = byZDesc.map(([id, v]) => `
@@ -3227,13 +3603,30 @@
         <span class="vision-layer-drag" draggable="true">⠿</span>
         <img class="vision-layer-thumb" src="${escapeHtml(v.src)}" alt="" draggable="false">
         <button type="button" class="vision-layer-eye" data-vision-eye="${id}" title="${v.hidden ? 'Mostrar foto' : 'Esconder foto'}">${v.hidden ? '🚫' : '👁'}</button>
+        ${cats.length ? `<select class="vision-layer-cat" data-vision-cat-select="${id}" title="Categoria desta foto">
+          <option value="">Sem categoria</option>
+          ${cats.map(c => `<option value="${c.id}"${v.categoria === c.id ? ' selected' : ''}>${escapeHtml(c.nome)}</option>`).join('')}
+        </select>` : ''}
       </li>`).join('');
-    // Clicar em qualquer parte da linha (menos a alça de arrastar e o olho) seleciona a foto
+    // Clicar em qualquer parte da linha (menos a alça, o olho e o seletor) seleciona a foto
     list.querySelectorAll('.vision-layer-row').forEach(row => {
       row.addEventListener('click', (e) => {
-        if(e.target.closest('.vision-layer-drag') || e.target.closest('.vision-layer-eye')) return;
+        if(e.target.closest('.vision-layer-drag') || e.target.closest('.vision-layer-eye') || e.target.closest('.vision-layer-cat')) return;
         const id = row.getAttribute('data-vision-id');
         visionManualSelectedId = visionManualSelectedId === id ? null : id;
+        paintVisionBoard();
+        renderVisionLayers();
+      });
+    });
+    list.querySelectorAll('[data-vision-cat-select]').forEach(sel => {
+      sel.addEventListener('click', (e) => e.stopPropagation());
+      sel.addEventListener('change', async () => {
+        const id = sel.getAttribute('data-vision-cat-select');
+        const categoria = sel.value || null;
+        visionData[id] = { ...visionData[id], categoria };
+        await dbPatchSilent(userPath('/VisionBoard/' + id), { categoria });
+        visionRenderChips();
+        // Mudar a categoria pode tirar a foto do filtro atual — repinta tudo.
         paintVisionBoard();
         renderVisionLayers();
       });
@@ -3331,11 +3724,17 @@
   document.getElementById('visionShuffleCancelBtn').addEventListener('click', cancelVisionShuffle);
   document.getElementById('visionRestoreAllBtn').addEventListener('click', async () => {
     visionData = await dbGet(userPath('/VisionBoard')) || {};
-    const entries = visionSortedEntries(visionData);
+    // Só restaura o que está visível agora — dentro de uma categoria, as fotos
+    // das outras categorias não são tocadas (por isso funde no visionData
+    // inteiro em vez de sobrescrever o nó todo com só o subconjunto filtrado).
+    const entries = visionEntriesVisiveis(visionData);
     if(!entries.length) return;
-    if(!await showConfirm('Isso restaura o tamanho e a posição de TODAS as fotos pro arranjo automático, desfazendo ajustes manuais. Continuar?')) return;
+    const msg = visionFiltroCategoria == null
+      ? 'Isso restaura o tamanho e a posição de TODAS as fotos pro arranjo automático, desfazendo ajustes manuais. Continuar?'
+      : 'Isso restaura o tamanho e a posição das fotos DESTA CATEGORIA pro arranjo automático, desfazendo ajustes manuais. Continuar?';
+    if(!await showConfirm(msg)) return;
     const layout = await visionBoardAutoLayout(entries.map(([, v]) => v.src));
-    const updates = {};
+    const updates = { ...visionData };
     entries.forEach(([id], i) => { updates[id] = { ...visionData[id], ...layout[i] }; });
     await dbPutSilent(userPath('/VisionBoard'), updates);
     visionData = updates;
@@ -3621,14 +4020,17 @@
         return;
       }
       const data = await dbGet(userPath('/VisionBoard')) || {};
-      const existingEntries = Object.entries(data).sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
+      // Reempacota só o que está visível agora — dentro de uma categoria, as
+      // fotos novas entram (e reorganizam) só ela, sem tocar nas outras.
+      const existingEntries = visionEntriesVisiveis(data);
+      const categoriaAlvo = (visionFiltroCategoria && visionFiltroCategoria !== '__sem__') ? visionFiltroCategoria : null;
       const allSrcs = existingEntries.map(([, v]) => v.src).concat(novosItens.map(it => it.src));
       const layout = await visionBoardAutoLayout(allSrcs);
       const updates = {};
       existingEntries.forEach(([id], i) => { updates[id] = { ...data[id], ...layout[i] }; });
       const novasEntries = novosItens.map((it, i) => {
         const pos = layout[existingEntries.length + i];
-        return [newId(), { ...it, order: existingEntries.length + i, criadoEm: new Date().toISOString(), ...pos }];
+        return [newId(), { ...it, order: existingEntries.length + i, categoria: categoriaAlvo, criadoEm: new Date().toISOString(), ...pos }];
       });
       novasEntries.forEach(([id, v]) => { updates[id] = v; });
       await Promise.all(Object.entries(updates).map(([id, v]) => dbPutSilent(userPath('/VisionBoard/' + id), v)));
@@ -8012,6 +8414,7 @@
     planoalimentar: [[renderPlanoAlimentar, 'o Plano Alimentar', 'paDaysGrid']],
     busca:          [],
     timelineobjetivos: [],
+    acordar:        [[renderAcordarChecklist, 'a checklist de Acordar', 'acordarChecklistList']],
     config:         []
   };
 
@@ -8045,7 +8448,10 @@
       ['a cor principal',    loadCorPrincipal],
       ['o tema do Diário',   loadDiarioTheme],
       ['a lista de pessoas', renderConfigCasaMembros],
-      ['os campos de responsável', populateCasaResponsavelSelects]
+      ['os campos de responsável', populateCasaResponsavelSelects],
+      ['os despertadores', carregarDespertadores],
+      ['a lista de despertadores', renderDespertadoresConfig],
+      ['a checklist de acordar', renderDespertadorChecklistConfig]
     ];
     for(const [rotulo, fn] of preludio){
       try{ await fn(); }
@@ -8059,6 +8465,9 @@
 
     atualizarBotaoNotificacoes();
     if(notificacoesLigadas()) iniciarAgendadorDeAvisos();
+    // Despertadores tocam independente do toggle de notificações — só
+    // precisam da aba aberta, sem pedir permissão nenhuma pro som.
+    iniciarChecagemDeDespertadores();
   }
 
   (async function init(){
