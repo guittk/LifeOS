@@ -1828,26 +1828,644 @@
   });
 
 
-  /* ---------- FINANÇAS ---------- */
-  const FINANCAS_URL = 'https://financas.guilherme-oliveira.com';
-  function renderFinancas(){
-    const wrap = document.getElementById('financasFrameWrap');
-    const note = document.getElementById('financasEmbedNote');
-    const openBtn = document.getElementById('financasOpenTabBtn');
-    const email = session && session.email ? session.email : '';
-    const src = FINANCAS_URL + (email ? ('?email=' + encodeURIComponent(email)) : '');
-    openBtn.href = src;
-    note.textContent = 'Tentando carregar aqui dentro — se não aparecer, use "Abrir em nova aba".';
-    wrap.innerHTML = `<iframe id="financasIframe" src="${escapeHtml(src)}" title="Finanças"
-      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-modals"
-      referrerpolicy="no-referrer-when-downgrade"></iframe>`;
-    clearTimeout(renderFinancas._fallbackTimer);
-    renderFinancas._fallbackTimer = setTimeout(() => {
-      if(document.getElementById('financasIframe')){
-        note.textContent = 'Se a tela acima estiver em branco, é porque as Finanças não permitem ser exibidas dentro de outro site — abra em nova aba.';
-      }
-    }, 4000);
+  /* ---------- FINANÇAS (o mês a mês da planilha "Financeiro", agora nativo) ----------
+     O encadeamento é o mesmo da planilha: a fatura final do Mercado Pago de um mês
+     vira a "sobra do mês passado" do mês seguinte, e o que foi empurrado pra frente
+     (empréstimo + taxa) volta como estimativa na fatura do cartão. Só as linhas de
+     verdade são digitadas — sobra, fatura, empréstimo e totais são calculados.
+
+     Linhas podem apontar para um item de "Valores" (refId) em vez de ter valor
+     próprio: é o equivalente ao =$U$14 da planilha, um lugar só pra mudar o aluguel
+     e todos os meses acompanharem. */
+  const FIN_PATH = '/FinancasPlano';
+  const FIN_MES_NOMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const FIN_ORCAMENTO_PADRAO = 300; // teto mensal de gasto aleatório, se nunca foi definido
+
+  let finState = null;
+  let finSaveTimer = null;
+
+  const finMoeda = new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' });
+  function finFmt(v){ return finMoeda.format(Number(v) || 0); }
+  function finFmtNum(v){ return (Number(v) || 0).toFixed(2).replace('.', ','); }
+  function finParseNum(txt){
+    const limpo = String(txt).replace(/\s|R\$/g, '').replace(/\.(?=\d{3}\b)/g, '').replace(',', '.');
+    const n = parseFloat(limpo);
+    return isNaN(n) ? 0 : n;
   }
+  function finLista(obj){ return Object.values(obj || {}).sort((a, b) => (a.ordem || 0) - (b.ordem || 0)); }
+  function finProxOrdem(obj){ return finLista(obj).reduce((m, i) => Math.max(m, (i.ordem || 0) + 1), 0); }
+  function finValorDe(item){
+    if(item.refId && finState.valores && finState.valores[item.refId]) return Number(finState.valores[item.refId].valor) || 0;
+    return Number(item.valor) || 0;
+  }
+  function finSinal(v){ return v > 0 ? ' pos' : (v < 0 ? ' neg' : ''); }
+  /* Teto de gasto aleatório: o mês pode ter o seu, senão vale o teto geral. */
+  function finOrcamentoDoMes(mes){
+    if(mes && mes.orcamentoAleatorio != null) return Math.abs(Number(mes.orcamentoAleatorio) || 0);
+    return Math.abs(Number(finState.orcamentoAleatorio) || 0);
+  }
+
+  function finSeedInicial(){
+    const valores = {};
+    let ordemValor = 0;
+    const val = (nome, valor) => {
+      const id = newId();
+      valores[id] = { id, nome, valor, ordem: ordemValor++ };
+      return id;
+    };
+    const rSalario = val('Salário', 2512);
+    const rVale = val('Vale', 1943);
+    const rRemedios = val('Remédios', -120);
+    const rMercado = val('Supermercado', -600);
+    const rGasolina = val('Gasolina', -400);
+    const rCondominio = val('Condomínio', -165);
+    const rAluguel = val('Aluguel', -600);
+    const rLuz = val('Luz', -210);
+    const rInternet = val('Internet', -100);
+    const rAgua = val('Água', -50);
+
+    const itens = {};
+    let ordemItem = 0;
+    const item = (secao, nome, extra) => {
+      const id = newId();
+      itens[id] = Object.assign({ id, secao, nome, valor:0, refId:null, ordem: ordemItem++ }, extra || {});
+    };
+    item('dia10', 'Salário', { refId: rSalario });
+    item('dia10', 'Alelo', { valor: 186 });
+    item('dia10', 'Condomínio', { refId: rCondominio });
+    item('dia10', 'Aluguel', { refId: rAluguel });
+    item('dia10', 'Luz', { refId: rLuz });
+    item('dia10', 'Internet', { refId: rInternet });
+    item('dia10', 'Água', { refId: rAgua });
+    item('dia20', 'Vale', { refId: rVale });
+    item('estimativas', 'Remédios', { refId: rRemedios });
+    item('estimativas', 'Supermercado', { refId: rMercado });
+    item('estimativas', 'Gasolina', { refId: rGasolina });
+    item('renovacoes', 'Vivo Easy', { valor: -38 });
+    item('renovacoes', 'YouTube Music', { valor: -21.9 });
+    item('renovacoes', 'YouTube Premium', { valor: -26.9 });
+    item('renovacoes', 'Google One', { valor: -4.5 });
+    item('renovacoes', 'Google One', { valor: -14.99 });
+    item('parcelas', 'Tablet', { valor: -229.74, parcela: 7, parcelas: 12 });
+    item('parcelas', 'Academia', { valor: -159.9, parcela: 6, parcelas: 12 });
+    item('parcelas', 'Seguro', { valor: -185.54, parcela: 1, parcelas: 7 });
+    item('parcelas', 'Mercado Livre', { valor: -117.25, parcela: 2, parcelas: 4 });
+    item('parcelas', 'Mercado Livre', { valor: -24.05, parcela: 2, parcelas: 4 });
+    item('parcelas', 'Mercado Livre', { valor: -88.65, parcela: 2, parcelas: 3 });
+    item('parcelas', 'Mercado Livre', { valor: -14.03, parcela: 1, parcelas: 3 });
+    item('parcelas', 'Mercado Livre', { valor: -26.46, parcela: 1, parcelas: 6 });
+    item('parcelas', 'Mercado Livre', { valor: -42, parcela: 1, parcelas: 3 });
+    item('parcelas', 'Praia (Indaiá)', { valor: -162, parcela: 1, parcelas: 2 });
+
+    const linhasCv = (linhas) => {
+      const alvo = {};
+      linhas.forEach(([nome, valor, refId], i) => {
+        const id = newId();
+        alvo[id] = { id, nome, valor: valor || 0, refId: refId || null, ordem: i };
+      });
+      return alvo;
+    };
+    const custoVidaBase = linhasCv([
+      ['Remédios', 0, rRemedios], ['Supermercado (básico)', -500], ['Renovações automáticas (básico)', -45],
+      ['Aluguel', 0, rAluguel], ['Luz (básico)', -200], ['Internet', 0, rInternet],
+      ['Água', 0, rAgua], ['Imprevistos', -200]
+    ]);
+    const custoVida = linhasCv([
+      ['Remédios', 0, rRemedios], ['Supermercado', -700], ['Suplementos', -165],
+      ['Renovações automáticas', -80], ['Aluguel', 0, rAluguel], ['Luz', -175],
+      ['Internet', 0, rInternet], ['Água', 0, rAgua], ['Academia', -120],
+      ['Gasolina', -300], ['Imprevistos', -120]
+    ]);
+
+    const hoje = new Date();
+    const mesId = newId();
+    return {
+      taxaEmprestimo: 0.065,
+      orcamentoAleatorio: FIN_ORCAMENTO_PADRAO,
+      valores, custoVida, custoVidaBase,
+      meses: { [mesId]: { id: mesId, ano: hoje.getFullYear(), mes: hoje.getMonth(), ordem: 0, itens } }
+    };
+  }
+
+  function finMesesOrdenados(){
+    return finLista(finState.meses).sort((a, b) => (a.ano - b.ano) || (a.mes - b.mes));
+  }
+  function finItensDaSecao(mes, secao){
+    return finLista(mes.itens).filter(i => i.secao === secao);
+  }
+
+  /* A cadeia de contas da planilha, mês a mês e na ordem do calendário. */
+  function finCalcular(){
+    const mapa = {};
+    let sobraAnterior = 0;      // fatura final do mês anterior  (planilha: C34 -> F5)
+    let empurradoAnterior = 0;  // empréstimo + taxa do mês anterior (planilha: C33 -> F38)
+    finMesesOrdenados().forEach(mes => {
+      const soma = (secao) => finItensDaSecao(mes, secao).reduce((s, i) => s + finValorDe(i), 0);
+      const mpEstimativa = -empurradoAnterior;
+      const cartaoLinhas = soma('estimativas') + soma('renovacoes') + soma('parcelas') + soma('compras') + soma('aleatorios');
+      const cartaoTotal = cartaoLinhas + mpEstimativa;
+      const posFatura = sobraAnterior + soma('dia10') + cartaoTotal;
+      const posVale = posFatura + soma('dia20');
+      const emprestimo = posVale < 50 ? (-posVale + 50) : 0;
+      const taxa = emprestimo * (Number(finState.taxaEmprestimo) || 0);
+      const empurrado = emprestimo + taxa;
+      const faturaFinal = posVale + emprestimo;
+
+      const doMes = finLista(mes.itens).filter(i => i.secao === 'dia10' || i.secao === 'dia20');
+      const ganhos = doMes.reduce((s, i) => s + Math.max(0, finValorDe(i)), 0);
+      const gastos = doMes.reduce((s, i) => s + Math.min(0, finValorDe(i)), 0) + cartaoTotal;
+
+      const orcamento = finOrcamentoDoMes(mes);
+      const aleatoriosGasto = -soma('aleatorios');
+
+      mapa[mes.id] = {
+        sobraAnterior, mpEstimativa, cartaoTotal, posFatura, posVale,
+        fatura: posVale, emprestimo, taxa, empurrado, faturaFinal,
+        ganhos, gastos, sobra: ganhos + gastos,
+        orcamento, aleatoriosGasto, aleatoriosResta: orcamento - aleatoriosGasto
+      };
+      sobraAnterior = faturaFinal;
+      empurradoAnterior = empurrado;
+    });
+    return mapa;
+  }
+
+  function finSetStatus(texto){
+    const el = document.getElementById('finSaveStatus');
+    if(el) el.textContent = texto;
+  }
+  function finSalvar(){
+    clearTimeout(finSaveTimer);
+    finSetStatus('Salvando...');
+    finSaveTimer = setTimeout(async () => {
+      try{
+        await dbPutSilent(userPath(FIN_PATH), finState);
+        finSetStatus('Tudo salvo');
+      }catch(err){
+        console.error('Falha ao salvar as Finanças:', err);
+        finSetStatus('Não salvou — sem conexão?');
+      }
+    }, 700);
+  }
+
+  /* ---------- Render ---------- */
+  function finLinhaHtml(item, opts){
+    const ref = item.refId && finState.valores ? finState.valores[item.refId] : null;
+    const valor = finValorDe(item);
+    // A parcela não é exclusiva da seção Parcelas: um lanche caro pode ter virado 3x.
+    const parcelas = (opts && opts.parcelas) || item.parcelas != null;
+    return '<div class="fin-linha" data-item-id="' + item.id + '">' +
+      '<input class="fin-in-nome" value="' + escapeHtml(item.nome || '') + '" placeholder="Nome">' +
+      (parcelas
+        ? '<span class="fin-parc"><input class="fin-in-parc" data-k="parcela" type="number" min="1" value="' + (item.parcela || 1) + '">' +
+          '<i>/</i><input class="fin-in-parc" data-k="parcelas" type="number" min="1" value="' + (item.parcelas || 1) + '"></span>'
+        : '') +
+      (ref
+        ? '<button type="button" class="fin-ref" data-fin-desvincular title="Vem de Valores: ' + escapeHtml(ref.nome) + '. Clique para soltar o valor deste mês.">' + finFmt(valor) + '</button>'
+        : '<input class="fin-in-valor' + finSinal(valor) + '" inputmode="decimal" value="' + finFmtNum(item.valor) + '">') +
+      '<button type="button" class="fin-linha-x" data-fin-del-item title="Remover linha">×</button>' +
+      '</div>';
+  }
+  function finAutoHtml(nome, mesId, campo, classe){
+    return '<div class="fin-linha fin-auto' + (classe ? ' ' + classe : '') + '">' +
+      '<span class="fin-auto-nome">' + escapeHtml(nome) + '</span>' +
+      '<span class="fin-auto-valor" data-calc="' + mesId + '|' + campo + '"></span></div>';
+  }
+  /* Doce, lanche, besteira: o que não dá pra planejar, mas dá pra limitar. */
+  function finBarraHtml(mes){
+    return '<div class="fin-barra" data-barra="' + mes.id + '">' +
+      '<div class="fin-barra-trilho"><span></span></div>' +
+      '<div class="fin-barra-legenda">' +
+      '<span class="fin-barra-txt"></span>' +
+      '<label title="Teto de gasto aleatório deste mês">teto <input class="fin-barra-teto" inputmode="decimal" value="' +
+      finFmtNum(finOrcamentoDoMes(mes)) + '"></label></div></div>';
+  }
+  function finSecaoHtml(mes, secaoId, titulo){
+    const itens = finItensDaSecao(mes, secaoId);
+    return '<p class="fin-sec-titulo">' + escapeHtml(titulo) + '</p>' +
+      itens.map(i => finLinhaHtml(i, { parcelas: secaoId === 'parcelas' })).join('') +
+      '<button type="button" class="fin-add" data-fin-add="' + secaoId + '">+ linha</button>';
+  }
+  function finMesHtml(mes){
+    const nome = FIN_MES_NOMES[mes.mes] || '';
+    return '<article class="fin-mes" data-mes-id="' + mes.id + '">' +
+      '<header class="fin-mes-head"><h2>' + escapeHtml(nome) + ' <span>' + mes.ano + '</span></h2>' +
+      '<button type="button" class="fin-mes-x" data-fin-del-mes title="Excluir mês">×</button></header>' +
+
+      '<section class="fin-sec">' +
+      finAutoHtml('Sobra do mês passado', mes.id, 'sobraAnterior', 't-entrada') +
+      finSecaoHtml(mes, 'dia10', 'Dia 10') +
+      finAutoHtml('Cartão Santander', mes.id, 'cartaoTotal', 't-cartao') +
+      '<div class="fin-total">Total pós fatura <b data-calc="' + mes.id + '|posFatura"></b></div>' +
+      '</section>' +
+
+      '<section class="fin-sec">' +
+      finSecaoHtml(mes, 'dia20', 'Dia 20') +
+      '<div class="fin-total">Total pós vale <b data-calc="' + mes.id + '|posVale"></b></div>' +
+      '</section>' +
+
+      '<section class="fin-sec fin-sec-mp">' +
+      '<p class="fin-sec-titulo">Mercado Pago</p>' +
+      finAutoHtml('Fatura', mes.id, 'fatura') +
+      finAutoHtml('Empréstimo', mes.id, 'emprestimo') +
+      finAutoHtml('Taxa', mes.id, 'taxa', 't-taxa') +
+      finAutoHtml('Vai pra próxima fatura', mes.id, 'empurrado') +
+      '<div class="fin-total">Fatura final <b data-calc="' + mes.id + '|faturaFinal"></b></div>' +
+      '</section>' +
+
+      '<section class="fin-sec fin-sec-cartao">' +
+      '<p class="fin-sec-head">Cartão Santander</p>' +
+      finAutoHtml('Mercado Pago (mês passado)', mes.id, 'mpEstimativa', 't-cartao') +
+      finSecaoHtml(mes, 'estimativas', 'Estimativas') +
+      finSecaoHtml(mes, 'renovacoes', 'Renovação automática') +
+      finSecaoHtml(mes, 'parcelas', 'Parcelas') +
+      finSecaoHtml(mes, 'compras', 'Compras') +
+      finSecaoHtml(mes, 'aleatorios', 'Aleatórios') +
+      finBarraHtml(mes) +
+      '<div class="fin-total">Total do cartão <b data-calc="' + mes.id + '|cartaoTotal"></b></div>' +
+      '</section>' +
+
+      '<footer class="fin-mes-foot">' +
+      '<div class="fin-kpi"><span>Ganhos</span><b data-calc="' + mes.id + '|ganhos"></b></div>' +
+      '<div class="fin-kpi"><span>Gastos</span><b data-calc="' + mes.id + '|gastos"></b></div>' +
+      '<div class="fin-kpi fin-kpi-forte"><span>Sobra do mês</span><b data-calc="' + mes.id + '|sobra"></b></div>' +
+      '</footer></article>';
+  }
+
+  function finRenderMeses(){
+    const el = document.getElementById('finMesesList');
+    if(!el) return;
+    const meses = finMesesOrdenados();
+    el.innerHTML = meses.length
+      ? meses.map(finMesHtml).join('')
+      : '<p class="empty-state">Nenhum mês ainda. Use "+ Próximo mês" para começar.</p>';
+    finAtualizarCalculados();
+    finRenderSimulador();
+  }
+
+  function finLinhaSimplesHtml(linha, colecao){
+    const ref = linha.refId && finState.valores ? finState.valores[linha.refId] : null;
+    const valor = finValorDe(linha);
+    return '<div class="fin-linha" data-cv="' + colecao + '" data-item-id="' + linha.id + '">' +
+      '<input class="fin-in-nome" value="' + escapeHtml(linha.nome || '') + '" placeholder="Nome">' +
+      (ref
+        ? '<button type="button" class="fin-ref" data-fin-desvincular title="Vem de Valores: ' + escapeHtml(ref.nome) + '. Clique para soltar.">' + finFmt(valor) + '</button>'
+        : '<input class="fin-in-valor' + finSinal(valor) + '" inputmode="decimal" value="' + finFmtNum(linha.valor) + '">') +
+      '<button type="button" class="fin-linha-x" data-fin-del-item title="Remover linha">×</button></div>';
+  }
+  function finRenderValores(){
+    const el = document.getElementById('finValoresList');
+    if(!el) return;
+    const taxa = document.getElementById('finTaxaInput');
+    if(taxa && document.activeElement !== taxa) taxa.value = finState.taxaEmprestimo;
+    const orcamento = document.getElementById('finOrcamentoInput');
+    if(orcamento && document.activeElement !== orcamento) orcamento.value = finFmtNum(finState.orcamentoAleatorio || 0);
+    el.innerHTML = finLista(finState.valores).map(v => finLinhaSimplesHtml(v, 'valores')).join('');
+  }
+  function finRenderCustoVida(){
+    const alvos = [['custoVidaBase', 'finCvBaseList'], ['custoVida', 'finCvList']];
+    alvos.forEach(([colecao, elId]) => {
+      const el = document.getElementById(elId);
+      if(!el) return;
+      const linhas = finLista(finState[colecao]);
+      el.innerHTML = linhas.map(l => finLinhaSimplesHtml(l, colecao)).join('') +
+        '<div class="fin-total">Total <b data-calc="cv|' + colecao + '"></b></div>';
+    });
+    finAtualizarCalculados();
+  }
+
+  /* Recalcula sem redesenhar: só os campos marcados com data-calc mudam, então
+     quem está digitando não perde o cursor. */
+  function finAtualizarCalculados(){
+    const mapa = finCalcular();
+    document.querySelectorAll('#view-financas [data-calc]').forEach(el => {
+      const [escopo, campo] = el.getAttribute('data-calc').split('|');
+      let valor;
+      if(escopo === 'cv'){
+        valor = finLista(finState[campo]).reduce((s, l) => s + finValorDe(l), 0);
+      }else{
+        const calc = mapa[escopo];
+        if(!calc) return;
+        valor = calc[campo];
+      }
+      el.textContent = finFmt(valor);
+      el.classList.toggle('pos', valor > 0);
+      el.classList.toggle('neg', valor < 0);
+    });
+    document.querySelectorAll('#view-financas [data-barra]').forEach(el => {
+      const calc = mapa[el.getAttribute('data-barra')];
+      if(!calc) return;
+      const pct = calc.orcamento > 0 ? Math.min(100, (calc.aleatoriosGasto / calc.orcamento) * 100) : 0;
+      const estourou = calc.aleatoriosResta < 0;
+      el.querySelector('.fin-barra-trilho span').style.width = pct + '%';
+      el.classList.toggle('estourou', estourou);
+      el.querySelector('.fin-barra-txt').textContent = calc.orcamento > 0
+        ? finFmt(calc.aleatoriosGasto) + ' de ' + finFmt(calc.orcamento) +
+          (estourou ? ' · passou ' + finFmt(-calc.aleatoriosResta) : ' · sobram ' + finFmt(calc.aleatoriosResta))
+        : finFmt(calc.aleatoriosGasto) + ' sem teto definido';
+    });
+  }
+
+  /* ---------- "Dá pra comprar?" ----------
+     A pergunta que a planilha não respondia: o que essa compra faz com o mês.
+     Olha dois limites ao mesmo tempo — o teto de gasto aleatório e a sobra do mês
+     (de cada mês, quando é parcelado). Basta um estourar pra resposta mudar. */
+  function finMesAtualId(){
+    const meses = finMesesOrdenados();
+    if(!meses.length) return '';
+    const hoje = new Date();
+    const atual = meses.find(m => m.ano === hoje.getFullYear() && m.mes === hoje.getMonth());
+    return (atual || meses[0]).id;
+  }
+  function finRenderSimulador(){
+    const select = document.getElementById('finSimMes');
+    if(!select) return;
+    const meses = finMesesOrdenados();
+    const anterior = select.value;
+    select.innerHTML = meses.map(m => '<option value="' + m.id + '">' + FIN_MES_NOMES[m.mes] + ' ' + m.ano + '</option>').join('');
+    select.value = meses.some(m => m.id === anterior) ? anterior : finMesAtualId();
+    finSimular();
+  }
+  function finSimular(){
+    const el = document.getElementById('finSimResultado');
+    if(!el) return;
+    const valor = Math.abs(finParseNum(document.getElementById('finSimValor').value));
+    const vezes = Math.max(1, Number(document.getElementById('finSimParcelas').value) || 1);
+    const mesId = document.getElementById('finSimMes').value;
+    const conta = document.getElementById('finSimAleatorio').checked;
+    const meses = finMesesOrdenados();
+    const idx = meses.findIndex(m => m.id === mesId);
+    if(!valor || idx < 0){
+      el.innerHTML = '<p class="empty-state" style="text-align:left;">Põe um valor pra ver o impacto.</p>';
+      return;
+    }
+
+    const mapa = finCalcular();
+    const parcela = valor / vezes;
+    const ultimo = meses[meses.length - 1];
+    const linhas = [];
+    let pior = Infinity;
+    for(let i = 0; i < vezes; i++){
+      const mes = meses[idx + i];
+      const base = mes ? mapa[mes.id].sobra : mapa[ultimo.id].sobra;
+      const depois = base - parcela;
+      pior = Math.min(pior, depois);
+      const base0 = meses[idx];
+      const futuro = new Date(base0.ano, base0.mes + i, 1);
+      linhas.push({
+        rotulo: (mes ? (FIN_MES_NOMES[mes.mes] + ' ' + mes.ano)
+                     : (FIN_MES_NOMES[futuro.getMonth()] + ' ' + futuro.getFullYear() + ' · projeção')),
+        projetado: !mes, depois
+      });
+    }
+    const calc = mapa[mesId];
+    const restaTeto = calc.aleatoriosResta - (conta ? parcela : 0);
+    const cabeNoTeto = !conta || calc.orcamento <= 0 || restaTeto >= 0;
+    const cabeNoMes = pior >= 0;
+
+    let nivel, titulo, resumo;
+    if(cabeNoMes && cabeNoTeto){
+      nivel = 'ok'; titulo = 'Dá pra comprar.';
+      resumo = conta && calc.orcamento > 0
+        ? 'Ainda sobram ' + finFmt(restaTeto) + ' do teto de aleatórios deste mês.'
+        : 'O mês continua no azul depois dessa compra.';
+    }else if(cabeNoMes){
+      nivel = 'aviso'; titulo = 'Dá, mas estoura o combinado.';
+      resumo = 'Passa ' + finFmt(-restaTeto) + ' do teto de aleatórios do mês. O mês em si aguenta.';
+    }else{
+      nivel = 'nao'; titulo = 'Não dá.';
+      resumo = 'O mês mais apertado fecharia em ' + finFmt(pior) + '.';
+    }
+
+    const nome = document.getElementById('finSimNome').value.trim();
+    el.innerHTML =
+      '<div class="fin-sim-veredito ' + nivel + '"><strong>' + titulo + '</strong><span>' + escapeHtml(resumo) + '</span></div>' +
+      (vezes > 1 ? '<p class="fin-sim-nota">' + vezes + 'x de ' + finFmt(parcela) + '</p>' : '') +
+      '<div class="fin-sim-linhas">' +
+      linhas.map(l => '<div class="fin-sim-linha' + (l.projetado ? ' projetado' : '') + '">' +
+        '<span>' + escapeHtml(l.rotulo) + '</span><b class="' + (l.depois < 0 ? 'neg' : 'pos') + '">' + finFmt(l.depois) + '</b></div>').join('') +
+      '</div>' +
+      '<button type="button" class="btn btn-ghost btn-sm" id="finSimRegistrarBtn">Registrar' + (nome ? ' "' + escapeHtml(nome) + '"' : ' compra') + '</button>';
+  }
+  /* Registrar é o que fecha o ciclo: avaliou, comprou, o mês já sabe. Parcelado
+     entra em todos os meses que já existem; os que ainda não existem herdam a
+     parcela quando forem criados pelo "+ Próximo mês". */
+  function finRegistrarCompra(){
+    const valor = Math.abs(finParseNum(document.getElementById('finSimValor').value));
+    const vezes = Math.max(1, Number(document.getElementById('finSimParcelas').value) || 1);
+    const mesId = document.getElementById('finSimMes').value;
+    const conta = document.getElementById('finSimAleatorio').checked;
+    const nome = document.getElementById('finSimNome').value.trim() || 'Compra';
+    const meses = finMesesOrdenados();
+    const idx = meses.findIndex(m => m.id === mesId);
+    if(!valor || idx < 0) return;
+
+    const parcela = valor / vezes;
+    for(let i = 0; i < vezes; i++){
+      const mes = meses[idx + i];
+      if(!mes) break;
+      if(!mes.itens) mes.itens = {};
+      const id = newId();
+      mes.itens[id] = {
+        id, nome,
+        secao: conta ? 'aleatorios' : (vezes > 1 ? 'parcelas' : 'compras'),
+        valor: -parcela, refId: null, ordem: finProxOrdem(mes.itens)
+      };
+      if(vezes > 1){ mes.itens[id].parcela = i + 1; mes.itens[id].parcelas = vezes; }
+    }
+    document.getElementById('finSimNome').value = '';
+    document.getElementById('finSimValor').value = '';
+    document.getElementById('finSimParcelas').value = 1;
+    finRenderMeses();
+    finSimular();
+    finSalvar();
+    showAppMessage(nome + ' lançado em ' + FIN_MES_NOMES[meses[idx].mes] + '.', 'success');
+  }
+
+  async function renderFinancas(){
+    const dados = await dbGet(userPath(FIN_PATH));
+    finState = dados || finSeedInicial();
+    // O Firebase não guarda objeto vazio: uma coleção zerada volta como undefined.
+    ['valores', 'custoVida', 'custoVidaBase', 'meses'].forEach(k => { finState[k] = finState[k] || {}; });
+    if(!dados) await dbPutSilent(userPath(FIN_PATH), finState);
+    finSetStatus('Tudo salvo');
+    finRenderMeses();
+    finRenderValores();
+    finRenderCustoVida();
+  }
+
+  /* ---------- Edição ---------- */
+  function finItemPorEvento(alvo){
+    const linha = alvo.closest('[data-item-id]');
+    if(!linha) return null;
+    const id = linha.getAttribute('data-item-id');
+    const colecao = linha.getAttribute('data-cv');
+    if(colecao) return { item: finState[colecao][id], dono: finState[colecao] };
+    const mesEl = linha.closest('[data-mes-id]');
+    const mes = mesEl && finState.meses[mesEl.getAttribute('data-mes-id')];
+    if(!mes) return null;
+    return { item: mes.itens[id], dono: mes.itens };
+  }
+
+  document.getElementById('view-financas').addEventListener('input', (e) => {
+    const alvo = e.target;
+    if(alvo.id === 'finTaxaInput'){
+      finState.taxaEmprestimo = Math.max(0, Number(alvo.value) || 0);
+      finAtualizarCalculados();
+      finSalvar();
+      return;
+    }
+    if(alvo.id === 'finOrcamentoInput'){
+      finState.orcamentoAleatorio = Math.abs(finParseNum(alvo.value));
+      document.querySelectorAll('.fin-mes').forEach(card => {
+        const mes = finState.meses[card.getAttribute('data-mes-id')];
+        const teto = card.querySelector('.fin-barra-teto');
+        if(mes && teto && mes.orcamentoAleatorio == null) teto.value = finFmtNum(finOrcamentoDoMes(mes));
+      });
+      finAtualizarCalculados();
+      finSalvar();
+      return;
+    }
+    if(alvo.id && alvo.id.indexOf('finSim') === 0){
+      finSimular();
+      return;
+    }
+    if(alvo.classList.contains('fin-barra-teto')){
+      const mes = finState.meses[alvo.closest('[data-mes-id]').getAttribute('data-mes-id')];
+      mes.orcamentoAleatorio = Math.abs(finParseNum(alvo.value));
+      finAtualizarCalculados();
+      finSalvar();
+      return;
+    }
+    const achado = finItemPorEvento(alvo);
+    if(!achado || !achado.item) return;
+    if(alvo.classList.contains('fin-in-nome')){
+      achado.item.nome = alvo.value;
+    }else if(alvo.classList.contains('fin-in-valor')){
+      achado.item.valor = finParseNum(alvo.value);
+      alvo.classList.toggle('pos', achado.item.valor > 0);
+      alvo.classList.toggle('neg', achado.item.valor < 0);
+    }else if(alvo.classList.contains('fin-in-parc')){
+      achado.item[alvo.getAttribute('data-k')] = Math.max(1, Number(alvo.value) || 1);
+    }else{
+      return;
+    }
+    finAtualizarCalculados();
+    if(alvo.classList.contains('fin-in-valor')) finRenderValoresRefs();
+    finSalvar();
+  });
+
+  /* Um valor de "Valores" aparece em várias linhas: quando ele muda, as linhas
+     que apontam pra ele precisam mostrar o número novo. */
+  function finRenderValoresRefs(){
+    document.querySelectorAll('#view-financas .fin-ref').forEach(btn => {
+      const achado = finItemPorEvento(btn);
+      if(achado && achado.item) btn.textContent = finFmt(finValorDe(achado.item));
+    });
+  }
+
+  document.getElementById('view-financas').addEventListener('change', (e) => {
+    if(e.target.id === 'finSimMes' || e.target.id === 'finSimAleatorio') finSimular();
+  });
+
+  document.getElementById('view-financas').addEventListener('click', async (e) => {
+    const alvo = e.target;
+
+    if(alvo.id === 'finSimRegistrarBtn'){ finRegistrarCompra(); return; }
+
+    const addSec = alvo.closest('[data-fin-add]');
+    if(addSec){
+      const mes = finState.meses[addSec.closest('[data-mes-id]').getAttribute('data-mes-id')];
+      if(!mes.itens) mes.itens = {};
+      const id = newId();
+      mes.itens[id] = { id, secao: addSec.getAttribute('data-fin-add'), nome:'', valor:0, refId:null, ordem: finProxOrdem(mes.itens) };
+      if(mes.itens[id].secao === 'parcelas'){ mes.itens[id].parcela = 1; mes.itens[id].parcelas = 1; }
+      finRenderMeses();
+      finSalvar();
+      return;
+    }
+
+    const addCv = alvo.closest('[data-fin-add-cv]');
+    if(addCv){
+      const colecao = addCv.getAttribute('data-fin-add-cv');
+      const id = newId();
+      finState[colecao][id] = { id, nome:'', valor:0, refId:null, ordem: finProxOrdem(finState[colecao]) };
+      finRenderCustoVida();
+      finSalvar();
+      return;
+    }
+
+    if(alvo.closest('[data-fin-desvincular]')){
+      const achado = finItemPorEvento(alvo);
+      if(!achado || !achado.item) return;
+      achado.item.valor = finValorDe(achado.item);
+      achado.item.refId = null;
+      finRenderMeses();
+      finRenderValores();
+      finRenderCustoVida();
+      finSalvar();
+      return;
+    }
+
+    if(alvo.closest('[data-fin-del-item]')){
+      const achado = finItemPorEvento(alvo);
+      if(!achado || !achado.item) return;
+      delete achado.dono[achado.item.id];
+      finRenderMeses();
+      finRenderValores();
+      finRenderCustoVida();
+      finSalvar();
+      return;
+    }
+
+    if(alvo.closest('[data-fin-del-mes]')){
+      const mesEl = alvo.closest('[data-mes-id]');
+      const mes = finState.meses[mesEl.getAttribute('data-mes-id')];
+      const ok = await showConfirm('Excluir ' + FIN_MES_NOMES[mes.mes] + ' de ' + mes.ano + '? Essa ação não pode ser desfeita.');
+      if(!ok) return;
+      delete finState.meses[mes.id];
+      finRenderMeses();
+      finSalvar();
+    }
+  });
+
+  document.getElementById('finAddValorBtn').addEventListener('click', () => {
+    const id = newId();
+    finState.valores[id] = { id, nome:'', valor:0, ordem: finProxOrdem(finState.valores) };
+    finRenderValores();
+    finSalvar();
+  });
+
+  /* O mês novo nasce do anterior: as contas que se repetem vêm junto, as parcelas
+     andam uma casa (e somem quando acabam) e as compras do mês passado ficam
+     pra trás. É o que se faz na mão na planilha, sem fazer na mão. */
+  document.getElementById('finAddMesBtn').addEventListener('click', () => {
+    const meses = finMesesOrdenados();
+    const ultimo = meses[meses.length - 1];
+    const base = ultimo
+      ? { ano: ultimo.mes === 11 ? ultimo.ano + 1 : ultimo.ano, mes: (ultimo.mes + 1) % 12 }
+      : { ano: new Date().getFullYear(), mes: new Date().getMonth() };
+    const id = newId();
+    const itens = {};
+    let ordem = 0;
+    if(ultimo){
+      finLista(ultimo.itens).forEach(item => {
+        // Compras e gastos aleatórios são do mês que passou; parcelas seguem em frente.
+        if(item.secao === 'compras') return;
+        if(item.secao === 'aleatorios' && item.parcelas == null) return;
+        const proxima = (item.parcela || 0) + 1;
+        if(item.parcelas != null && proxima > item.parcelas) return;
+        const novoId = newId();
+        itens[novoId] = Object.assign({}, item, { id: novoId, ordem: ordem++ });
+        if(item.parcelas != null) itens[novoId].parcela = proxima;
+      });
+    }
+    finState.meses[id] = { id, ano: base.ano, mes: base.mes, ordem: finProxOrdem(finState.meses), itens };
+    if(ultimo && ultimo.orcamentoAleatorio != null) finState.meses[id].orcamentoAleatorio = ultimo.orcamentoAleatorio;
+    finRenderMeses();
+    finSalvar();
+    showAppMessage(FIN_MES_NOMES[base.mes] + ' criado a partir do mês anterior.', 'success');
+  });
 
   /* ---------- OBJETIVOS (objetivo grande + pontos menores que dependem dele) ---------- */
   let objEditingId = null; // null = criando um novo objetivo
@@ -3976,11 +4594,11 @@
       (totalItens ? '<span class="board-card-count-badge">' + totalItens + (totalItens === 1 ? ' item' : ' itens') + '</span>' : '') +
       '<div class="board-card-top">' +
       '<span class="board-card-icon-check" data-select="1"></span>' +
-      '<button type="button" class="board-card-pin-btn' + (nota.fixada ? ' on' : '') + '" data-pin="1" title="' + (nota.fixada ? 'Desfixar' : 'Fixar') + '">📌</button>' +
-      '<button type="button" class="board-card-menu-btn" data-menu="1" title="Mais">⋯</button>' +
+      '<button type="button" tabindex="-1" class="board-card-pin-btn' + (nota.fixada ? ' on' : '') + '" data-pin="1" title="' + (nota.fixada ? 'Desfixar' : 'Fixar') + '">📌</button>' +
+      '<button type="button" tabindex="-1" class="board-card-menu-btn" data-menu="1" title="Mais">⋯</button>' +
       '</div>' +
       '<div class="board-card-titulo-row">' +
-      '<button type="button" class="board-card-icone-btn" data-icone-item="' + nota.id + '" title="Mudar ícone">' + escapeHtml(nota.icone || '📝') + '</button>' +
+      '<button type="button" tabindex="-1" class="board-card-icone-btn" data-icone-item="' + nota.id + '" title="Mudar ícone">' + escapeHtml(nota.icone || '📝') + '</button>' +
       (notasModoEdicao
         ? '<input class="board-card-titulo-input" data-titulo="1" placeholder="Sem título" value="' + escapeHtml(nota.titulo || '') + '">'
         : '<div class="board-card-titulo-texto">' + escapeHtml(nota.titulo || 'Sem título') + '</div>') +
@@ -4405,15 +5023,6 @@
       }
       notasFocarId = null;
     }
-    notasAtualizarBadges();
-  }
-
-  function notasAtualizarBadges(){
-    const total = Object.keys(notasState.notas).length;
-    const badge = document.getElementById('navInboxBadge');
-    if(badge) badge.textContent = String(total);
-    const mobileBadge = document.getElementById('mobileInboxBadge');
-    if(mobileBadge) mobileBadge.textContent = total ? String(total) : '';
   }
 
   async function renderArquivoNotas(){
@@ -4422,7 +5031,6 @@
     notasContainerEl = document.getElementById('notasBoard');
     notasRenderChips();
     notasRender();
-    notasAtualizarBadges();
   }
 
   /* ---------- Modal "Categorias" ---------- */
@@ -7303,7 +7911,7 @@
       [renderCasaRegras,     'as regras da Casa',     'casaRegrasList'],
       [renderCasaErros,      'os erros da Casa',      'casaErrosList']
     ],
-    financas:       [[renderFinancas, 'as Finanças', []]],
+    financas:       [[renderFinancas, 'as Finanças', 'finMesesList']],
     objetivos:      [[renderObjetivos, 'os Objetivos', 'objetivosList']],
     decisoes:       [[renderDecisoes, 'as Decisões', 'decisoesList']],
     visionboard:    [[renderVisionBoard, 'o Vision Board', 'visionBoard']],
@@ -7353,12 +7961,7 @@
       try{ await fn(); }
       catch(err){ console.error('Falha no boot ao carregar ' + rotulo + ':', err); }
     }
-    // Carrega as Notas no boot mesmo sem abrir o Arquivo: é o que preenche o
-    // badge de contagem na sidebar, visível de qualquer tela.
-    await Promise.allSettled([
-      guardRender(async () => { await notasCarregarEstado(); notasAtualizarBadges(); }, 'as Notas', []),
-      renderView('hoje')
-    ]);
+    await renderView('hoje');
     // Trava de segurança: garante que o overlay global de loading nunca fique
     // travado após o boot, independentemente de qualquer erro acima.
     loadingDepth = 0;

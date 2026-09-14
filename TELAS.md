@@ -90,13 +90,19 @@ As pessoas da casa (usadas nos dropdowns de responsável/quem) são gerenciadas 
 
 ## Finanças (`view-financas`)
 
-Agora é um **app separado**, embutido via iframe (mesmo padrão da Fluência e da Bateria) — código-fonte vive em outra pasta (`Finanças/`, fora do Life OS) e será publicado em `financas.guilherme-oliveira.com`. Usa a mesma conta/dados do Life OS (`/users/{uid}/Financas`).
+Tela nativa do Life OS (não é mais iframe nem app separado), modelada na aba **Financeiro** da planilha — mesmos valores, mesmas cores e as mesmas contas. Dados em `/users/{uid}/FinancasPlano`, autossalvos com indicador ("Salvando..." / "Tudo salvo"). Três abas:
 
-Funcionalidade da planilha (no app separado):
-- Planilha estilo Excel: células endereçáveis (A1, B2...), fórmulas com `=`, `SUM(range)`, `AVG(range)` e operadores matemáticos.
-- Formatação por célula: negrito, moeda (R$), cor de fundo (8 opções), + linha / + coluna.
-- Modelo padrão pré-preenchido com a estrutura real do usuário: **Dia 10** (contas fixas), **Dia 20** (entradas), **Cartão Santander** (Estimativas / Renovação Automática / Parcelas / Compras), **Mercado Pago**, resumo de **sobra/falta do mês**, e uma tabela simples de valores fixos. Botão "Recarregar modelo" restaura esse padrão.
-- Autossalva com indicador de status ("Salvando..." / "Tudo salvo").
+- **Meses**: um cartão por mês, lado a lado, na ordem do calendário. Cada mês tem **Dia 10**, **Dia 20**, **Mercado Pago** e **Cartão Santander** (Estimativas / Renovação automática / Parcelas / Compras / **Aleatórios**), mais Ganhos, Gastos e Sobra do mês no rodapé.
+  - **Aleatórios** é o que não dá pra planejar mas dá pra limitar (doce, lanche, besteira): cada gasto vira uma linha e uma barra mostra quanto já foi do teto do mês — vermelha quando estoura. O teto padrão fica em *Valores* e cada mês pode ter o seu (campo "teto" ao lado da barra).
+  - Só as linhas de verdade são digitadas. Sobra do mês passado, total do cartão, total pós fatura, total pós vale, empréstimo, taxa e fatura final são calculados — e um mês puxa o outro: a fatura final vira a sobra do mês seguinte, e o que foi empurrado pra frente (empréstimo + taxa) volta como estimativa na fatura do cartão.
+  - **"+ Próximo mês"** cria o mês seguinte a partir do anterior: as contas que se repetem vêm junto, as parcelas andam uma casa (`7/12` → `8/12`) e somem quando acabam, e as compras do mês passado ficam pra trás.
+- **Dá pra comprar?**: o freio antes da compra. Informe o quê, quanto, em quantas vezes e em que mês — a tela responde com o veredito ("Dá pra comprar" / "Dá, mas estoura o combinado" / "Não dá"), quanto ainda sobra do teto de aleatórios e como fica a sobra de cada mês afetado (meses ainda não criados entram como projeção). O botão **Registrar** lança a compra de verdade: à vista vai pra Aleatórios ou Compras, parcelada se espalha pelos meses que já existem e os próximos herdam a parcela quando forem criados.
+- **Valores**: os números que se repetem todo mês (salário, vale, aluguel, luz...), a taxa de empréstimo do Mercado Pago e o teto de gasto aleatório por mês. As linhas dos meses podem apontar pra eles — é o `=$U$14` da planilha: mudou aqui, mudou em todos os meses. Clicar no valor lilás de uma linha solta ela desse vínculo.
+- **Custo de vida**: as duas listas da planilha lado a lado — *base* (o mínimo pra viver o mês) e *real* (com academia, suplementos e imprevistos), cada uma com seu total.
+
+---
+
+> O app separado em `Financas/` (financas.guilherme-oliveira.com) não é mais usado pelo Life OS.
 
 ---
 

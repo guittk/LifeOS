@@ -80,11 +80,13 @@
 
   <nav class="nav-level">
     <div class="nav-level-label">Organizar</div>
-    <div class="nav-item" data-view="storage" title="Notas"><span class="nav-icon">🗂️</span><span class="nav-label">Notas</span> <span class="badge" id="navInboxBadge">0</span></div>
+    <div class="nav-item" data-view="storage" title="Notas"><span class="nav-icon">🗂️</span><span class="nav-label">Notas</span></div>
     <div class="nav-item" data-view="tarefas" title="Tarefas"><span class="nav-icon">✅</span><span class="nav-label">Tarefas</span></div>
+    <div class="nav-item" data-view="monday" title="Planejamento"><span class="nav-icon">📋</span><span class="nav-label">Planejamento</span></div>
     <div class="nav-item" data-view="agenda" title="Agenda"><span class="nav-icon">📅</span><span class="nav-label">Agenda</span></div>
     <div class="nav-item" data-view="rotina" title="Rotina"><span class="nav-icon">🔁</span><span class="nav-label">Rotina</span></div>
     <div class="nav-item" data-view="casa" title="Casa"><span class="nav-icon">🏡</span><span class="nav-label">Casa</span></div>
+    <div class="nav-item" data-view="financas" title="Finanças"><span class="nav-icon">💰</span><span class="nav-label">Finanças</span></div>
     <div class="nav-item" data-view="decisoes" title="Decisões"><span class="nav-icon">🧭</span><span class="nav-label">Decisões</span></div>
     <div class="nav-item" data-view="busca" title="Perguntar"><span class="nav-icon">💬</span><span class="nav-label">Perguntar</span></div>
   </nav>
@@ -103,8 +105,6 @@
   <!-- Telas de uso ocasional: continuam funcionando 100%, só ficam visualmente
        apagadas e no fim da lista pra não competir com o resto da sidebar. -->
   <nav class="nav-level">
-    <div class="nav-item nav-item-dim" data-view="monday" title="Planejamento"><span class="nav-icon">📋</span><span class="nav-label">Planejamento</span></div>
-    <div class="nav-item nav-item-dim" data-view="financas" title="Finanças"><span class="nav-icon">💰</span><span class="nav-label">Finanças</span></div>
     <div class="nav-item nav-item-dim" data-view="bateria" title="Bateria"><span class="nav-icon">🔋</span><span class="nav-label">Bateria</span></div>
   </nav>
 
@@ -120,7 +120,7 @@
   <button type="button" class="mobile-nav-item active" data-view="hoje"><span class="mn-icon">◉</span>Hoje</button>
   <button type="button" class="mobile-nav-item" data-view="tarefas"><span class="mn-icon">✓</span>Tarefas</button>
   <button type="button" class="mobile-nav-item" data-view="agenda"><span class="mn-icon">▦</span>Agenda</button>
-  <button type="button" class="mobile-nav-item" data-view="storage"><span class="mn-icon">▤</span>Notas<span class="mn-badge" id="mobileInboxBadge"></span></button>
+  <button type="button" class="mobile-nav-item" data-view="storage"><span class="mn-icon">▤</span>Notas</button>
   <button type="button" class="mobile-nav-item" id="mobileMoreBtn" aria-expanded="false"><span class="mn-icon">≡</span>Menu</button>
 </nav>
 
@@ -927,12 +927,72 @@
       <div>
         <p class="eyebrow">Organizar</p>
         <h1 class="view-title">Finanças</h1>
-        <p class="view-desc" id="financasEmbedNote">Carregando...</p>
+        <p class="view-desc">O mês a mês da planilha: o que entra no dia 10 e no dia 20, a fatura do cartão e o que sobra. Um mês puxa o outro sozinho.</p>
       </div>
-      <a class="btn btn-primary btn-sm" id="financasOpenTabBtn" href="#" target="_blank" rel="noopener">Abrir em nova aba ↗</a>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span id="finSaveStatus" style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">Tudo salvo</span>
+        <button class="btn btn-primary btn-sm" id="finAddMesBtn">+ Próximo mês</button>
+      </div>
     </div>
-    <div class="fluencia-frame-wrap" id="financasFrameWrap">
-      <p class="empty-state">Carregando...</p>
+
+    <div class="subtabs">
+      <button class="subtab active" data-sub="financas" data-target="fin-meses">Meses</button>
+      <button class="subtab" data-sub="financas" data-target="fin-simular">Dá pra comprar?</button>
+      <button class="subtab" data-sub="financas" data-target="fin-valores">Valores</button>
+      <button class="subtab" data-sub="financas" data-target="fin-custovida">Custo de vida</button>
+    </div>
+
+    <div class="subview" id="fin-simular">
+      <div class="panel fin-painel">
+        <p class="panel-title">Dá pra comprar?</p>
+        <p class="view-desc" style="margin:-6px 0 16px;">Antes de gastar: põe o valor aqui e veja o que sobra do mês — e do seu teto de aleatórios — se você comprar.</p>
+        <div class="fin-sim-form">
+          <label class="fin-sim-campo fin-sim-largo"><span>O quê</span><input id="finSimNome" placeholder="Ex: fone novo, lanche, doce"></label>
+          <label class="fin-sim-campo"><span>Quanto</span><input id="finSimValor" inputmode="decimal" placeholder="0,00"></label>
+          <label class="fin-sim-campo"><span>Em quantas vezes</span><input id="finSimParcelas" type="number" min="1" value="1"></label>
+          <label class="fin-sim-campo"><span>Em que mês</span><select id="finSimMes"></select></label>
+        </div>
+        <label class="fin-sim-check"><input type="checkbox" id="finSimAleatorio" checked> Conta no teto de aleatórios (doce, lanche, besteira)</label>
+        <div id="finSimResultado" class="fin-sim-res"></div>
+      </div>
+    </div>
+
+    <div class="subview active" id="fin-meses">
+      <div class="fin-meses" id="finMesesList"><p class="empty-state">Carregando...</p></div>
+    </div>
+
+    <div class="subview" id="fin-valores">
+      <div class="panel fin-painel">
+        <p class="panel-title">Valores</p>
+        <p class="view-desc" style="margin:-6px 0 14px;">Os valores que se repetem todo mês. Mudou aqui, muda em todos os meses que apontam para eles.</p>
+        <label class="fin-taxa">
+          <span>Taxa de empréstimo do Mercado Pago</span>
+          <input type="number" step="0.001" min="0" id="finTaxaInput">
+        </label>
+        <label class="fin-taxa">
+          <span>Teto de gasto aleatório por mês (doce, lanche, besteira)</span>
+          <input inputmode="decimal" id="finOrcamentoInput">
+        </label>
+        <div id="finValoresList"></div>
+        <button class="btn btn-ghost btn-sm" id="finAddValorBtn">+ Novo valor</button>
+      </div>
+    </div>
+
+    <div class="subview" id="fin-custovida">
+      <div class="fin-cv-grid">
+        <div class="panel fin-painel">
+          <p class="panel-title">Custo de vida base</p>
+          <p class="view-desc" style="margin:-6px 0 14px;">O mínimo para viver um mês — sem extras.</p>
+          <div id="finCvBaseList"></div>
+          <button class="btn btn-ghost btn-sm" data-fin-add-cv="custoVidaBase">+ Nova linha</button>
+        </div>
+        <div class="panel fin-painel">
+          <p class="panel-title">Custo de vida</p>
+          <p class="view-desc" style="margin:-6px 0 14px;">O mês como ele é de verdade, com academia, suplementos e imprevistos.</p>
+          <div id="finCvList"></div>
+          <button class="btn btn-ghost btn-sm" data-fin-add-cv="custoVida">+ Nova linha</button>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -974,7 +1034,8 @@
       <li class="obj-timeline-item"><span class="obj-timeline-num">8</span><span class="obj-timeline-nome">Comprar uma moto</span><span class="obj-timeline-valor">R$ 8.000,00</span></li>
       <li class="obj-timeline-item"><span class="obj-timeline-num">9</span><span class="obj-timeline-nome">Vender apartamento</span><span class="obj-timeline-valor obj-timeline-ganho">R$ 140.000,00</span></li>
       <li class="obj-timeline-item"><span class="obj-timeline-num">10</span><span class="obj-timeline-nome">Comprar uma chácara</span></li>
-      <li class="obj-timeline-item"><span class="obj-timeline-num">11</span><span class="obj-timeline-nome">Ter filho</span></li>
+      <li class="obj-timeline-item"><span class="obj-timeline-num">11</span><span class="obj-timeline-nome">Comprar um carro</span></li>
+      <li class="obj-timeline-item"><span class="obj-timeline-num">12</span><span class="obj-timeline-nome">Ter filho</span></li>
     </ol>
   </section>
 
