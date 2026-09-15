@@ -193,7 +193,7 @@
       const monthAbbr = MONTHS_PT[evDate.getMonth()];
       const dayEvents = byDate[dateKey];
 
-      html += `<div class="cal-day-block ${isToday ? 'today' : ''}">
+      html += `<div class="cal-day-block ${isToday ? 'today' : ''} ${inThisWeek ? 'week-atual' : ''}">
         <div class="cal-day-datebox">
           <span class="cal-day-weekday">${isToday ? 'hoje' : weekdayAbbr}</span>
           <span class="cal-day-num">${evDate.getDate()}</span>
@@ -1625,6 +1625,23 @@
     if(data < hoje) data = new Date(hoje.getFullYear() + 1, mes - 1, dia);
     return data;
   }
+  function presenteProximaDataMensal(dia){
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    let data = new Date(hoje.getFullYear(), hoje.getMonth(), dia);
+    if(data < hoje) data = new Date(hoje.getFullYear(), hoje.getMonth() + 1, dia);
+    return data;
+  }
+  // Normaliza o tipo de repetição — inclusive de ocasiões criadas antes de "mensal"
+  // existir, quando o campo era só o booleano `anual`.
+  function presenteOcasiaoTipo(oc){
+    return oc.tipo || (oc.anual ? 'anual' : 'avulso');
+  }
+  function presenteOcasiaoProxima(oc){
+    const tipo = presenteOcasiaoTipo(oc);
+    if(tipo === 'anual' && oc.dia && oc.mes) return presenteProximaData(oc.dia, oc.mes);
+    if(tipo === 'mensal' && oc.dia) return presenteProximaDataMensal(oc.dia);
+    return null;
+  }
   function presenteDiasRotulo(data){
     const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
     const dias = Math.round((data - hoje) / 86400000);
@@ -1648,7 +1665,7 @@
       if(!p.aniversarioDia || p.ocasioes) continue;
       const ocId = newId();
       const ocasiao = {
-        id: ocId, nome:'Aniversário', anual:true, dia:p.aniversarioDia, mes:p.aniversarioMes,
+        id: ocId, nome:'Aniversário', tipo:'anual', dia:p.aniversarioDia, mes:p.aniversarioMes,
         orcamento: p.orcamento || null, ideias: p.ideias || {}, criadoEm: new Date().toISOString()
       };
       await dbPatchSilent(userPath('/PresentesPessoas/' + id), {
@@ -1673,11 +1690,15 @@
 
   function presenteOcasiaoCardHtml(pessoaId, ocId, oc){
     const ideias = Object.entries(oc.ideias || {}).sort((a, b) => (a[1].criadoEm || '').localeCompare(b[1].criadoEm || ''));
+    const tipo = presenteOcasiaoTipo(oc);
     let meta = `<span>${presenteOcasiaoIcone(oc.nome)} ${escapeHtml(oc.nome)}</span>`;
-    if(oc.anual && oc.dia && oc.mes){
+    if(tipo === 'anual' && oc.dia && oc.mes){
       const rotulo = presenteDiasRotulo(presenteProximaData(oc.dia, oc.mes));
       meta += `<span>${String(oc.dia).padStart(2, '0')}/${String(oc.mes).padStart(2, '0')}</span>` +
               `<span class="${rotulo.classe}">${rotulo.texto}</span>`;
+    } else if(tipo === 'mensal' && oc.dia){
+      const rotulo = presenteDiasRotulo(presenteProximaDataMensal(oc.dia));
+      meta += `<span>todo dia ${oc.dia}</span><span class="${rotulo.classe}">${rotulo.texto}</span>`;
     } else {
       meta += `<span>avulsa</span>`;
     }
@@ -1701,18 +1722,18 @@
       </div>`;
   }
 
-  // Data mais próxima entre as ocasiões anuais da pessoa — usada só pra
-  // ordenar a lista de pessoas; quem só tem ocasião avulsa fica no fim.
+  // Data mais próxima entre as ocasiões com data (anual ou mensal) da pessoa —
+  // usada só pra ordenar a lista de pessoas; quem só tem ocasião avulsa fica no fim.
   function presentePessoaProximaData(p){
-    const anuais = Object.values(p.ocasioes || {}).filter(o => o.anual && o.dia && o.mes);
-    if(!anuais.length) return null;
-    return anuais.map(o => presenteProximaData(o.dia, o.mes)).sort((a, b) => a - b)[0];
+    const datas = Object.values(p.ocasioes || {}).map(presenteOcasiaoProxima).filter(Boolean);
+    if(!datas.length) return null;
+    return datas.sort((a, b) => a - b)[0];
   }
 
   function presentePessoaCardHtml(id, p){
     const ocasioes = Object.entries(p.ocasioes || {}).sort((a, b) => {
-      const da = a[1].anual && a[1].dia ? presenteProximaData(a[1].dia, a[1].mes) : null;
-      const db = b[1].anual && b[1].dia ? presenteProximaData(b[1].dia, b[1].mes) : null;
+      const da = presenteOcasiaoProxima(a[1]);
+      const db = presenteOcasiaoProxima(b[1]);
       if(da && db) return da - db;
       if(da) return -1;
       if(db) return 1;
@@ -1852,48 +1873,51 @@
     if(eraNovo) presenteAbrirOcasiaoModal(id, null, null);
   });
 
+  const PRESENTE_OCASIAO_NOTAS = {
+    anual: 'Só o dia e o mês são usados — o ano do calendário é ignorado, a ocasião se repete todo ano.',
+    mensal: 'Todo mês, nesse dia — útil pra um presente ou mimo recorrente que não é ligado a uma data comemorativa fixa.',
+    avulso: 'Sem nenhuma data — pra um presente único, ideia solta.'
+  };
+  function presenteAtualizarCamposTipo(){
+    const tipo = document.getElementById('presenteOcasiaoTipoInput').value;
+    document.getElementById('presenteOcasiaoDataAnualRow').classList.toggle('hidden', tipo !== 'anual');
+    document.getElementById('presenteOcasiaoDataMensalRow').classList.toggle('hidden', tipo !== 'mensal');
+    document.getElementById('presenteOcasiaoNota').textContent = PRESENTE_OCASIAO_NOTAS[tipo];
+  }
+  document.getElementById('presenteOcasiaoTipoInput').addEventListener('change', presenteAtualizarCamposTipo);
+
   let presenteOcasiaoContexto = null;
   function presenteAbrirOcasiaoModal(pessoaId, ocId, oc){
     presenteOcasiaoContexto = { pessoaId, ocId: ocId || null };
-    const dataInput = document.getElementById('presenteOcasiaoDataInput');
-    const semDataToggle = document.getElementById('presenteOcasiaoSemDataToggle');
+    const tipo = oc ? presenteOcasiaoTipo(oc) : 'anual';
     document.getElementById('presenteOcasiaoModalTitle').textContent = ocId ? 'Editar ocasião' : 'Nova ocasião';
     document.getElementById('presenteOcasiaoNomeInput').value = oc ? oc.nome : '';
-    dataInput.value = '';
-    dataInput.disabled = false;
-    semDataToggle.classList.remove('active');
-    if(oc && oc.anual && oc.dia){
-      dataInput.value = (new Date().getFullYear()) + '-' + String(oc.mes).padStart(2, '0') + '-' + String(oc.dia).padStart(2, '0');
-    } else if(oc){
-      semDataToggle.classList.add('active');
-      dataInput.disabled = true;
-    }
+    document.getElementById('presenteOcasiaoTipoInput').value = tipo;
+    document.getElementById('presenteOcasiaoDataInput').value = (tipo === 'anual' && oc && oc.dia)
+      ? (new Date().getFullYear()) + '-' + String(oc.mes).padStart(2, '0') + '-' + String(oc.dia).padStart(2, '0')
+      : '';
+    document.getElementById('presenteOcasiaoDiaMesInput').value = (tipo === 'mensal' && oc && oc.dia) ? oc.dia : '';
+    presenteAtualizarCamposTipo();
     document.getElementById('presenteOcasiaoOrcamentoInput').value = oc && oc.orcamento ? finFmtNum(oc.orcamento) : '';
     document.getElementById('presenteOcasiaoModal').classList.add('active');
     document.getElementById('presenteOcasiaoNomeInput').focus();
   }
-  document.getElementById('presenteOcasiaoSemDataToggle').addEventListener('click', () => {
-    const toggle = document.getElementById('presenteOcasiaoSemDataToggle');
-    const input = document.getElementById('presenteOcasiaoDataInput');
-    const nowActive = !toggle.classList.contains('active');
-    toggle.classList.toggle('active', nowActive);
-    input.disabled = nowActive;
-    if(nowActive) input.value = '';
-  });
   document.getElementById('presenteOcasiaoCancelBtn').addEventListener('click', () => document.getElementById('presenteOcasiaoModal').classList.remove('active'));
   document.getElementById('presenteOcasiaoOkBtn').addEventListener('click', async () => {
     const nome = document.getElementById('presenteOcasiaoNomeInput').value.trim();
     if(!nome){ showAppMessage('Digite o nome da ocasião.', 'error'); return; }
-    const semData = document.getElementById('presenteOcasiaoSemDataToggle').classList.contains('active');
-    const dataStr = document.getElementById('presenteOcasiaoDataInput').value;
-    if(!semData && !dataStr){ showAppMessage('Escolha uma data ou marque "Avulsa".', 'error'); return; }
+    const tipo = document.getElementById('presenteOcasiaoTipoInput').value;
     const orcamento = finParseNum(document.getElementById('presenteOcasiaoOrcamentoInput').value) || null;
-    const patch = { nome, anual: !semData, orcamento };
-    if(semData){
-      patch.dia = null; patch.mes = null;
-    } else {
+    const patch = { nome, tipo, orcamento, dia:null, mes:null };
+    if(tipo === 'anual'){
+      const dataStr = document.getElementById('presenteOcasiaoDataInput').value;
+      if(!dataStr){ showAppMessage('Escolha uma data.', 'error'); return; }
       const [, mesStr, diaStr] = dataStr.split('-');
       patch.dia = parseInt(diaStr, 10); patch.mes = parseInt(mesStr, 10);
+    } else if(tipo === 'mensal'){
+      const dia = parseInt(document.getElementById('presenteOcasiaoDiaMesInput').value, 10);
+      if(!dia || dia < 1 || dia > 31){ showAppMessage('Escolha um dia do mês válido (1 a 31).', 'error'); return; }
+      patch.dia = dia;
     }
     const { pessoaId, ocId } = presenteOcasiaoContexto;
     const id = ocId || newId();

@@ -928,21 +928,26 @@
     <div class="confirm-modal-panel">
       <p class="confirm-modal-text" id="presenteOcasiaoModalTitle" style="margin-bottom:12px;">Nova ocasião</p>
       <label class="modal-field-label">Ocasião</label>
-      <input type="text" id="presenteOcasiaoNomeInput" class="modal-text-input" list="presenteOcasiaoSugestoes" placeholder="Aniversário, Natal, Dia dos Namorados..." autocomplete="off">
-      <datalist id="presenteOcasiaoSugestoes">
-        <option value="Aniversário">
-        <option value="Natal">
-        <option value="Dia dos Namorados">
-        <option value="Aniversário de casamento">
-      </datalist>
-      <div class="modal-field-row">
+      <input type="text" id="presenteOcasiaoNomeInput" class="modal-text-input" placeholder="Aniversário, Natal, Dia dos Namorados..." autocomplete="off">
+      <label class="modal-field-label">Repetição</label>
+      <select id="presenteOcasiaoTipoInput" class="modal-text-input">
+        <option value="anual">Anual — uma data, se repete todo ano</option>
+        <option value="mensal">Mensal — um dia do mês, se repete todo mês</option>
+        <option value="avulso">Avulsa — presente único, sem nenhuma data</option>
+      </select>
+      <div class="modal-field-row" id="presenteOcasiaoDataAnualRow">
         <div>
           <label class="modal-field-label">Data</label>
           <input type="date" id="presenteOcasiaoDataInput" class="modal-text-input">
         </div>
-        <button type="button" class="nodate-toggle" id="presenteOcasiaoSemDataToggle">Avulsa</button>
       </div>
-      <p class="fin-sim-nota" style="margin:-8px 0 14px;">Com data, só o dia e o mês contam — a ocasião se repete todo ano. "Avulsa" é pra presente único, sem nenhuma data comemorativa fixa.</p>
+      <div class="modal-field-row" id="presenteOcasiaoDataMensalRow">
+        <div>
+          <label class="modal-field-label">Dia do mês</label>
+          <input type="number" min="1" max="31" id="presenteOcasiaoDiaMesInput" class="modal-text-input" placeholder="ex: 15">
+        </div>
+      </div>
+      <p class="fin-sim-nota" id="presenteOcasiaoNota" style="margin:-8px 0 14px;">Só o dia e o mês são usados — o ano do calendário é ignorado.</p>
       <label class="modal-field-label">Orçamento (opcional)</label>
       <input type="text" id="presenteOcasiaoOrcamentoInput" class="modal-text-input" inputmode="decimal" placeholder="ex: 150,00">
       <div class="confirm-modal-actions">

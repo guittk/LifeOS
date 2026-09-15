@@ -765,6 +765,17 @@
     const n = parseFloat(limpo);
     return isNaN(n) ? 0 : n;
   }
+  // Todo campo monetário do app usa inputmode="decimal" — em vez de cada tela
+  // reimplementar o "digitei 160, vira 160,00", um único listener delegado no
+  // documento cobre todos eles (inclusive os que ainda nem existem: linhas de
+  // Finanças, Supermercado etc são recriadas a cada render). Dispara ao sair do
+  // campo, não a cada tecla, pra não brigar com o cursor enquanto a pessoa digita.
+  document.addEventListener('blur', (e) => {
+    const el = e.target;
+    if(el && el.matches && el.matches('input[inputmode="decimal"]') && el.value.trim() !== ''){
+      el.value = finFmtNum(finParseNum(el.value));
+    }
+  }, true);
   function finLista(obj){ return Object.values(obj || {}).sort((a, b) => (a.ordem || 0) - (b.ordem || 0)); }
   function finProxOrdem(obj){ return finLista(obj).reduce((m, i) => Math.max(m, (i.ordem || 0) + 1), 0); }
   function finValorDe(item){

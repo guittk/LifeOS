@@ -411,12 +411,14 @@
   function timelineOrdenados(){
     return Object.values(timelineMarcos).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
   }
-  // O input de valor usa fonte monoespaçada, então 1 caractere = 1ch — dá pra
-  // encolher/esticar o campo (ou a pill de visualização) pro tamanho exato do texto.
-  function timelineAjustarLarguraValor(el){
-    const texto = 'value' in el ? el.value : el.textContent;
-    const len = Math.max((texto || el.placeholder || '').length, 4);
-    el.style.width = (len + 2) + 'ch';
+  // Só o INPUT (modo edição) precisa de JS pra se ajustar — um <span> (modo
+  // visualização) já encolhe pro tamanho do próprio texto sozinho. O input usa
+  // fonte monoespaçada (1 caractere ≈ 1ch), mas letter-spacing e negrito comem
+  // uma fração de pixel a mais por caractere que o "ch" não conta — por isso o
+  // +6px de folga, senão o fim do número (os centavos) ficava cortado.
+  function timelineAjustarLarguraValor(inp){
+    const len = Math.max((inp.value || inp.placeholder || '').length, 4);
+    inp.style.width = 'calc(' + len + 'ch + 6px)';
   }
   async function renderTimelineObjetivos(){
     const list = document.getElementById('timelineList');
@@ -448,7 +450,6 @@
             ${m.valor != null ? `<span class="obj-timeline-valor-view${m.ganho ? ' ganho' : ''}">${finFmtNum(m.valor)}</span>` : ''}
           </div>` : ''}
         </li>`).join('');
-      list.querySelectorAll('.obj-timeline-valor-view').forEach(timelineAjustarLarguraValor);
       return;
     }
     list.innerHTML = itens.map((m, i) => `
@@ -460,7 +461,7 @@
           <button type="button" class="obj-timeline-del" data-marco-del="${m.id}" title="Excluir">×</button>
         </div>
         <div class="obj-timeline-meta">
-          <input class="obj-timeline-prazo-input" data-marco-prazo="${m.id}" value="${escapeHtml(m.prazo || '')}" placeholder="prazo (ex: Dezembro)">
+          <input class="obj-timeline-prazo-input" data-marco-prazo="${m.id}" value="${escapeHtml(m.prazo || '')}" placeholder="prazo">
           <input class="obj-timeline-valor-input${m.ganho ? ' ganho' : ''}" data-marco-valor="${m.id}" inputmode="decimal" value="${m.valor != null ? finFmtNum(m.valor) : ''}" placeholder="valor">
           ${m.valor != null ? `<button type="button" class="obj-timeline-ganho-toggle${m.ganho ? ' on' : ''}" data-marco-ganho="${m.id}" title="Alternar entre valor a pagar e a receber">${m.ganho ? '↑ recebe' : '↓ paga'}</button>` : ''}
         </div>
