@@ -857,7 +857,6 @@
       [renderCasaErros,      'os erros da Casa',      'casaErrosList']
     ],
     manutencao:     [[renderManutencao, 'a Manutenção', 'manutList']],
-    nosdois:        [[renderNosDois, 'Nós dois', ['nosdoisPendentesList', 'nosdoisFeitosList']]],
     financas:       [[renderFinancas, 'as Finanças', 'finMesesList']],
     objetivos:      [[renderObjetivos, 'os Objetivos', 'objetivosList']],
     decisoes:       [[renderDecisoes, 'as Decisões', 'decisoesList']],

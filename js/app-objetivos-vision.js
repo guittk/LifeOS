@@ -412,13 +412,19 @@
     return Object.values(timelineMarcos).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
   }
   // Só o INPUT (modo edição) precisa de JS pra se ajustar — um <span> (modo
-  // visualização) já encolhe pro tamanho do próprio texto sozinho. O input usa
-  // fonte monoespaçada (1 caractere ≈ 1ch), mas letter-spacing e negrito comem
-  // uma fração de pixel a mais por caractere que o "ch" não conta — por isso o
-  // +6px de folga, senão o fim do número (os centavos) ficava cortado.
+  // visualização) já encolhe pro tamanho do próprio texto sozinho. Medir em
+  // "ch" (1 caractere = largura do "0") é só uma aproximação — não conta
+  // letter-spacing nem sempre bate com o peso da fonte — e deixava o fim do
+  // número cortado. Medir o texto de verdade num canvas elimina esse chute.
+  let timelineMedidorCanvasCtx = null;
   function timelineAjustarLarguraValor(inp){
-    const len = Math.max((inp.value || inp.placeholder || '').length, 4);
-    inp.style.width = 'calc(' + len + 'ch + 6px)';
+    if(!timelineMedidorCanvasCtx) timelineMedidorCanvasCtx = document.createElement('canvas').getContext('2d');
+    const texto = inp.value || inp.placeholder || '';
+    const estilo = getComputedStyle(inp);
+    timelineMedidorCanvasCtx.font = estilo.fontWeight + ' ' + estilo.fontSize + ' ' + estilo.fontFamily;
+    const letterSpacing = parseFloat(estilo.letterSpacing) || 0;
+    const largura = timelineMedidorCanvasCtx.measureText(texto).width + texto.length * letterSpacing;
+    inp.style.width = Math.ceil(largura) + 8 + 'px'; // folga pro cursor de digitação
   }
   async function renderTimelineObjetivos(){
     const list = document.getElementById('timelineList');
@@ -476,6 +482,9 @@
     list.querySelectorAll('[data-marco-valor]').forEach(inp => {
       timelineAjustarLarguraValor(inp);
       inp.addEventListener('input', () => timelineAjustarLarguraValor(inp));
+      // A máscara monetária global (blur, fase de captura) formata "160" -> "160,00"
+      // antes deste blur (fase normal) rodar — reajusta a largura pro texto final.
+      inp.addEventListener('blur', () => timelineAjustarLarguraValor(inp));
       inp.addEventListener('change', async () => {
         const id = inp.getAttribute('data-marco-valor');
         const texto = inp.value.trim();

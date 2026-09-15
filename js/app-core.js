@@ -836,7 +836,7 @@
   const SEARCH_VIEWS = [
     ['hoje','Hoje'], ['storage','Notas'], ['tarefas','Tarefas'], ['monday','Planejamento'],
     ['agenda','Agenda'], ['presentes','Presentes & datas'], ['rotina','Rotina'], ['casa','Casa'], ['manutencao','Manutenção'],
-    ['nosdois','Nós dois'], ['financas','Finanças'],
+    ['financas','Finanças'],
     ['fluencia','Fluência'], ['bateria','Bateria'], ['academia','Academia'], ['diario','Diário'],
     ['retrospectiva','Retrospectiva'],
     ['planoalimentar','Plano Alimentar'], ['objetivos','Objetivos'], ['timelineobjetivos','Timeline'], ['decisoes','Decisões'],

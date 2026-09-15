@@ -169,7 +169,6 @@
   const BOARD_VIEW_OPTIONS = [
     { key:'casa', label:'Casa' },
     { key:'manutencao', label:'Manutenção' },
-    { key:'nosdois', label:'Nós dois' },
     { key:'retrospectiva', label:'Retrospectiva' },
     { key:'hoje', label:'Hoje' },
     { key:'rotina', label:'Rotina' },
@@ -1737,49 +1736,6 @@
     await dbPut(userPath('/Manutencao/' + newId()), { nome, frequencia, custo, observacao, criadoEm: new Date().toISOString() });
     document.getElementById('manutModal').classList.remove('active');
     renderManutencao();
-  });
-
-  /* ---------- NÓS DOIS (coisas pra fazer juntos, sem virar tarefa) ---------- */
-  function nosdoisItemHtml(id, item){
-    return `
-      <div class="casa-card" data-id="${id}">
-        <button type="button" class="casa-check ${item.feito ? 'casa-card-feita' : ''}" data-nosdois-toggle="${id}" title="${item.feito ? 'Desmarcar' : 'Já fizemos'}">${item.feito ? '✓' : ''}</button>
-        <div class="casa-card-main"><p class="casa-card-title">${escapeHtml(item.texto)}</p></div>
-        <div class="casa-card-actions"><button data-nosdois-del="${id}">excluir</button></div>
-      </div>`;
-  }
-  async function renderNosDois(){
-    const pendEl = document.getElementById('nosdoisPendentesList');
-    const feitosEl = document.getElementById('nosdoisFeitosList');
-    if(!pendEl || !feitosEl) return;
-    const dados = await dbGet(userPath('/NosDois')) || {};
-    const entries = Object.entries(dados).sort((a, b) => (a[1].criadoEm || '').localeCompare(b[1].criadoEm || ''));
-    const pendentes = entries.filter(([, i]) => !i.feito);
-    const feitos = entries.filter(([, i]) => i.feito);
-    pendEl.innerHTML = pendentes.length ? pendentes.map(([id, i]) => nosdoisItemHtml(id, i)).join('') : '<p class="empty-state">Nada na lista ainda — adicione algo que vocês querem fazer juntos.</p>';
-    feitosEl.innerHTML = feitos.length ? feitos.map(([id, i]) => nosdoisItemHtml(id, i)).join('') : '<p class="empty-state">O que vocês marcarem como feito aparece aqui.</p>';
-    document.querySelectorAll('[data-nosdois-toggle]').forEach(btn => btn.addEventListener('click', async () => {
-      const id = btn.getAttribute('data-nosdois-toggle');
-      await dbPatch(userPath('/NosDois/' + id), { feito: !dados[id].feito });
-      renderNosDois();
-    }));
-    document.querySelectorAll('[data-nosdois-del]').forEach(btn => btn.addEventListener('click', async () => {
-      if(!await showConfirm('Excluir este item?')) return;
-      await dbDelete(userPath('/NosDois/' + btn.getAttribute('data-nosdois-del')));
-      renderNosDois();
-    }));
-  }
-  document.getElementById('nosdoisAddBtn').addEventListener('click', () => {
-    document.getElementById('nosdoisTextoInput').value = '';
-    document.getElementById('nosdoisModal').classList.add('active');
-  });
-  document.getElementById('nosdoisCancelBtn').addEventListener('click', () => document.getElementById('nosdoisModal').classList.remove('active'));
-  document.getElementById('nosdoisOkBtn').addEventListener('click', async () => {
-    const texto = document.getElementById('nosdoisTextoInput').value.trim();
-    if(!texto){ showAppMessage('Digite o que vocês querem fazer.', 'error'); return; }
-    await dbPut(userPath('/NosDois/' + newId()), { texto, feito:false, criadoEm: new Date().toISOString() });
-    document.getElementById('nosdoisModal').classList.remove('active');
-    renderNosDois();
   });
 
   /* ---------- Lançar item avulso nas Finanças (usado pelo Supermercado) ----------
