@@ -870,7 +870,7 @@
     busca:          [],
     timelineobjetivos: [[renderTimelineObjetivos, 'a Timeline', 'timelineList']],
     acordar:        [[renderAcordarChecklist, 'a checklist de Acordar', 'acordarChecklistList']],
-    supermercado:   [[renderSupermercado, 'o Supermercado', 'superListaContainer']],
+    supermercado:   [[renderSupermercado, 'o Supermercado', ['superListaContainer', 'superDespensaList']]],
     calculos:       [[renderCalculosRescisaoInit, 'os Cálculos', 'calcRescisaoResultado']],
     empreendedorismo: [[renderPossibilidades, 'as Possibilidades Financeiras', 'possList']],
     config:         []

@@ -1259,13 +1259,15 @@
   }
 
   async function superGerarDaSemana(){
-    const [plano, fixosRaw, catalogoRaw, listaRaw] = await Promise.all([
+    const [plano, fixosRaw, catalogoRaw, listaRaw, despensaRaw] = await Promise.all([
       dbGet(userPath('/PlanoAlimentar')), dbGet(userPath('/SupermercadoFixos')),
-      dbGet(userPath('/SupermercadoCatalogo')), dbGet(userPath('/SupermercadoLista'))
+      dbGet(userPath('/SupermercadoCatalogo')), dbGet(userPath('/SupermercadoLista')),
+      dbGet(userPath('/SupermercadoDespensa'))
     ]);
     const catalogo = catalogoRaw || {};
     const listaAtual = listaRaw || {};
     const fixos = fixosRaw || {};
+    const despensa = despensaRaw || {};
 
     const grupos = {}; // chave normalizada -> { nome, entradas: [texto de quantidade,...] }
     Object.values(plano || {}).forEach(dia => {
@@ -1282,16 +1284,22 @@
 
     const gerados = {};
     Object.entries(grupos).forEach(([chave, g]) => {
+      const secao = (catalogo[chave] && catalogo[chave].secao) || 'outros';
       const parses = g.entradas.map(superParseQtd);
-      let quantidade;
       if(parses.length && parses.every(p => p && p.familia === parses[0].familia)){
-        quantidade = superFormatarQtd(parses[0].familia, parses.reduce((s, p) => s + p.valorBase, 0));
+        const familia = parses[0].familia;
+        let valorBase = parses.reduce((s, p) => s + p.valorBase, 0);
+        // Abate o que já tem na despensa, quando dá pra comparar (mesma família).
+        const naDespensa = despensa[chave] && superParseQtd(despensa[chave].quantidade);
+        if(naDespensa && naDespensa.familia === familia) valorBase = Math.max(0, valorBase - naDespensa.valorBase);
+        if(valorBase <= 0) return; // a despensa já cobre tudo — nem entra na lista
+        gerados[chave] = { nome: g.nome, secao, quantidade: superFormatarQtd(familia, valorBase) };
       }else{
         // Família mista ou algo que não bate o padrão (ex: "a gosto"): lista
-        // os textos distintos em vez de somar errado.
-        quantidade = Array.from(new Set(g.entradas.filter(Boolean))).join(' + ');
+        // os textos distintos em vez de somar errado — e não dá pra abater
+        // da despensa algo que não sabe comparar.
+        gerados[chave] = { nome: g.nome, secao, quantidade: Array.from(new Set(g.entradas.filter(Boolean))).join(' + ') };
       }
-      gerados[chave] = { nome: g.nome, secao: (catalogo[chave] && catalogo[chave].secao) || 'outros', quantidade };
     });
 
     // O que já estava marcado continua marcado depois de regenerar — regenerar
@@ -1427,6 +1435,7 @@
     const restante = {};
     Object.entries(lista).forEach(([id, it]) => { if(!it.marcado) restante[id] = it; });
     await dbPut(userPath('/SupermercadoLista'), restante);
+    await superDespensaSomar(marcados.map(([, it]) => ({ nome: it.nome, quantidade: it.quantidade })));
     const valor = finParseNum(document.getElementById('superFinalizarValorInput').value);
     const hoje = todayStr();
     let lancado = null;
@@ -1438,6 +1447,85 @@
     document.getElementById('superFinalizarModal').classList.remove('active');
     await renderSuperLista();
     showAppMessage(lancado ? 'Compra registrada e lançada nas Finanças.' : (valor > 0 ? 'Compra registrada — o mês atual ainda não existe nas Finanças, abra a tela Finanças e volte aqui.' : 'Compra registrada.'), lancado || !valor ? 'success' : 'error');
+  });
+
+  /* ---------- SUPERMERCADO: Despensa ----------
+     O que já tem em casa — abatido da lista ao gerar (ver superGerarDaSemana)
+     e realimentado sozinho ao finalizar uma compra (superDespensaSomar).
+     "Zerar" (excluir) é a baixa rápida: sem o item aqui, a próxima geração
+     volta a pedir a quantidade cheia. */
+  async function superDespensaSomar(itensComprados){
+    const chaves = itensComprados.map(it => superChaveNome(it.nome)).filter(Boolean);
+    if(!chaves.length) return;
+    const despensa = await dbGet(userPath('/SupermercadoDespensa'), { fresh:true }) || {};
+    const atualizacoes = {};
+    itensComprados.forEach(it => {
+      const nome = (it.nome || '').trim();
+      if(!nome) return;
+      const chave = superChaveNome(nome);
+      const novaParse = superParseQtd(it.quantidade);
+      const existente = despensa[chave];
+      const exParse = existente && superParseQtd(existente.quantidade);
+      if(exParse && novaParse && exParse.familia === novaParse.familia){
+        atualizacoes[chave] = { nome, quantidade: superFormatarQtd(novaParse.familia, exParse.valorBase + novaParse.valorBase) };
+      }else{
+        // Sem entrada prévia, ou quantidade que não dá pra somar com confiança:
+        // guarda o que acabou de comprar em vez de tentar somar errado.
+        atualizacoes[chave] = { nome, quantidade: it.quantidade || (existente ? existente.quantidade : '') };
+      }
+    });
+    await dbPatch(userPath('/SupermercadoDespensa'), atualizacoes);
+  }
+
+  async function renderSuperDespensa(){
+    const el = document.getElementById('superDespensaList');
+    if(!el) return;
+    const despensa = await dbGet(userPath('/SupermercadoDespensa')) || {};
+    const entradas = Object.entries(despensa).sort((a, b) => a[1].nome.localeCompare(b[1].nome, 'pt-BR'));
+    if(!entradas.length){ el.innerHTML = '<p class="empty-state">Despensa vazia. O que você marcar como comprado numa compra finalizada entra aqui sozinho — ou adicione na mão.</p>'; return; }
+    el.innerHTML = entradas.map(([chave, it]) => `
+      <div class="casa-card" data-id="${chave}">
+        <div class="casa-card-main" data-super-despensa-edit="${chave}" style="cursor:pointer;">
+          <p class="casa-card-title">${escapeHtml(it.nome)}</p>
+          <div class="casa-card-meta">${it.quantidade ? `<span>${escapeHtml(it.quantidade)}</span>` : ''}</div>
+        </div>
+        <div class="casa-card-actions"><button data-super-despensa-zerar="${chave}" title="Acabou — some daqui e volta a pedir na próxima lista">zerar</button></div>
+      </div>`).join('');
+    el.querySelectorAll('[data-super-despensa-edit]').forEach(row => row.addEventListener('click', () => {
+      const chave = row.getAttribute('data-super-despensa-edit');
+      superAbrirDespensaModal(chave, despensa[chave]);
+    }));
+    el.querySelectorAll('[data-super-despensa-zerar]').forEach(btn => btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await dbDelete(userPath('/SupermercadoDespensa/' + btn.getAttribute('data-super-despensa-zerar')));
+      renderSuperDespensa();
+    }));
+  }
+  let superDespensaEditandoChave = null;
+  function superAbrirDespensaModal(chave, it){
+    superDespensaEditandoChave = chave || null;
+    document.getElementById('superDespensaModalTitle').textContent = chave ? 'Editar item da despensa' : 'Item na despensa';
+    document.getElementById('superDespensaNomeInput').value = it ? it.nome : '';
+    document.getElementById('superDespensaQtdInput').value = it ? (it.quantidade || '') : '';
+    document.getElementById('superDespensaModal').classList.add('active');
+    document.getElementById('superDespensaNomeInput').focus();
+  }
+  document.getElementById('superAddDespensaBtn').addEventListener('click', () => superAbrirDespensaModal(null, null));
+  document.getElementById('superDespensaCancelBtn').addEventListener('click', () => document.getElementById('superDespensaModal').classList.remove('active'));
+  document.getElementById('superDespensaOkBtn').addEventListener('click', async () => {
+    const nome = document.getElementById('superDespensaNomeInput').value.trim();
+    if(!nome){ showAppMessage('Digite o nome do item.', 'error'); return; }
+    const quantidade = document.getElementById('superDespensaQtdInput').value.trim();
+    // A chave é o nome normalizado (mesmo padrão do catálogo) — editar o nome
+    // de um item existente cria uma entrada nova em vez de mover a antiga,
+    // pra manter a mesma regra simples "uma chave por nome" em toda a tela.
+    const chave = superChaveNome(nome);
+    if(superDespensaEditandoChave && superDespensaEditandoChave !== chave){
+      await dbDelete(userPath('/SupermercadoDespensa/' + superDespensaEditandoChave));
+    }
+    await dbPut(userPath('/SupermercadoDespensa/' + chave), { nome, quantidade });
+    document.getElementById('superDespensaModal').classList.remove('active');
+    renderSuperDespensa();
   });
 
   /* ---------- SUPERMERCADO: Itens fixos ---------- */
@@ -1518,6 +1606,6 @@
 
   async function renderSupermercado(){
     if(!document.getElementById('superListaContainer')) return;
-    await Promise.all([renderSuperLista(), renderSuperFixos(), renderSuperHistorico()]);
+    await Promise.all([renderSuperLista(), renderSuperDespensa(), renderSuperFixos(), renderSuperHistorico()]);
   }
 

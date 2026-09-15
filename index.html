@@ -1147,6 +1147,7 @@
     </div>
     <div class="subtabs">
       <button class="subtab active" data-sub="super" data-target="super-lista">Lista</button>
+      <button class="subtab" data-sub="super" data-target="super-despensa">Despensa</button>
       <button class="subtab" data-sub="super" data-target="super-fixos">Itens fixos</button>
       <button class="subtab" data-sub="super" data-target="super-historico">Histórico</button>
     </div>
@@ -1159,6 +1160,12 @@
         <button class="btn btn-ghost btn-sm" id="superFinalizarBtn">✓ Finalizar compra</button>
       </div>
       <div id="superListaContainer"><p class="empty-state">Carregando...</p></div>
+    </div>
+
+    <div class="subview" id="super-despensa">
+      <p class="view-desc" style="margin:0 0 14px;">O que já tem em casa. "Gerar da semana" abate isso da lista antes de pedir pra comprar de novo.</p>
+      <button class="btn btn-primary btn-sm" id="superAddDespensaBtn" style="margin-bottom:14px;">+ Item na despensa</button>
+      <div id="superDespensaList"><p class="empty-state">Carregando...</p></div>
     </div>
 
     <div class="subview" id="super-fixos">
@@ -1228,6 +1235,21 @@
       <div class="confirm-modal-actions">
         <button class="btn btn-ghost btn-sm" id="superFinalizarCancelBtn">Cancelar</button>
         <button class="btn btn-primary btn-sm" id="superFinalizarOkBtn">Finalizar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: item da despensa -->
+  <div class="confirm-modal" id="superDespensaModal">
+    <div class="confirm-modal-panel">
+      <p class="confirm-modal-text" id="superDespensaModalTitle" style="margin-bottom:12px;">Item na despensa</p>
+      <label class="modal-field-label">Nome</label>
+      <input type="text" class="modal-text-input" id="superDespensaNomeInput" placeholder="ex: Arroz, Detergente...">
+      <label class="modal-field-label">Quantidade</label>
+      <input type="text" class="modal-text-input" id="superDespensaQtdInput" placeholder="ex: 2kg, 3un, 500ml">
+      <div class="confirm-modal-actions">
+        <button class="btn btn-ghost btn-sm" id="superDespensaCancelBtn">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="superDespensaOkBtn">Salvar</button>
       </div>
     </div>
   </div>

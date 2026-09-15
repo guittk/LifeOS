@@ -105,9 +105,10 @@ Tela nativa, modelada na aba **Financeiro** da planilha. Dados em `/users/{uid}/
 
 ## Supermercado (`view-supermercado`)
 
-Lista de compras por corredor, em 3 abas:
+Lista de compras por corredor, em 4 abas:
 
-- **Lista**: "Gerar da semana" varre o Plano Alimentar inteiro, agrupa alimentos pelo nome (sem acento/maiúscula) e soma quantidade quando dá — mesma família de unidade (peso: g/kg; volume: ml/l; ou contagem: un). O que não bate esse padrão (ex: "a gosto") não é somado: fica listado com os textos originais, em vez de inventar um total. Cada item cai num corredor (Hortifrúti, Açougue, Padaria, Laticínios, Mercearia, Bebidas, Congelados, Limpeza, Higiene, Outros) — o catálogo aprende a seção de cada nome quando você reclassifica um item (`/SupermercadoCatalogo`), e usa isso nas próximas gerações. **Modo mercado**: fonte e alvo de toque maiores. Itens marcados caem pro fim, riscados. **Finalizar compra** tira os marcados da lista e registra no Histórico — os que não foram marcados continuam lá pra próxima.
+- **Lista**: "Gerar da semana" varre o Plano Alimentar inteiro, agrupa alimentos pelo nome (sem acento/maiúscula) e soma quantidade quando dá — mesma família de unidade (peso: g/kg; volume: ml/l; ou contagem: un). O que não bate esse padrão (ex: "a gosto") não é somado: fica listado com os textos originais, em vez de inventar um total. Antes de somar, abate o que já está na Despensa (mesma família) — se a despensa cobrir tudo, o item nem entra na lista. Cada item cai num corredor (Hortifrúti, Açougue, Padaria, Laticínios, Mercearia, Bebidas, Congelados, Limpeza, Higiene, Outros) — o catálogo aprende a seção de cada nome quando você reclassifica um item (`/SupermercadoCatalogo`), e usa isso nas próximas gerações. **Modo mercado**: fonte e alvo de toque maiores. Itens marcados caem pro fim, riscados. **Finalizar compra** tira os marcados da lista, soma tudo na Despensa (mesma família) e registra no Histórico — os que não foram marcados continuam lá pra próxima.
+- **Despensa**: o que já tem em casa — nome + quantidade, chaveado pelo nome normalizado (mesmo padrão do catálogo). Alimenta sozinha ao finalizar uma compra; "zerar" (excluir) é a baixa rápida — sem o item aqui, a próxima geração volta a pedir a quantidade cheia. `/SupermercadoDespensa`.
 - **Itens fixos**: o que entra em toda geração (papel higiênico, sabão, ração...). `/SupermercadoFixos`.
 - **Histórico**: compras já finalizadas, com data e quantidade de itens. `/SupermercadoCompras`.
 
