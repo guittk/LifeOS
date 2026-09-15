@@ -1203,3 +1203,302 @@
     planRender();
   }
 
+  /* ---------- SUPERMERCADO ----------
+     Lista por corredor. "Gerar da semana" varre o Plano Alimentar, soma
+     quantidades da mesma família de unidade (peso/volume/unidade) e chuta
+     "outros" pra quem o catálogo ainda não aprendeu — reclassificar um item
+     ensina o catálogo pra sempre (ver superEnsinarCatalogo). O que não dá pra
+     somar com confiança fica listado em vez de virar um total inventado. */
+  const SUPER_SECOES = [
+    { key:'hortifruti', label:'Hortifrúti' },
+    { key:'acougue', label:'Açougue & peixaria' },
+    { key:'padaria', label:'Padaria' },
+    { key:'laticinios', label:'Laticínios & frios' },
+    { key:'mercearia', label:'Mercearia' },
+    { key:'bebidas', label:'Bebidas' },
+    { key:'congelados', label:'Congelados' },
+    { key:'limpeza', label:'Limpeza' },
+    { key:'higiene', label:'Higiene & farmácia' },
+    { key:'outros', label:'Outros' }
+  ];
+  function superSecaoLabel(key){ return (SUPER_SECOES.find(s => s.key === key) || SUPER_SECOES[SUPER_SECOES.length - 1]).label; }
+  function superSecaoOptionsHtml(){ return SUPER_SECOES.map(s => `<option value="${s.key}">${s.label}</option>`).join(''); }
+
+  // Chave estável e segura pro Firebase: mesmo nome digitado de jeitos
+  // diferentes ("Arroz", "arroz ", "ARROZ") cai na mesma entrada do catálogo.
+  function superChaveNome(nome){
+    return (nome || '').trim().toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '') // tira acento
+      .replace(/[.#$\[\]\/]/g, '_').replace(/\s+/g, '_');
+  }
+
+  // Reconhece só o que dá pra converter com confiança (kg/g, l/ml, un). Tudo
+  // que não bate o formato retorna null — quem chama decide desistir em
+  // silêncio em vez de inventar um total.
+  function superParseQtd(texto){
+    const m = String(texto || '').trim().match(/^([\d]+(?:[.,]\d+)?)\s*(kg|g|l|ml|un|unid\.?|unidades?)?\.?$/i);
+    if(!m) return null;
+    const valor = parseFloat(m[1].replace(',', '.'));
+    if(isNaN(valor)) return null;
+    const u = (m[2] || 'un').toLowerCase();
+    if(u === 'kg') return { familia:'peso', valorBase: valor * 1000 };
+    if(u === 'g') return { familia:'peso', valorBase: valor };
+    if(u === 'l') return { familia:'volume', valorBase: valor * 1000 };
+    if(u === 'ml') return { familia:'volume', valorBase: valor };
+    return { familia:'unidade', valorBase: valor };
+  }
+  function superFormatarQtd(familia, valorBase){
+    if(familia === 'peso') return valorBase >= 1000 ? (valorBase / 1000).toLocaleString('pt-BR', { maximumFractionDigits:2 }) + 'kg' : Math.round(valorBase) + 'g';
+    if(familia === 'volume') return valorBase >= 1000 ? (valorBase / 1000).toLocaleString('pt-BR', { maximumFractionDigits:2 }) + 'l' : Math.round(valorBase) + 'ml';
+    return (valorBase % 1 === 0 ? valorBase : valorBase.toFixed(1)) + 'un';
+  }
+
+  async function superEnsinarCatalogo(nome, secao){
+    if(!nome) return;
+    await dbPatchSilent(userPath('/SupermercadoCatalogo/' + superChaveNome(nome)), { secao }).catch(() => {});
+  }
+
+  async function superGerarDaSemana(){
+    const [plano, fixosRaw, catalogoRaw, listaRaw] = await Promise.all([
+      dbGet(userPath('/PlanoAlimentar')), dbGet(userPath('/SupermercadoFixos')),
+      dbGet(userPath('/SupermercadoCatalogo')), dbGet(userPath('/SupermercadoLista'))
+    ]);
+    const catalogo = catalogoRaw || {};
+    const listaAtual = listaRaw || {};
+    const fixos = fixosRaw || {};
+
+    const grupos = {}; // chave normalizada -> { nome, entradas: [texto de quantidade,...] }
+    Object.values(plano || {}).forEach(dia => {
+      Object.values((dia && dia.refeicoes) || {}).forEach(ref => {
+        Object.values((ref && ref.alimentos) || {}).forEach(f => {
+          const nome = (f.nome || '').trim();
+          if(!nome) return;
+          const chave = superChaveNome(nome);
+          if(!grupos[chave]) grupos[chave] = { nome, entradas: [] };
+          grupos[chave].entradas.push((f.quantidade || '').trim());
+        });
+      });
+    });
+
+    const gerados = {};
+    Object.entries(grupos).forEach(([chave, g]) => {
+      const parses = g.entradas.map(superParseQtd);
+      let quantidade;
+      if(parses.length && parses.every(p => p && p.familia === parses[0].familia)){
+        quantidade = superFormatarQtd(parses[0].familia, parses.reduce((s, p) => s + p.valorBase, 0));
+      }else{
+        // Família mista ou algo que não bate o padrão (ex: "a gosto"): lista
+        // os textos distintos em vez de somar errado.
+        quantidade = Array.from(new Set(g.entradas.filter(Boolean))).join(' + ');
+      }
+      gerados[chave] = { nome: g.nome, secao: (catalogo[chave] && catalogo[chave].secao) || 'outros', quantidade };
+    });
+
+    // O que já estava marcado continua marcado depois de regenerar — regenerar
+    // não deveria te fazer perder o progresso da compra em andamento.
+    const marcadoPorChave = {};
+    Object.values(listaAtual).forEach(it => { if(it.origem !== 'manual') marcadoPorChave[superChaveNome(it.nome)] = !!it.marcado; });
+
+    const novaLista = {};
+    Object.entries(listaAtual).forEach(([id, it]) => { if(it.origem === 'manual') novaLista[id] = it; }); // manuais ficam como estavam
+    Object.values(gerados).forEach(g => {
+      novaLista[newId()] = { nome: g.nome, secao: g.secao, quantidade: g.quantidade, marcado: !!marcadoPorChave[superChaveNome(g.nome)], origem:'gerado' };
+    });
+    Object.values(fixos).forEach(f => {
+      novaLista[newId()] = { nome: f.nome, secao: f.secao || 'outros', quantidade: f.quantidade || '', marcado: !!marcadoPorChave[superChaveNome(f.nome)], origem:'fixo' };
+    });
+    await dbPut(userPath('/SupermercadoLista'), novaLista);
+    return novaLista;
+  }
+
+  let superModoMercado = false;
+
+  function superItemCardHtml(id, it){
+    return `
+      <div class="casa-card ${it.marcado ? 'casa-card-feita' : ''}" data-id="${id}">
+        <button type="button" class="casa-check" data-super-toggle="${id}" aria-label="${it.marcado ? 'Desmarcar' : 'Marquei'}">${it.marcado ? '✓' : ''}</button>
+        <div class="casa-card-main" data-super-edit="${id}" style="cursor:pointer;">
+          <p class="casa-card-title">${escapeHtml(it.nome)}</p>
+          <div class="casa-card-meta">
+            ${it.quantidade ? `<span>${escapeHtml(it.quantidade)}</span>` : ''}
+            ${it.origem === 'fixo' ? '<span>· fixo</span>' : ''}
+          </div>
+        </div>
+        <div class="casa-card-actions"><button data-super-del="${id}">excluir</button></div>
+      </div>`;
+  }
+
+  async function renderSuperLista(){
+    const el = document.getElementById('superListaContainer');
+    if(!el) return;
+    const lista = await dbGet(userPath('/SupermercadoLista')) || {};
+    const entradas = Object.entries(lista);
+    if(!entradas.length){
+      el.innerHTML = '<p class="empty-state">Lista vazia. "Gerar da semana" puxa do Plano Alimentar, ou adicione um item avulso.</p>';
+      return;
+    }
+    const pendentes = entradas.filter(([, it]) => !it.marcado)
+      .sort((a, b) => a[1].nome.localeCompare(b[1].nome, 'pt-BR'));
+    const marcados = entradas.filter(([, it]) => it.marcado)
+      .sort((a, b) => a[1].nome.localeCompare(b[1].nome, 'pt-BR'));
+
+    let html = '';
+    SUPER_SECOES.forEach(sec => {
+      const doSecao = pendentes.filter(([, it]) => (it.secao || 'outros') === sec.key);
+      if(!doSecao.length) return;
+      html += `<p class="super-secao-titulo">${sec.label} <span style="color:var(--text-dim);">· ${doSecao.length}</span></p>` +
+        doSecao.map(([id, it]) => superItemCardHtml(id, it)).join('');
+    });
+    if(marcados.length){
+      html += `<p class="super-secao-titulo">✓ Já peguei · ${marcados.length}</p>` +
+        marcados.map(([id, it]) => superItemCardHtml(id, it)).join('');
+    }
+    el.innerHTML = html || '<p class="empty-state">Tudo pego! "Finalizar compra" registra e limpa a lista.</p>';
+    el.classList.toggle('super-modo-mercado', superModoMercado);
+
+    el.querySelectorAll('[data-super-toggle]').forEach(btn => btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-super-toggle');
+      await dbPatch(userPath('/SupermercadoLista/' + id), { marcado: !lista[id].marcado });
+      renderSuperLista();
+    }));
+    el.querySelectorAll('[data-super-edit]').forEach(row => row.addEventListener('click', () => {
+      superAbrirItemModal(row.getAttribute('data-super-edit'), lista[row.getAttribute('data-super-edit')]);
+    }));
+    el.querySelectorAll('[data-super-del]').forEach(btn => btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await dbDelete(userPath('/SupermercadoLista/' + btn.getAttribute('data-super-del')));
+      renderSuperLista();
+    }));
+  }
+
+  let superItemEditandoId = null;
+  function superAbrirItemModal(id, item){
+    superItemEditandoId = id || null;
+    document.getElementById('superItemModalTitle').textContent = id ? 'Editar item' : 'Item avulso';
+    document.getElementById('superItemNomeInput').value = item ? item.nome : '';
+    document.getElementById('superItemQtdInput').value = item ? (item.quantidade || '') : '';
+    document.getElementById('superItemSecaoInput').value = item ? (item.secao || 'outros') : 'outros';
+    document.getElementById('superItemModal').classList.add('active');
+    document.getElementById('superItemNomeInput').focus();
+  }
+  document.getElementById('superItemSecaoInput').innerHTML = superSecaoOptionsHtml();
+  document.getElementById('superAddItemBtn').addEventListener('click', () => superAbrirItemModal(null, null));
+  document.getElementById('superItemCancelBtn').addEventListener('click', () => document.getElementById('superItemModal').classList.remove('active'));
+  document.getElementById('superItemOkBtn').addEventListener('click', async () => {
+    const nome = document.getElementById('superItemNomeInput').value.trim();
+    if(!nome){ showAppMessage('Digite o nome do item.', 'error'); return; }
+    const secao = document.getElementById('superItemSecaoInput').value;
+    const quantidade = document.getElementById('superItemQtdInput').value.trim();
+    const id = superItemEditandoId || newId();
+    const existente = superItemEditandoId ? (await dbGet(userPath('/SupermercadoLista/' + id))) : null;
+    await dbPut(userPath('/SupermercadoLista/' + id), {
+      nome, secao, quantidade,
+      marcado: existente ? !!existente.marcado : false,
+      origem: existente ? existente.origem : 'manual'
+    });
+    await superEnsinarCatalogo(nome, secao);
+    document.getElementById('superItemModal').classList.remove('active');
+    renderSuperLista();
+  });
+
+  document.getElementById('superGerarBtn').addEventListener('click', async () => {
+    await superGerarDaSemana();
+    await renderSuperLista();
+    showAppMessage('Lista gerada a partir do Plano Alimentar.', 'success');
+  });
+  document.getElementById('superModoMercadoBtn').addEventListener('click', (e) => {
+    superModoMercado = !superModoMercado;
+    e.currentTarget.classList.toggle('btn-primary', superModoMercado);
+    document.getElementById('superListaContainer').classList.toggle('super-modo-mercado', superModoMercado);
+  });
+  document.getElementById('superFinalizarBtn').addEventListener('click', async () => {
+    const lista = await dbGet(userPath('/SupermercadoLista'), { fresh:true }) || {};
+    const marcadosIds = Object.entries(lista).filter(([, it]) => it.marcado).map(([id]) => id);
+    if(!marcadosIds.length){ showAppMessage('Marque os itens que pegou antes de finalizar.', 'error'); return; }
+    if(!await showConfirm('Finalizar compra com ' + marcadosIds.length + ' ' + (marcadosIds.length === 1 ? 'item' : 'itens') + '? Eles saem da lista.')) return;
+    const restante = {};
+    Object.entries(lista).forEach(([id, it]) => { if(!it.marcado) restante[id] = it; });
+    await dbPut(userPath('/SupermercadoLista'), restante);
+    await dbPut(userPath('/SupermercadoCompras/' + newId()), { data: todayStr(), quantidadeItens: marcadosIds.length });
+    await renderSuperLista();
+    showAppMessage('Compra registrada.', 'success');
+  });
+
+  /* ---------- SUPERMERCADO: Itens fixos ---------- */
+  function superFixoCardHtml(id, f){
+    return `
+      <div class="casa-card" data-id="${id}">
+        <div class="casa-card-main" data-super-fixo-edit="${id}" style="cursor:pointer;">
+          <p class="casa-card-title">${escapeHtml(f.nome)}</p>
+          <div class="casa-card-meta">
+            <span>${superSecaoLabel(f.secao || 'outros')}</span>
+            ${f.quantidade ? `<span>· ${escapeHtml(f.quantidade)}</span>` : ''}
+          </div>
+        </div>
+        <div class="casa-card-actions"><button data-super-fixo-del="${id}">excluir</button></div>
+      </div>`;
+  }
+  async function renderSuperFixos(){
+    const el = document.getElementById('superFixosList');
+    if(!el) return;
+    const fixos = await dbGet(userPath('/SupermercadoFixos')) || {};
+    const entradas = Object.entries(fixos).sort((a, b) => a[1].nome.localeCompare(b[1].nome, 'pt-BR'));
+    if(!entradas.length){ el.innerHTML = '<p class="empty-state">Nenhum item fixo ainda. Papel higiênico, sabão, ração... o que entra em toda compra.</p>'; return; }
+    el.innerHTML = entradas.map(([id, f]) => superFixoCardHtml(id, f)).join('');
+    el.querySelectorAll('[data-super-fixo-edit]').forEach(row => row.addEventListener('click', () => {
+      const id = row.getAttribute('data-super-fixo-edit');
+      superAbrirFixoModal(id, fixos[id]);
+    }));
+    el.querySelectorAll('[data-super-fixo-del]').forEach(btn => btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if(!await showConfirm('Excluir este item fixo?')) return;
+      await dbDelete(userPath('/SupermercadoFixos/' + btn.getAttribute('data-super-fixo-del')));
+      renderSuperFixos();
+    }));
+  }
+  let superFixoEditandoId = null;
+  function superAbrirFixoModal(id, f){
+    superFixoEditandoId = id || null;
+    document.getElementById('superFixoModalTitle').textContent = id ? 'Editar item fixo' : 'Item fixo';
+    document.getElementById('superFixoNomeInput').value = f ? f.nome : '';
+    document.getElementById('superFixoQtdInput').value = f ? (f.quantidade || '') : '';
+    document.getElementById('superFixoSecaoInput').value = f ? (f.secao || 'outros') : 'outros';
+    document.getElementById('superFixoModal').classList.add('active');
+    document.getElementById('superFixoNomeInput').focus();
+  }
+  document.getElementById('superFixoSecaoInput').innerHTML = superSecaoOptionsHtml();
+  document.getElementById('superAddFixoBtn').addEventListener('click', () => superAbrirFixoModal(null, null));
+  document.getElementById('superFixoCancelBtn').addEventListener('click', () => document.getElementById('superFixoModal').classList.remove('active'));
+  document.getElementById('superFixoOkBtn').addEventListener('click', async () => {
+    const nome = document.getElementById('superFixoNomeInput').value.trim();
+    if(!nome){ showAppMessage('Digite o nome do item.', 'error'); return; }
+    const secao = document.getElementById('superFixoSecaoInput').value;
+    const quantidade = document.getElementById('superFixoQtdInput').value.trim();
+    const id = superFixoEditandoId || newId();
+    await dbPut(userPath('/SupermercadoFixos/' + id), { nome, secao, quantidade });
+    await superEnsinarCatalogo(nome, secao);
+    document.getElementById('superFixoModal').classList.remove('active');
+    renderSuperFixos();
+  });
+
+  /* ---------- SUPERMERCADO: Histórico ---------- */
+  async function renderSuperHistorico(){
+    const el = document.getElementById('superHistoricoList');
+    if(!el) return;
+    const compras = await dbGet(userPath('/SupermercadoCompras')) || {};
+    const entradas = Object.values(compras).sort((a, b) => (b.data || '').localeCompare(a.data || ''));
+    if(!entradas.length){ el.innerHTML = '<p class="empty-state">Nenhuma compra finalizada ainda.</p>'; return; }
+    el.innerHTML = entradas.map(c => `
+      <div class="casa-card">
+        <div class="casa-card-main">
+          <p class="casa-card-title">${fmtDatePill(new Date(c.data + 'T00:00:00'))}</p>
+          <div class="casa-card-meta"><span>${c.quantidadeItens} ${c.quantidadeItens === 1 ? 'item' : 'itens'}</span></div>
+        </div>
+      </div>`).join('');
+  }
+
+  async function renderSupermercado(){
+    if(!document.getElementById('superListaContainer')) return;
+    await Promise.all([renderSuperLista(), renderSuperFixos(), renderSuperHistorico()]);
+  }
+

@@ -74,10 +74,11 @@ Na prática:
 ## Views (`index.html`, `id="view-*"`)
 
 `hoje`, `storage` (Notas), `tarefas`, `monday` (Planejamento), `agenda`, `rotina`,
-`casa`, `financas`, `decisoes`, `busca` (Perguntar ao LifeOS), `fluencia`, `academia`,
-`diario`, `planoalimentar`, `objetivos`, `timelineobjetivos`, `visionboard`,
+`casa`, `manutencao`, `nosdois` (Nós dois), `financas`, `supermercado`, `calculos`,
+`decisoes`, `empreendedorismo`, `busca` (Perguntar ao LifeOS), `fluencia`, `academia`,
+`diario`, `retrospectiva`, `planoalimentar`, `objetivos`, `timelineobjetivos`, `visionboard`,
 `bateria`, `acordar` (sem entrada na sidebar — só abre quando um despertador toca),
-`supermercado`, `calculos`, `empreendedorismo`, `apice` (essas 4 últimas: em breve),
+`apice` (única "em breve" sem conteúdo — só o botão que leva pro site),
 `config`.
 
 O `data-view` na sidebar é o mesmo sufixo do id da `<section>` e, em geral, do nome

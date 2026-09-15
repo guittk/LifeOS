@@ -491,6 +491,187 @@
     }, 4000);
   }
 
+  /* ---------- EMPREENDEDORISMO: Possibilidades Financeiras ----------
+     Registro comparado de caminhos de carreira/negócio em análise — cada um
+     com estrelas, retorno, risco, tempo e uma nota pessoal de quem está
+     avaliando. Seed inicial com a análise já feita em 14/09/2026 (mesmo
+     padrão de Finanças/Timeline: só semeia se a coleção nunca existiu). */
+  const POSS_PATH = '/PossibilidadesFinanceiras';
+  const POSS_PESSOA_LABEL = { guilherme:'Guilherme', julia:'Júlia' };
+  const POSS_NIVEL_CLS = { 'Baixo':'tag-sage', 'Médio':'tag-gold', 'Alto':'tag-coral', 'Muito Alto':'tag-coral' };
+
+  function possSeedInicial(){
+    const item = (nome, pessoa, extra) => ({ nome, pessoa, estrelas:0, retorno:'', risco:'', tempo:'', descricao:'', faixaSalarial:'', oQueEstudar:[], notas:'', ...extra });
+    const linhas = [
+      item('Desenvolvedor VR no Exterior', 'guilherme', {
+        estrelas:5, retorno:'Muito Alto', risco:'Baixo', tempo:'1 a 2 anos',
+        descricao:'É atualmente a oportunidade com melhor relação entre risco e retorno. Já possuo praticamente todos os requisitos técnicos (7 anos de experiência, Unity, VR, liderança e portfólio). O principal obstáculo é o inglês.',
+        faixaSalarial:'R$ 20.000 a R$ 30.000 líquidos por mês (inicialmente como Mid-Level). Possibilidade de R$ 35.000 a R$ 60.000 por mês futuramente como Senior.',
+        oQueEstudar:['Inglês (B2/C1)', 'Entrevistas técnicas', 'System Design', 'Arquitetura de Software', 'Algoritmos e estruturas de dados para entrevistas'],
+        notas:'Alta possibilidade pela minha experiência e portfólio trabalhando com VR e Simuladores Industriais. Preciso atingir um nível B2/C1 em inglês e treinar entrevistas. Estudar parte técnica, teórica, System Design e arquitetura. Poderia ganhar entre R$ 20.000 e 27.000 por mês.'
+      }),
+      item('Plataforma de Treinamentos VR', 'guilherme', {
+        estrelas:5, retorno:'Muito Alto', risco:'Médio', tempo:'2 a 5 anos',
+        descricao:'É o negócio próprio com maior potencial de crescimento por ser escalável. Ao invés de vender horas de desenvolvimento, o objetivo é vender licenças e assinaturas de treinamentos VR para empresas.\nTambém permite vender: desenvolvimento de treinamentos personalizados, suporte, atualizações e consultoria.\nÉ uma área onde já possuo experiência prática e conhecimento do mercado.',
+        notas:'Eu poderia aproveitar minha experiência com treinamentos VR para criar uma plataforma de treinamentos VR. Nessa plataforma as empresas teriam acesso a treinamentos VR para comprar e instalar no MetaQuest. Seriam treinamentos de coisas que a maioria das empresas poderiam ter, como o controle de máquinas comuns, uso de equipamentos ou ações de emergência. Porém iríamos ter serviços para desenvolver projetos específicos para empresas ou fazer pequenos ajustes em sistemas já prontos.'
+      }),
+      item('Estúdio de Jogos', 'guilherme', {
+        estrelas:4, retorno:'Muito Alto (caso um jogo seja sucesso)', risco:'Muito Alto', tempo:'Indefinido',
+        descricao:'Possui potencial de gerar uma renda muito alta caso um jogo tenha sucesso. Entretanto, depende muito de marketing, comunidade, qualidade e sorte.\nO ideal é desenvolver os jogos sem depender financeiramente deles, utilizando o salário do exterior para financiar o estúdio.',
+        notas:'Mesmo se der errado pode gerar um salário mínimo anual, além de maiores chances num segundo jogo. Só precisamos de 1 hit para ficarmos ricos ou pelo menos bancar o desenvolvimento de um próximo full time. Tenho 7 anos de experiência e mais de 30 projetos feitos, já estou entre o 1% dos devs da Steam. Eu poderia aproveitar o projeto para estudar inglês ao dublar os vídeos, estudar coisas mais técnicas que não sei. Preciso criar conteúdo toda semana para fazer o marketing do jogo quando lançar.'
+      }),
+      item('Serviço de Atualização de Treinamentos', 'guilherme', {
+        estrelas:4, retorno:'Alto', risco:'Baixo',
+        descricao:'Complementa perfeitamente a Plataforma VR. Empresas que já possuem treinamentos podem contratar correções, melhorias, novos módulos e atualizações para novos equipamentos.\nPossui potencial de gerar receita recorrente e relacionamento de longo prazo com clientes.',
+        notas:'Como as empresas recebem o código fonte dos treinamentos desenvolvidos, dá para dar continuidade nos projetos. Empresas com projetos já desenvolvidos poderiam querer fazer melhorias e atualizações a um baixo custo. Dessa forma contratando o serviço para cuidar da parte de treinamento da empresa que seria muito mais barato do que comprar um projeto.'
+      }),
+      item('Professor Universitário', 'guilherme', {
+        estrelas:3, retorno:'Médio', risco:'Baixo',
+        descricao:'Boa opção para networking, autoridade profissional, renda extra e segurança futura. A pós-graduação ajuda e um mestrado amplia bastante as oportunidades.\nEntretanto, financeiramente dificilmente supera uma carreira internacional ou um negócio próprio.',
+        notas:'Termino minha Pós Graduação de Especialização em Arquitetura de Software em 8 meses. Após finalizar posso buscar um mestrado e sempre ter essa vantagem de diploma no mercado. Sempre terei a possibilidade de me tornar professor se quiser ou precisar em algum momento. Quanto será que ganha um professor na FACENS?'
+      }),
+      item('Concurso Público', 'guilherme', {
+        estrelas:2, retorno:'Médio', risco:'Baixo após aprovação', tempo:'1 a 3 anos de estudo',
+        descricao:'Oferece estabilidade e bons benefícios. Porém, considerando meu perfil e potencial internacional, provavelmente limita meu crescimento financeiro.\nSó faria sentido caso minha prioridade passasse a ser estabilidade ao invés de maximizar renda.',
+        notas:'Se os salários forem altos e der uma estabilidade, talvez possa fazer sentido. Porém precisa estudar muito tempo para quem sabe nem conseguir passar. Precisa ser avaliado se vale a pena ou não.'
+      }),
+      item('Geral', 'guilherme', {
+        notas:'Seria bom eu já estudar entrevistas tanto em português quanto inglês para poder me tranquilizar e estar preparado. Quero sempre poder ter um plano para se por acaso acabar havendo demissões.'
+      }),
+      item('Ápice', 'guilherme', {
+        notas:'Empresa de tecnologia de desenvolvimento de landing pages, plataformas e inovação.'
+      }),
+      item('Consultório de Psicologia (Edifício Iguatemi Business)', 'julia', {
+        notas:'Precisa criar conteúdo desde agora para conquistar clientes quando abrir o consultório. Pelos vídeos que vemos, dá pra ter muitos clientes, ganhando muito dinheiro (R$ 200 a R$ 250, 4 a 5 pessoas por dia).'
+      }),
+      item('Consultório Home Office', 'julia', {
+        notas:'Poderíamos criar um lugar dentro da nossa casa para fazer consultas num ambiente mais pessoal. Uma consulta no sítio, lugar verde, tranquilo, tomando chá, ao ar livre. Seria um diferencial gigantesco para clientes conhecidas e premium.'
+      }),
+      item('Leal ChocoArt', 'julia', {
+        notas:'Podemos voltar com a loja de início antes de terminar a faculdade ou conseguir um trabalho CLT.'
+      })
+    ];
+    const seed = {};
+    linhas.forEach((l, i) => { l.ordem = i; seed[newId()] = l; });
+    return seed;
+  }
+
+  let possData = {};
+  let possFiltroAtivo = 'todas';
+
+  function possEstrelasHtml(n){
+    n = Math.max(0, Math.min(5, Number(n) || 0));
+    if(!n) return '';
+    return '<span class="poss-estrelas">' + '★'.repeat(n) + '☆'.repeat(5 - n) + '</span>';
+  }
+
+  function possCardHtml(id, p){
+    const badges = [
+      p.retorno ? `<span class="tag ${POSS_NIVEL_CLS[p.retorno.split(' (')[0]] || 'tag-blue'}">↑ ${escapeHtml(p.retorno)}</span>` : '',
+      p.risco ? `<span class="tag ${POSS_NIVEL_CLS[p.risco.split(' ')[0]] || 'tag-blue'}">risco ${escapeHtml(p.risco)}</span>` : '',
+      p.tempo ? `<span class="tag tag-blue">⏱ ${escapeHtml(p.tempo)}</span>` : ''
+    ].filter(Boolean).join('');
+    return `
+      <div class="poss-card" data-id="${id}">
+        <div class="poss-card-head">
+          <p class="poss-card-nome">${escapeHtml(p.nome)}</p>
+          ${possEstrelasHtml(p.estrelas)}
+        </div>
+        ${badges ? `<div class="poss-badges">${badges}</div>` : ''}
+        ${p.descricao ? `<p class="poss-desc">${escapeHtml(p.descricao)}</p>` : ''}
+        ${p.faixaSalarial ? `<p class="poss-salario">💰 ${escapeHtml(p.faixaSalarial)}</p>` : ''}
+        ${(p.oQueEstudar && p.oQueEstudar.length) ? `<div class="poss-estudar">O que estudar:<ul>${p.oQueEstudar.map(e => `<li>${escapeHtml(e)}</li>`).join('')}</ul></div>` : ''}
+        ${p.notas ? `<div class="poss-notas"><b>Nota de ${escapeHtml(POSS_PESSOA_LABEL[p.pessoa] || p.pessoa)}</b>${escapeHtml(p.notas)}</div>` : ''}
+        <div class="poss-actions">
+          <button data-poss-edit="${id}">editar</button>
+          <button data-poss-del="${id}">excluir</button>
+        </div>
+      </div>`;
+  }
+
+  function possRenderList(){
+    const el = document.getElementById('possList');
+    if(!el) return;
+    const entradas = Object.entries(possData).filter(([, p]) => possFiltroAtivo === 'todas' || p.pessoa === possFiltroAtivo);
+    if(!entradas.length){ el.innerHTML = '<p class="empty-state">Nenhuma possibilidade cadastrada ainda.</p>'; return; }
+    const grupos = possFiltroAtivo === 'todas' ? ['guilherme', 'julia'] : [possFiltroAtivo];
+    let html = '';
+    grupos.forEach(pessoa => {
+      const doGrupo = entradas.filter(([, p]) => p.pessoa === pessoa)
+        .sort((a, b) => (b[1].estrelas || 0) - (a[1].estrelas || 0) || (a[1].ordem || 0) - (b[1].ordem || 0));
+      if(!doGrupo.length) return;
+      html += `<p class="poss-grupo-titulo">${POSS_PESSOA_LABEL[pessoa] || pessoa}</p><div class="poss-grid">` +
+        doGrupo.map(([id, p]) => possCardHtml(id, p)).join('') + '</div>';
+    });
+    el.innerHTML = html;
+    el.querySelectorAll('[data-poss-edit]').forEach(btn => btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-poss-edit');
+      possAbrirModal(id, possData[id]);
+    }));
+    el.querySelectorAll('[data-poss-del]').forEach(btn => btn.addEventListener('click', async () => {
+      if(!await showConfirm('Excluir esta possibilidade?')) return;
+      await dbDelete(userPath(POSS_PATH + '/' + btn.getAttribute('data-poss-del')));
+      delete possData[btn.getAttribute('data-poss-del')];
+      possRenderList();
+    }));
+  }
+
+  async function renderPossibilidades(){
+    const el = document.getElementById('possList');
+    if(!el) return;
+    const dados = await dbGet(userPath(POSS_PATH));
+    possData = dados || possSeedInicial();
+    if(!dados) await dbPutSilent(userPath(POSS_PATH), possData);
+    possRenderList();
+  }
+
+  document.querySelectorAll('[data-poss-filtro]').forEach(btn => btn.addEventListener('click', () => {
+    possFiltroAtivo = btn.getAttribute('data-poss-filtro');
+    document.querySelectorAll('[data-poss-filtro]').forEach(b => b.classList.toggle('active', b === btn));
+    possRenderList();
+  }));
+
+  let possEditandoId = null;
+  function possAbrirModal(id, p){
+    possEditandoId = id || null;
+    document.getElementById('possModalTitle').textContent = id ? 'Editar possibilidade' : 'Nova possibilidade';
+    document.getElementById('possNomeInput').value = p ? p.nome : '';
+    document.getElementById('possPessoaInput').value = (p && p.pessoa) || 'guilherme';
+    document.getElementById('possEstrelasInput').value = p ? (p.estrelas || 0) : 0;
+    document.getElementById('possRetornoInput').value = (p && p.retorno) || '';
+    document.getElementById('possRiscoInput').value = (p && p.risco) || '';
+    document.getElementById('possTempoInput').value = (p && p.tempo) || '';
+    document.getElementById('possDescricaoInput').value = (p && p.descricao) || '';
+    document.getElementById('possFaixaSalarialInput').value = (p && p.faixaSalarial) || '';
+    document.getElementById('possEstudarInput').value = p && p.oQueEstudar ? p.oQueEstudar.join('\n') : '';
+    document.getElementById('possNotasInput').value = (p && p.notas) || '';
+    document.getElementById('possModal').classList.add('active');
+    document.getElementById('possNomeInput').focus();
+  }
+  document.getElementById('possAddBtn').addEventListener('click', () => possAbrirModal(null, null));
+  document.getElementById('possCancelBtn').addEventListener('click', () => document.getElementById('possModal').classList.remove('active'));
+  document.getElementById('possOkBtn').addEventListener('click', async () => {
+    const nome = document.getElementById('possNomeInput').value.trim();
+    if(!nome){ showAppMessage('Digite o nome da possibilidade.', 'error'); return; }
+    const id = possEditandoId || newId();
+    const item = {
+      nome, pessoa: document.getElementById('possPessoaInput').value,
+      estrelas: Math.max(0, Math.min(5, parseInt(document.getElementById('possEstrelasInput').value, 10) || 0)),
+      retorno: document.getElementById('possRetornoInput').value,
+      risco: document.getElementById('possRiscoInput').value,
+      tempo: document.getElementById('possTempoInput').value.trim(),
+      descricao: document.getElementById('possDescricaoInput').value.trim(),
+      faixaSalarial: document.getElementById('possFaixaSalarialInput').value.trim(),
+      oQueEstudar: document.getElementById('possEstudarInput').value.split('\n').map(s => s.trim()).filter(Boolean),
+      notas: document.getElementById('possNotasInput').value.trim(),
+      ordem: possEditandoId && possData[id] ? possData[id].ordem : Object.keys(possData).length
+    };
+    possData[id] = item;
+    await dbPut(userPath(POSS_PATH + '/' + id), item);
+    document.getElementById('possModal').classList.remove('active');
+    possRenderList();
+  });
+
   /* ---------- BATERIA ---------- */
   const BATERIA_URL = 'https://drum.guilherme-oliveira.com';
   function renderBateria(){
@@ -510,6 +691,103 @@
         note.textContent = 'Se a tela acima estiver em branco, é porque a Bateria não permite ser exibida dentro de outro site — abra em nova aba.';
       }
     }, 4000);
+  }
+
+  /* ---------- RETROSPECTIVA (últimos 7 dias, só leitura) ----------
+     Não registra nada novo — só devolve o que Água, Treino, Diário e Fluência
+     já guardam todo dia. Ressalva real: tarefa recorrente avança a data ao ser
+     concluída (ver onComplete em renderHojeQueue), então ela passa a contar no
+     dia do PRÓXIMO prazo, não no dia em que foi feita — a contagem de tarefas
+     por dia aqui é aproximada por causa disso; o total da semana é o número
+     mais confiável dos dois. */
+  async function retroUltimosDias(n){
+    const dias = [];
+    for(let i = n - 1; i >= 0; i--){
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      dias.push(d);
+    }
+    return dias;
+  }
+
+  async function renderRetrospectiva(){
+    const resumoEl = document.getElementById('retroResumo');
+    const diaADiaEl = document.getElementById('retroDiaADia');
+    if(!resumoEl || !diaADiaEl) return;
+
+    const [tasksRaw, metasRaw, consumoRaw, concluidosRaw, diarioRaw, cardsRaw] = await Promise.all([
+      dbGet(userPath('/Tasks')), dbGet(userPath('/AcademiaMetas')), dbGet(userPath('/AcademiaConsumo')),
+      dbGet(userPath('/AcademiaConcluidos')), dbGet(userPath('/DiarioEntradas')), dbGet(userPath('/Cards'))
+    ]);
+    const tasks = tasksRaw || {};
+    const metaAgua = Number((metasRaw || {}).aguaMl) || 0;
+    const consumo = consumoRaw || {};
+    const concluidos = concluidosRaw || {};
+    const cards = cardsRaw || {};
+
+    const humorPorDia = {};
+    Object.values(diarioRaw || {}).forEach(e => {
+      if(!e.createdAt) return;
+      const d = new Date(e.createdAt);
+      if(isNaN(d)) return;
+      const key = dateKey(d);
+      if(!humorPorDia[key]) humorPorDia[key] = e.mood || '📓'; // primeira entrada do dia, se houver mais de uma
+    });
+
+    const fluenciaPorDia = {};
+    Object.values(cards).forEach(card => {
+      (card.History || []).forEach(h => {
+        if(!h || typeof h.Date !== 'string') return;
+        const d = new Date(h.Date);
+        if(isNaN(d)) return;
+        const key = dateKey(d);
+        fluenciaPorDia[key] = (fluenciaPorDia[key] || 0) + 1;
+      });
+    });
+
+    const dias = await retroUltimosDias(7);
+    const hojeKey = dateKey(new Date());
+    const inicioKey = dateKey(dias[0]);
+    const temMetaAgua = metaAgua > 0;
+
+    let aguaOk = 0, diasComTreino = 0, entradasDiario = 0, cardsSemana = 0;
+    const linhas = dias.map(d => {
+      const key = dateKey(d);
+      const aguaDia = Number((consumo[key] || {}).aguaMl) || 0;
+      const bateuAgua = temMetaAgua && aguaDia >= metaAgua;
+      if(bateuAgua) aguaOk++;
+      const treinoQtd = Object.keys(concluidos[key] || {}).length;
+      if(treinoQtd > 0) diasComTreino++;
+      const humor = humorPorDia[key];
+      if(humor) entradasDiario++;
+      const fluenciaQtd = fluenciaPorDia[key] || 0;
+      cardsSemana += fluenciaQtd;
+      return { key, data: d, bateuAgua, treinoQtd, humor, fluenciaQtd };
+    });
+
+    const tarefasSemana = Object.values(tasks).filter(t => t.done && t.date && t.date >= inicioKey && t.date <= hojeKey).length;
+
+    resumoEl.innerHTML = [
+      ['Tarefas concluídas', tarefasSemana],
+      temMetaAgua ? ['Dias com água na meta', aguaOk + '/7'] : null,
+      ['Dias com treino', diasComTreino + '/7'],
+      ['Cards de Fluência', cardsSemana],
+      ['Entradas no Diário', entradasDiario]
+    ].filter(Boolean).map(([label, valor]) => '<div class="fech-stat"><b>' + valor + '</b><span>' + label + '</span></div>').join('');
+
+    diaADiaEl.innerHTML = linhas.map(l => {
+      const badges = [
+        temMetaAgua ? `<span class="tag ${l.bateuAgua ? 'tag-sage' : 'tag-blue'}">💧 ${l.bateuAgua ? 'meta batida' : 'sem meta batida'}</span>` : '',
+        l.treinoQtd > 0 ? `<span class="tag tag-sage">🏋️ ${l.treinoQtd} ${l.treinoQtd === 1 ? 'exercício' : 'exercícios'}</span>` : '',
+        l.fluenciaQtd > 0 ? `<span class="tag tag-blue">🗣️ ${l.fluenciaQtd} cards</span>` : '',
+        l.humor ? `<span class="tag tag-gold">${l.humor} diário</span>` : ''
+      ].filter(Boolean).join('');
+      const rotulo = l.key === hojeKey ? 'Hoje' : l.data.toLocaleDateString('pt-BR', { weekday:'short', day:'2-digit', month:'2-digit' });
+      return `<div class="retro-dia-row">
+        <span class="retro-dia-data${l.key === hojeKey ? ' hoje' : ''}">${rotulo}</span>
+        <div class="retro-dia-badges">${badges || '<span style="color:var(--text-dim); font-size:11.5px;">sem registro</span>'}</div>
+      </div>`;
+    }).join('') + '<p class="fin-sim-nota" style="margin-top:10px;">Tarefas recorrentes contam no dia do próximo prazo, não no dia em que foram feitas — o número da semana é mais confiável que o de um dia isolado.</p>';
   }
 
   /* ---------- BOOT ---------- */
@@ -577,6 +855,8 @@
       [renderCasaRegras,     'as regras da Casa',     'casaRegrasList'],
       [renderCasaErros,      'os erros da Casa',      'casaErrosList']
     ],
+    manutencao:     [[renderManutencao, 'a Manutenção', 'manutList']],
+    nosdois:        [[renderNosDois, 'Nós dois', ['nosdoisPendentesList', 'nosdoisFeitosList']]],
     financas:       [[renderFinancas, 'as Finanças', 'finMesesList']],
     objetivos:      [[renderObjetivos, 'os Objetivos', 'objetivosList']],
     decisoes:       [[renderDecisoes, 'as Decisões', 'decisoesList']],
@@ -585,13 +865,14 @@
     bateria:        [[renderBateria, 'a Bateria', []]],
     academia:       [[renderAcademia, 'a Academia', 'academiaDaysGrid']],
     diario:         [[renderDiario, 'o Diário', 'diarioEntriesList']],
+    retrospectiva:  [[renderRetrospectiva, 'a Retrospectiva', ['retroResumo', 'retroDiaADia']]],
     planoalimentar: [[renderPlanoAlimentar, 'o Plano Alimentar', 'paDaysGrid']],
     busca:          [],
     timelineobjetivos: [[renderTimelineObjetivos, 'a Timeline', 'timelineList']],
     acordar:        [[renderAcordarChecklist, 'a checklist de Acordar', 'acordarChecklistList']],
-    supermercado:   [],
-    calculos:       [],
-    empreendedorismo: [],
+    supermercado:   [[renderSupermercado, 'o Supermercado', 'superListaContainer']],
+    calculos:       [[renderCalculosRescisaoInit, 'os Cálculos', 'calcRescisaoResultado']],
+    empreendedorismo: [[renderPossibilidades, 'as Possibilidades Financeiras', 'possList']],
     apice:          [],
     config:         []
   };

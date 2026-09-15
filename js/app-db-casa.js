@@ -168,6 +168,9 @@
      do resto do app passam a ler/gravar os dados daquele quadro automaticamente. */
   const BOARD_VIEW_OPTIONS = [
     { key:'casa', label:'Casa' },
+    { key:'manutencao', label:'Manutenção' },
+    { key:'nosdois', label:'Nós dois' },
+    { key:'retrospectiva', label:'Retrospectiva' },
     { key:'hoje', label:'Hoje' },
     { key:'rotina', label:'Rotina' },
     { key:'tarefas', label:'Tarefas' },
@@ -1460,4 +1463,311 @@
     e.preventDefault();
     e.currentTarget.scrollLeft += (e.deltaY || e.deltaX);
   }, { passive:false });
+
+  /* ---------- CÁLCULOS: Rescisão ----------
+     Modela só demissão sem justa causa com aviso prévio indenizado — o
+     cenário mais comum e o único que dava pra verificar com números reais.
+     Fórmulas conferidas contra um cálculo de referência real, verba a verba:
+     o aviso prévio indenizado projeta a data de saída (Súmula 371 TST) — é
+     essa data projetada, não a data do aviso, que conta pra 13º e férias
+     proporcionais. Sem INSS/IRRF de propósito: as faixas mudam todo ano e
+     errar por tabela desatualizada é pior que não calcular — ver aviso na tela. */
+  const RESC_PATH = '/CalculosRescisao';
+  let rescState = null;
+
+  function rescAddMeses(d, n){ const r = new Date(d); r.setMonth(r.getMonth() + n); return r; }
+  function rescAddAnos(d, n){ const r = new Date(d); r.setFullYear(r.getFullYear() + n); return r; }
+  function rescAddDias(d, n){ const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+  function rescDiffDias(a, b){ return Math.round((b - a) / 86400000); }
+  // Conta anos/meses completos entre duas datas, com a fração do último mês/ano
+  // contando inteiro só a partir de 15 dias — a mesma regra usada pra 13º e
+  // férias proporcionais na CLT (Súmula 388/TST aplicada por analogia).
+  function rescContarAnos(ini, fim){
+    let n = 0, c = new Date(ini);
+    while(rescAddAnos(c, 1) <= fim){ n++; c = rescAddAnos(c, 1); }
+    return n;
+  }
+  function rescContarMeses(ini, fim){
+    let n = 0, c = new Date(ini);
+    while(rescAddMeses(c, 1) <= fim){ n++; c = rescAddMeses(c, 1); }
+    if(rescDiffDias(c, fim) >= 15) n++;
+    return n;
+  }
+
+  function rescSeedInicial(){
+    return {
+      salario: 5371.00, dataAdmissao: '2019-07-01', dataRescisao: todayStr(),
+      periodosVencidos: 0, decimoAdiantado: false, valorAdiantamento: 0,
+      fgtsTotalDepositado: 0, fgtsSaldoDisponivel: 0, dividaEmprestimoFgts: 0, fgtsBloqueadoGarantia: 0
+    };
+  }
+
+  function rescCalcular(dados){
+    const salario = Number(dados.salario) || 0;
+    const admissao = new Date(dados.dataAdmissao + 'T00:00:00');
+    const rescisao = new Date(dados.dataRescisao + 'T00:00:00');
+    if(!salario || isNaN(admissao) || isNaN(rescisao) || rescisao <= admissao) return null;
+
+    const anos = rescContarAnos(admissao, rescisao);
+    const diasAviso = Math.min(90, 30 + 3 * anos);
+    const projetada = rescAddDias(rescisao, diasAviso);
+
+    const saldoSalario = salario / 30 * rescisao.getDate();
+    const avisoIndenizado = salario / 30 * diasAviso;
+
+    const jan1 = new Date(projetada.getFullYear(), 0, 1);
+    const meses13 = rescContarMeses(jan1, projetada);
+    const decimoBruto = salario / 12 * meses13;
+    const adiantamento = dados.decimoAdiantado ? (Number(dados.valorAdiantamento) || 0) : 0;
+    const decimoTerceiro = Math.max(0, decimoBruto - adiantamento);
+
+    const anosAteProjetada = rescContarAnos(admissao, projetada);
+    const inicioPeriodo = rescAddAnos(admissao, anosAteProjetada);
+    const mesesFerias = rescContarMeses(inicioPeriodo, projetada);
+    const feriasProporcionais = (salario / 12 * mesesFerias) * 4 / 3;
+
+    const periodosVencidos = Math.max(0, Number(dados.periodosVencidos) || 0);
+    const feriasVencidas = periodosVencidos * salario * 4 / 3;
+
+    const trct = saldoSalario + avisoIndenizado + decimoTerceiro + feriasProporcionais + feriasVencidas;
+    const fgtsTotalDepositado = Math.max(0, Number(dados.fgtsTotalDepositado) || 0);
+    const multaFgts = fgtsTotalDepositado * 0.40;
+    const totalSempre = trct + multaFgts;
+
+    const fgtsDisponivel = Math.max(0, Number(dados.fgtsSaldoDisponivel) || 0);
+    const divida = Math.max(0, Number(dados.dividaEmprestimoFgts) || 0);
+    const fgtsBloqueado = Math.max(0, Number(dados.fgtsBloqueadoGarantia) || 0);
+
+    // Cenário A: mantém o empréstimo — o FGTS bloqueado como garantia continua
+    // travado (por isso não entra na soma), só o disponível na conta é usável.
+    const totalA = totalSempre + fgtsDisponivel;
+    // Cenário B: quita a dívida com parte da multa — o que sobrar da multa some
+    // dela, e o FGTS bloqueado volta a ficar 100% disponível.
+    const multaLiquida = multaFgts - divida;
+    const totalB = trct + multaLiquida + (fgtsDisponivel + fgtsBloqueado);
+
+    return {
+      anos, diasAviso, projetada, saldoSalario, avisoIndenizado,
+      meses13, decimoBruto, adiantamento, decimoTerceiro,
+      mesesFerias, feriasProporcionais, periodosVencidos, feriasVencidas,
+      trct, fgtsTotalDepositado, multaFgts, totalSempre,
+      temEmprestimo: divida > 0 || fgtsBloqueado > 0,
+      fgtsDisponivel, divida, fgtsBloqueado, totalA, multaLiquida, totalB, diferenca: totalB - totalA
+    };
+  }
+
+  function rescLinha(rotulo, valor, nota){
+    return '<div class="fin-sim-linha"><span>' + escapeHtml(rotulo) + (nota ? ' <span style="color:var(--text-dim);">(' + escapeHtml(nota) + ')</span>' : '') + '</span><b class="pos">' + finFmt(valor) + '</b></div>';
+  }
+
+  function renderCalculosRescisao(){
+    const form = document.getElementById('calcRescisaoForm');
+    const resultado = document.getElementById('calcRescisaoResultado');
+    if(!form || !resultado) return;
+
+    document.getElementById('rescSalarioInput').value = finFmtNum(rescState.salario);
+    document.getElementById('rescAdmissaoInput').value = rescState.dataAdmissao || '';
+    document.getElementById('rescDataInput').value = rescState.dataRescisao || '';
+    document.getElementById('rescFeriasVencidasInput').value = rescState.periodosVencidos || 0;
+    document.getElementById('rescDecimoAdiantadoInput').checked = !!rescState.decimoAdiantado;
+    document.getElementById('rescValorAdiantamentoInput').value = finFmtNum(rescState.valorAdiantamento);
+    document.getElementById('rescFgtsTotalInput').value = finFmtNum(rescState.fgtsTotalDepositado);
+    document.getElementById('rescFgtsDisponivelInput').value = finFmtNum(rescState.fgtsSaldoDisponivel);
+    document.getElementById('rescDividaInput').value = finFmtNum(rescState.dividaEmprestimoFgts);
+    document.getElementById('rescFgtsBloqueadoInput').value = finFmtNum(rescState.fgtsBloqueadoGarantia);
+
+    rescRecalcularEExibir();
+  }
+
+  function rescRecalcularEExibir(){
+    const resultado = document.getElementById('calcRescisaoResultado');
+    if(!resultado) return;
+    const calc = rescCalcular(rescState);
+    if(!calc){
+      resultado.innerHTML = '<p class="empty-state">Preencha salário, admissão e data de rescisão pra calcular.</p>';
+      return;
+    }
+    let html = '<p class="panel-title">Verbas (valores brutos)</p><div class="fin-sim-linhas">' +
+      rescLinha('Saldo de salário', calc.saldoSalario) +
+      rescLinha('Aviso prévio indenizado', calc.avisoIndenizado, calc.diasAviso + ' dias') +
+      rescLinha('13º proporcional', calc.decimoTerceiro, calc.adiantamento ? 'já descontado o adiantamento' : (calc.meses13 + '/12')) +
+      rescLinha('Férias proporcionais + 1/3', calc.feriasProporcionais, calc.mesesFerias + '/12') +
+      (calc.periodosVencidos > 0 ? rescLinha('Férias vencidas + 1/3', calc.feriasVencidas, calc.periodosVencidos + (calc.periodosVencidos === 1 ? ' período' : ' períodos')) : '') +
+      '</div>' +
+      '<div class="fin-sim-veredito ok"><strong>' + finFmt(calc.trct) + '</strong><span>Subtotal TRCT</span></div>';
+    if(calc.multaFgts > 0){
+      html += '<div class="fin-sim-linhas" style="margin-top:10px;">' + rescLinha('Multa FGTS (40%)', calc.multaFgts) + '</div>' +
+        '<div class="fin-sim-veredito ok"><strong>' + finFmt(calc.totalSempre) + '</strong><span>Total em dinheiro, direto na conta</span></div>';
+    }
+    if(calc.temEmprestimo){
+      html += '<div class="grid-2" style="margin-top:16px; gap:14px;">' +
+        '<div><p class="panel-title" style="font-size:12px;">Cenário A — mantém o empréstimo</p><div class="fin-sim-linhas">' +
+          rescLinha('Dinheiro em mãos (TRCT + multa)', calc.totalSempre) +
+          rescLinha('FGTS disponível na conta', calc.fgtsDisponivel) +
+          (calc.fgtsBloqueado > 0 ? '<div class="fin-sim-linha"><span>FGTS bloqueado como garantia</span><b class="neg">' + finFmt(-calc.fgtsBloqueado) + '</b></div>' : '') +
+        '</div><div class="fin-sim-veredito aviso"><strong>' + finFmt(calc.totalA) + '</strong><span>Total utilizável agora' + (calc.divida > 0 ? ' — dívida de ' + finFmt(calc.divida) + ' continua em aberto' : '') + '</span></div></div>' +
+        '<div><p class="panel-title" style="font-size:12px;">Cenário B — quita o empréstimo</p><div class="fin-sim-linhas">' +
+          rescLinha('TRCT', calc.trct) +
+          rescLinha('Multa FGTS líquida', calc.multaLiquida, finFmt(calc.multaFgts) + ' − ' + finFmt(calc.divida)) +
+          rescLinha('FGTS na conta, 100% liberado', calc.fgtsDisponivel + calc.fgtsBloqueado) +
+        '</div><div class="fin-sim-veredito ok"><strong>' + finFmt(calc.totalB) + '</strong><span>Total utilizável — sem dívida em aberto</span></div></div>' +
+      '</div>' +
+      '<p class="fin-sim-nota" style="margin-top:12px;">Diferença entre os dois cenários: ' + finFmt(Math.abs(calc.diferenca)) +
+        (calc.diferenca >= 0 ? ' a mais quitando o empréstimo (o FGTS que ficaria bloqueado vale mais que a dívida).' : ' a mais mantendo o empréstimo (a dívida é maior que o FGTS que seria liberado).') + '</p>';
+    }
+    html += '<p class="fin-sim-nota">Estimativa educativa — sem INSS/IRRF, não substitui o cálculo oficial do RH, contador, ou a conferência no app FGTS/Caixa.</p>';
+    resultado.innerHTML = html;
+  }
+
+  async function renderCalculosRescisaoInit(){
+    const dados = await dbGet(userPath(RESC_PATH));
+    rescState = dados || rescSeedInicial();
+    if(!dados) await dbPutSilent(userPath(RESC_PATH), rescState);
+    renderCalculosRescisao();
+  }
+
+  // Recalcula na hora a cada tecla (é só matemática, não custa nada); grava no
+  // Firebase só quando o campo perde o foco ou o valor muda de verdade — não a
+  // cada tecla, pra não disparar uma escrita por caractere digitado.
+  const RESC_CAMPOS = [
+    ['rescSalarioInput', 'salario', 'moeda'], ['rescAdmissaoInput', 'dataAdmissao', 'data'],
+    ['rescDataInput', 'dataRescisao', 'data'], ['rescFeriasVencidasInput', 'periodosVencidos', 'inteiro'],
+    ['rescDecimoAdiantadoInput', 'decimoAdiantado', 'bool'], ['rescValorAdiantamentoInput', 'valorAdiantamento', 'moeda'],
+    ['rescFgtsTotalInput', 'fgtsTotalDepositado', 'moeda'], ['rescFgtsDisponivelInput', 'fgtsSaldoDisponivel', 'moeda'],
+    ['rescDividaInput', 'dividaEmprestimoFgts', 'moeda'], ['rescFgtsBloqueadoInput', 'fgtsBloqueadoGarantia', 'moeda']
+  ];
+  function rescLerCampo(el, tipo){
+    if(tipo === 'bool') return el.checked;
+    if(tipo === 'data') return el.value;
+    if(tipo === 'inteiro') return Math.max(0, parseInt(el.value, 10) || 0);
+    return finParseNum(el.value);
+  }
+  RESC_CAMPOS.forEach(([id, campo, tipo]) => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('input', () => {
+      rescState[campo] = rescLerCampo(el, tipo);
+      rescRecalcularEExibir();
+    });
+    el.addEventListener('change', () => {
+      dbPatchSilent(userPath(RESC_PATH), { [campo]: rescLerCampo(el, tipo) }).catch(() => {});
+    });
+  });
+
+  /* ---------- MANUTENÇÃO (carro, casa, documentos — intervalo longo) ----------
+     Mesmo modelo de pendência por frequência da Casa (ver casaAtividadeStatus),
+     só que com intervalos de meses/anos em vez de dias/semanas. */
+  const MANUT_FREQ_DIAS = { mensal:30, trimestral:90, semestral:180, anual:365 };
+  const MANUT_FREQ_LABEL = { mensal:'Mensal', trimestral:'Trimestral', semestral:'Semestral', anual:'Anual' };
+
+  function manutStatus(m){
+    const intervalo = MANUT_FREQ_DIAS[m.frequencia] || 365;
+    const dias = casaDiasDesde(m.feitaEm); // reaproveita a mesma conta de dias-desde da Casa
+    if(dias === Infinity) return { pendente:true, texto:'nunca feita' };
+    if(dias >= intervalo) return { pendente:true, texto: 'pendente há ' + dias + (dias === 1 ? ' dia' : ' dias') };
+    const faltam = intervalo - dias;
+    return { pendente:false, texto:'feita há ' + dias + (dias === 1 ? ' dia' : ' dias'), proxima: faltam === 1 ? 'volta amanhã' : 'volta em ' + faltam + ' dias' };
+  }
+
+  async function renderManutencao(){
+    const el = document.getElementById('manutList');
+    if(!el) return;
+    const dados = await dbGet(userPath('/Manutencao')) || {};
+    const entries = Object.entries(dados).sort((a, b) => {
+      const pa = manutStatus(a[1]).pendente ? 0 : 1, pb = manutStatus(b[1]).pendente ? 0 : 1;
+      return pa - pb || (a[1].criadoEm || '').localeCompare(b[1].criadoEm || '');
+    });
+    if(!entries.length){ el.innerHTML = '<p class="empty-state">Nenhuma manutenção cadastrada. Troca de óleo, revisão, IPVA, filtro de água...</p>'; return; }
+    el.innerHTML = entries.map(([id, m]) => {
+      const st = manutStatus(m);
+      return `
+      <div class="casa-card ${st.pendente ? '' : 'casa-card-feita'}" data-id="${id}">
+        <button type="button" class="casa-check" data-manut-done="${id}" title="${st.pendente ? 'Marcar como feita' : 'Desmarcar'}">${st.pendente ? '' : '✓'}</button>
+        <div class="casa-card-main">
+          <p class="casa-card-title">${escapeHtml(m.nome)}</p>
+          <div class="casa-card-meta">
+            <span>${MANUT_FREQ_LABEL[m.frequencia] || m.frequencia}</span>
+            ${m.custo ? `<span>· ${finFmt(m.custo)}</span>` : ''}
+            <span class="casa-status ${st.pendente ? 'casa-status-pendente' : ''}">· ${escapeHtml(st.texto)}</span>
+            ${st.proxima ? `<span class="casa-status">· ${escapeHtml(st.proxima)}</span>` : ''}
+            ${m.observacao ? `<span>· ${escapeHtml(m.observacao)}</span>` : ''}
+          </div>
+        </div>
+        <div class="casa-card-actions"><button data-manut-del="${id}">excluir</button></div>
+      </div>`;
+    }).join('');
+    el.querySelectorAll('[data-manut-done]').forEach(btn => btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-manut-done');
+      const m = dados[id];
+      const st = manutStatus(m);
+      await dbPatch(userPath('/Manutencao/' + id), { feitaEm: st.pendente ? todayStr() : null });
+      renderManutencao();
+    }));
+    el.querySelectorAll('[data-manut-del]').forEach(btn => btn.addEventListener('click', async () => {
+      if(!await showConfirm('Excluir esta manutenção?')) return;
+      await dbDelete(userPath('/Manutencao/' + btn.getAttribute('data-manut-del')));
+      renderManutencao();
+    }));
+  }
+  document.getElementById('manutAddBtn').addEventListener('click', () => {
+    document.getElementById('manutNomeInput').value = '';
+    document.getElementById('manutFrequenciaInput').value = 'anual';
+    document.getElementById('manutCustoInput').value = '';
+    document.getElementById('manutObsInput').value = '';
+    document.getElementById('manutModal').classList.add('active');
+  });
+  document.getElementById('manutCancelBtn').addEventListener('click', () => document.getElementById('manutModal').classList.remove('active'));
+  document.getElementById('manutOkBtn').addEventListener('click', async () => {
+    const nome = document.getElementById('manutNomeInput').value.trim();
+    if(!nome){ showAppMessage('Digite o que precisa ser feito.', 'error'); return; }
+    const frequencia = document.getElementById('manutFrequenciaInput').value;
+    const custo = finParseNum(document.getElementById('manutCustoInput').value) || null;
+    const observacao = document.getElementById('manutObsInput').value.trim();
+    await dbPut(userPath('/Manutencao/' + newId()), { nome, frequencia, custo, observacao, criadoEm: new Date().toISOString() });
+    document.getElementById('manutModal').classList.remove('active');
+    renderManutencao();
+  });
+
+  /* ---------- NÓS DOIS (coisas pra fazer juntos, sem virar tarefa) ---------- */
+  function nosdoisItemHtml(id, item){
+    return `
+      <div class="casa-card" data-id="${id}">
+        <button type="button" class="casa-check ${item.feito ? 'casa-card-feita' : ''}" data-nosdois-toggle="${id}" title="${item.feito ? 'Desmarcar' : 'Já fizemos'}">${item.feito ? '✓' : ''}</button>
+        <div class="casa-card-main"><p class="casa-card-title">${escapeHtml(item.texto)}</p></div>
+        <div class="casa-card-actions"><button data-nosdois-del="${id}">excluir</button></div>
+      </div>`;
+  }
+  async function renderNosDois(){
+    const pendEl = document.getElementById('nosdoisPendentesList');
+    const feitosEl = document.getElementById('nosdoisFeitosList');
+    if(!pendEl || !feitosEl) return;
+    const dados = await dbGet(userPath('/NosDois')) || {};
+    const entries = Object.entries(dados).sort((a, b) => (a[1].criadoEm || '').localeCompare(b[1].criadoEm || ''));
+    const pendentes = entries.filter(([, i]) => !i.feito);
+    const feitos = entries.filter(([, i]) => i.feito);
+    pendEl.innerHTML = pendentes.length ? pendentes.map(([id, i]) => nosdoisItemHtml(id, i)).join('') : '<p class="empty-state">Nada na lista ainda — adicione algo que vocês querem fazer juntos.</p>';
+    feitosEl.innerHTML = feitos.length ? feitos.map(([id, i]) => nosdoisItemHtml(id, i)).join('') : '<p class="empty-state">O que vocês marcarem como feito aparece aqui.</p>';
+    document.querySelectorAll('[data-nosdois-toggle]').forEach(btn => btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-nosdois-toggle');
+      await dbPatch(userPath('/NosDois/' + id), { feito: !dados[id].feito });
+      renderNosDois();
+    }));
+    document.querySelectorAll('[data-nosdois-del]').forEach(btn => btn.addEventListener('click', async () => {
+      if(!await showConfirm('Excluir este item?')) return;
+      await dbDelete(userPath('/NosDois/' + btn.getAttribute('data-nosdois-del')));
+      renderNosDois();
+    }));
+  }
+  document.getElementById('nosdoisAddBtn').addEventListener('click', () => {
+    document.getElementById('nosdoisTextoInput').value = '';
+    document.getElementById('nosdoisModal').classList.add('active');
+  });
+  document.getElementById('nosdoisCancelBtn').addEventListener('click', () => document.getElementById('nosdoisModal').classList.remove('active'));
+  document.getElementById('nosdoisOkBtn').addEventListener('click', async () => {
+    const texto = document.getElementById('nosdoisTextoInput').value.trim();
+    if(!texto){ showAppMessage('Digite o que vocês querem fazer.', 'error'); return; }
+    await dbPut(userPath('/NosDois/' + newId()), { texto, feito:false, criadoEm: new Date().toISOString() });
+    document.getElementById('nosdoisModal').classList.remove('active');
+    renderNosDois();
+  });
 

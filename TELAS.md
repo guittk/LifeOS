@@ -5,16 +5,15 @@ automaticamente pelo Claude Code — é referência sob demanda, pode ser detalh
 sem preocupação com custo de contexto (ao contrário do CLAUDE.md).
 
 > **Quadro compartilhado**: Guilherme é dono, Júlia é membro com acesso a
-> todas as telas listadas em `BOARD_VIEW_OPTIONS` (praticamente tudo, exceto
-> as telas "em breve" recém-criadas que ainda não têm conteúdo pra valer a
-> pena listar, Busca e Config — essas duas ficam sempre visíveis pra
-> qualquer um, dono ou membro, por serem utilitários da própria conta).
+> todas as telas listadas em `BOARD_VIEW_OPTIONS` (praticamente tudo — Busca
+> e Config ficam sempre visíveis pra qualquer um, dono ou membro, por serem
+> utilitários da própria conta, não dados de um Quadro).
 
 ---
 
 ## Navegação global (presente em todas as telas)
 
-- **Sidebar** com grupos: Executar (Hoje), Organizar (Notas, Tarefas, Agenda, Rotina, Casa, Finanças, Decisões, Perguntar), Evoluir (Fluência, Academia, Diário, Plano Alimentar, Objetivos, Timeline, Vision Board), Em breve (Bateria e Planejamento — uso ocasional, já funcionam de verdade; Supermercado, Cálculos, Empreendedorismo, Ápice — ainda sem conteúdo), e Configurações/Sair no rodapé.
+- **Sidebar** com grupos: Executar (Hoje), Organizar (Notas, Tarefas, Agenda, Rotina, Casa, Manutenção, Nós dois, Finanças, Supermercado, Cálculos, Decisões, Empreendedorismo, Perguntar), Evoluir (Fluência, Academia, Diário, Retrospectiva, Plano Alimentar, Objetivos, Timeline, Vision Board), Em breve (Bateria e Planejamento — uso ocasional, já funcionam de verdade; Ápice — ainda sem conteúdo), e Configurações/Sair no rodapé.
 - **Pesquisa global** (Ctrl/Cmd+K): busca em objetivos, tarefas, planejamento, diário, decisões e mais, ao mesmo tempo — e funciona como comando de navegação pra qualquer tela.
 - **Captura rápida**: modal de texto livre acessível de qualquer tela, cria uma nova Nota.
 - **Loading global**, **toasts** de notificação e **modal de confirmação** substituem os diálogos nativos do navegador em toda a aplicação.
@@ -78,6 +77,20 @@ Compartilhada com quem mora com você, em 3 abas:
 
 As pessoas da casa (dropdowns de responsável/quem) são gerenciadas em Configurações.
 
+## Manutenção (`view-manutencao`)
+
+Igual à aba Atividades da Casa, mas pra intervalo longo — carro, casa, documentos: troca de óleo, revisão, IPVA, filtro de água. Mesmo modelo de pendência por frequência (`manutStatus()`, reaproveita `casaDiasDesde()`), só que com frequência mensal/trimestral/semestral/anual em vez de diária/semanal/quinzenal/mensal. Custo estimado e observação opcionais. Dados em `/Manutencao`.
+
+## Nós dois (`view-nosdois`)
+
+Lista simples de coisas que vocês querem fazer juntos, sem virar tarefa nem objetivo — "Quero fazer com você" (pendentes) e "Já fizemos" (marcados). Dados em `/NosDois`.
+
+> Um "equilíbrio da semana" (quantas atividades da Casa cada um fechou) foi
+> cogitado aqui, mas a Casa só guarda a *última vez* que uma atividade foi
+> feita (`feitaEm`), não um histórico de conclusões — não dava pra contar
+> "quantas nesta semana" sem inventar o número. Precisaria de um log de
+> conclusões na Casa antes de fazer sentido.
+
 ---
 
 ## Finanças (`view-financas`)
@@ -90,9 +103,27 @@ Tela nativa, modelada na aba **Financeiro** da planilha. Dados em `/users/{uid}/
 - **Valores**: números que se repetem todo mês (salário, vale, Alelo, aluguel...) — os meses apontam pra eles (`=$U$14` da planilha); editar aqui muda em todos.
 - **Custo de vida**: listas *base* (mínimo pra viver) e *real* (com academia/suplementos/imprevistos), lado a lado.
 
+## Supermercado (`view-supermercado`)
+
+Lista de compras por corredor, em 3 abas:
+
+- **Lista**: "Gerar da semana" varre o Plano Alimentar inteiro, agrupa alimentos pelo nome (sem acento/maiúscula) e soma quantidade quando dá — mesma família de unidade (peso: g/kg; volume: ml/l; ou contagem: un). O que não bate esse padrão (ex: "a gosto") não é somado: fica listado com os textos originais, em vez de inventar um total. Cada item cai num corredor (Hortifrúti, Açougue, Padaria, Laticínios, Mercearia, Bebidas, Congelados, Limpeza, Higiene, Outros) — o catálogo aprende a seção de cada nome quando você reclassifica um item (`/SupermercadoCatalogo`), e usa isso nas próximas gerações. **Modo mercado**: fonte e alvo de toque maiores. Itens marcados caem pro fim, riscados. **Finalizar compra** tira os marcados da lista e registra no Histórico — os que não foram marcados continuam lá pra próxima.
+- **Itens fixos**: o que entra em toda geração (papel higiênico, sabão, ração...). `/SupermercadoFixos`.
+- **Histórico**: compras já finalizadas, com data e quantidade de itens. `/SupermercadoCompras`.
+
+Regenerar a lista preserva o que já estava marcado (por nome) e os itens avulsos digitados na hora — só os gerados/fixos são recalculados.
+
+## Cálculos (`view-calculos`)
+
+Calculadoras do dia a dia. Por enquanto só a aba **Rescisão**, modelando demissão sem justa causa com aviso prévio indenizado (o cenário mais comum). Fórmulas conferidas verba a verba contra um cálculo de referência real: o aviso prévio indenizado projeta a data de saída pra frente (Súmula 371 TST) — é essa data projetada, não a do aviso, que conta pros meses de 13º e férias proporcionais (regra dos 15 dias, Súmula 388 por analogia). Campos: salário, admissão, data de rescisão, períodos de férias vencidas, 13º já adiantado, FGTS total depositado (base da multa de 40%), FGTS disponível na conta, dívida de empréstimo FGTS e FGTS bloqueado como garantia. Se houver dívida de empréstimo, mostra a comparação **Cenário A** (mantém o empréstimo) x **Cenário B** (quita com a multa) lado a lado, com a diferença entre os dois. Recalcula a cada tecla; grava no Firebase ao perder o foco do campo. **De propósito, sem INSS/IRRF** — as faixas mudam todo ano e uma tabela desatualizada erraria em silêncio; confira o líquido com o RH/contador. Dados em `/CalculosRescisao`.
+
 ## Decisões (`view-decisoes`)
 
 Registro de decisões importantes com contexto, opções e critérios. Status: Em análise, Decidida, Cancelada. Importância: Alta, Média, Baixa. Botão **"✦ Padrões com IA"** analisa as decisões registradas e aponta padrões (usa a `iaProxy`).
+
+## Empreendedorismo (`view-empreendedorismo`)
+
+Uma aba por enquanto: **Possibilidades Financeiras** — caminhos de carreira/negócio em análise, comparados lado a lado. Cada possibilidade tem dono (Guilherme ou Júlia), estrelas (0 a 5), retorno financeiro, risco, tempo estimado, descrição, faixa salarial e "o que estudar" (quando fizer sentido), e uma nota pessoal de quem está avaliando. Filtro por pessoa no topo; cards ordenados por estrelas dentro de cada grupo. Dados em `/PossibilidadesFinanceiras`, semeado com a análise feita em 14/09/2026 (Dev VR no exterior, Plataforma de Treinamentos VR, Estúdio de Jogos, Serviço de Atualização de Treinamentos, Professor Universitário, Concurso Público, Ápice — de Guilherme; Consultório de Psicologia, Consultório Home Office, Leal ChocoArt — de Júlia).
 
 ## Perguntar ao LifeOS (`view-busca`)
 
@@ -113,6 +144,15 @@ Apps externos (fluencia.guilherme-oliveira.com e drum.guilherme-oliveira.com) em
 ## Diário (`view-diario`)
 
 Livro aberto (duas páginas, papel pautado): página esquerda escreve a entrada de hoje (seletor de humor + texto), direita mostra entradas anteriores. 5 temas de cor (Papel, Rosa, Céu, Noturno, Meia-noite). Sem "padrões da IA" — só o que a pessoa escreveu.
+
+## Retrospectiva (`view-retrospectiva`)
+
+Só leitura — não registra nada novo, devolve os últimos 7 dias do que Água, Treino, Diário e Fluência já guardam todo dia. Resumo da semana (tarefas concluídas, dias com água na meta, dias com treino, cards de Fluência, entradas no Diário) e o dia a dia logo abaixo, com um badge por marco batido naquele dia.
+
+> Tarefa recorrente avança a data pro próximo prazo ao ser concluída (ver
+> `onComplete` em `renderHojeQueue`), então ela passa a contar no dia do
+> *próximo* prazo, não no dia em que foi feita de verdade — a contagem por
+> dia isolado é aproximada por causa disso; o total da semana é mais confiável.
 
 ## Plano Alimentar (`view-planoalimentar`)
 
@@ -142,16 +182,9 @@ Colagem de imagens que representam onde você quer chegar.
 
 ## Em breve
 
-Dois grupos diferentes no mesmo lugar da sidebar: **Bateria e Planejamento** já
-funcionam de verdade, só ainda sem um bom uso encontrado no dia a dia; as
-outras quatro é que não têm conteúdo nenhum.
-
-- **Bateria** (`view-bateria`) — app externo (drum.guilherme-oliveira.com) embutido via iframe. Ver Fluência/Bateria acima.
-- **Planejamento** (`view-monday`) — board estilo Monday.com/Trello, portado do projeto Apice: **grupos → elementos → subelementos**, cada um com status (Backlog, To Do, Em andamento, Bloqueado, Concluído, Adiado, Cancelado), prioridade, responsável e prazo. Arraste pra reorganizar. "Selecionar" pra ações em lote. Cobre um espaço parecido com Tarefas e com Atividades da Casa — as três continuam existindo, sem fronteira formal entre elas ainda.
-- **Supermercado** (`view-supermercado`) — sem conteúdo. Lista de compras a partir do cardápio do Plano Alimentar.
-- **Cálculos** (`view-calculos`) — sem conteúdo. Calculadoras do dia a dia; já tem a aba **Rescisão** criada dentro (vazia).
-- **Empreendedorismo** (`view-empreendedorismo`) — sem conteúdo definido.
-- **Ápice** (`view-apice`) — sem conteúdo além do botão "Abrir Ápice ↗", que já funciona, pra apicesolucoesdigitais.com.br.
+- **Bateria** (`view-bateria`) — funciona de verdade (app externo embutido, ver Fluência/Bateria acima), só ainda sem um bom uso encontrado no dia a dia.
+- **Planejamento** (`view-monday`) — funciona de verdade: board estilo Monday.com/Trello, portado do projeto Apice: **grupos → elementos → subelementos**, cada um com status (Backlog, To Do, Em andamento, Bloqueado, Concluído, Adiado, Cancelado), prioridade, responsável e prazo. Arraste pra reorganizar. "Selecionar" pra ações em lote. Cobre um espaço parecido com Tarefas e com Atividades da Casa — as três continuam existindo, sem fronteira formal entre elas ainda.
+- **Ápice** (`view-apice`) — a única sem conteúdo de verdade: só o botão "Abrir Ápice ↗", que já funciona, pra apicesolucoesdigitais.com.br. As possibilidades financeiras ligadas à Ápice como negócio (empresa de landing pages/plataformas/inovação) estão em Empreendedorismo, não aqui.
 
 ---
 

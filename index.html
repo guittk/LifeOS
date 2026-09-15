@@ -85,8 +85,13 @@
     <div class="nav-item" data-view="agenda" title="Agenda"><span class="nav-icon">📅</span><span class="nav-label">Agenda</span></div>
     <div class="nav-item" data-view="rotina" title="Rotina"><span class="nav-icon">🔁</span><span class="nav-label">Rotina</span></div>
     <div class="nav-item" data-view="casa" title="Casa"><span class="nav-icon">🏡</span><span class="nav-label">Casa</span></div>
+    <div class="nav-item" data-view="manutencao" title="Manutenção"><span class="nav-icon">🔧</span><span class="nav-label">Manutenção</span></div>
+    <div class="nav-item" data-view="nosdois" title="Nós dois"><span class="nav-icon">💞</span><span class="nav-label">Nós dois</span></div>
     <div class="nav-item" data-view="financas" title="Finanças"><span class="nav-icon">💰</span><span class="nav-label">Finanças</span></div>
+    <div class="nav-item" data-view="supermercado" title="Supermercado"><span class="nav-icon">🛒</span><span class="nav-label">Supermercado</span></div>
+    <div class="nav-item" data-view="calculos" title="Cálculos"><span class="nav-icon">🧮</span><span class="nav-label">Cálculos</span></div>
     <div class="nav-item" data-view="decisoes" title="Decisões"><span class="nav-icon">🧭</span><span class="nav-label">Decisões</span></div>
+    <div class="nav-item" data-view="empreendedorismo" title="Empreendedorismo"><span class="nav-icon">💡</span><span class="nav-label">Empreendedorismo</span></div>
     <div class="nav-item" data-view="busca" title="Perguntar"><span class="nav-icon">💬</span><span class="nav-label">Perguntar</span></div>
   </nav>
 
@@ -95,23 +100,20 @@
     <div class="nav-item" data-view="fluencia" title="Fluência"><span class="nav-icon">🗣️</span><span class="nav-label">Fluência</span></div>
     <div class="nav-item" data-view="academia" title="Academia"><span class="nav-icon">🏋️</span><span class="nav-label">Academia</span></div>
     <div class="nav-item" data-view="diario" title="Diário"><span class="nav-icon">📓</span><span class="nav-label">Diário</span></div>
+    <div class="nav-item" data-view="retrospectiva" title="Retrospectiva"><span class="nav-icon">📊</span><span class="nav-label">Retrospectiva</span></div>
     <div class="nav-item" data-view="planoalimentar" title="Plano Alimentar"><span class="nav-icon">🍽️</span><span class="nav-label">Plano Alimentar</span></div>
     <div class="nav-item" data-view="objetivos" title="Objetivos"><span class="nav-icon">🎯</span><span class="nav-label">Objetivos</span></div>
     <div class="nav-item" data-view="timelineobjetivos" title="Timeline"><span class="nav-icon">📍</span><span class="nav-label">Timeline</span></div>
     <div class="nav-item" data-view="visionboard" title="Vision Board"><span class="nav-icon">🖼️</span><span class="nav-label">Vision Board</span></div>
   </nav>
 
-  <!-- Telas ainda não construídas: o lugar já existe pra não esquecer, o
-       conteúdo vem depois. Bateria e Planejamento são uso ocasional (as duas já
-       funcionam de verdade), mas ficam agrupadas aqui por pedido do usuário —
-       ainda sem um bom uso encontrado no dia a dia. -->
+  <!-- Bateria e Planejamento já funcionam de verdade, mas ficam aqui por
+       pedido do usuário — ainda sem um bom uso encontrado no dia a dia.
+       Ápice é a única sem conteúdo mesmo (só o botão que leva pro site). -->
   <nav class="nav-level">
     <div class="nav-level-label">Em breve</div>
     <div class="nav-item nav-item-dim" data-view="bateria" title="Bateria"><span class="nav-icon">🥁</span><span class="nav-label">Bateria</span></div>
     <div class="nav-item nav-item-dim" data-view="monday" title="Planejamento"><span class="nav-icon">📋</span><span class="nav-label">Planejamento</span></div>
-    <div class="nav-item nav-item-dim" data-view="supermercado" title="Supermercado"><span class="nav-icon">🛒</span><span class="nav-label">Supermercado</span></div>
-    <div class="nav-item nav-item-dim" data-view="calculos" title="Cálculos"><span class="nav-icon">🧮</span><span class="nav-label">Cálculos</span></div>
-    <div class="nav-item nav-item-dim" data-view="empreendedorismo" title="Empreendedorismo"><span class="nav-icon">💡</span><span class="nav-label">Empreendedorismo</span></div>
     <div class="nav-item nav-item-dim" data-view="apice" title="Ápice"><span class="nav-icon">🏔️</span><span class="nav-label">Ápice</span></div>
   </nav>
 
@@ -948,6 +950,81 @@
     </div>
   </section>
 
+  <!-- MANUTENÇÃO -->
+  <section class="view" id="view-manutencao">
+    <div class="view-head">
+      <div>
+        <p class="eyebrow">Organizar</p>
+        <h1 class="view-title">Manutenção</h1>
+        <p class="view-desc">Coisas de intervalo longo, caras de esquecer — carro, casa, documentos.</p>
+      </div>
+      <button class="btn btn-primary btn-sm" id="manutAddBtn">+ Nova manutenção</button>
+    </div>
+    <div id="manutList"><p class="empty-state">Carregando...</p></div>
+  </section>
+
+  <!-- Modal: manutenção -->
+  <div class="confirm-modal" id="manutModal">
+    <div class="confirm-modal-panel">
+      <p class="confirm-modal-text" style="margin-bottom:12px;">Nova manutenção</p>
+      <label class="modal-field-label">O que precisa ser feito</label>
+      <input type="text" id="manutNomeInput" class="modal-text-input" placeholder="ex: Troca de óleo, IPVA, Filtro de água..." autocomplete="off">
+      <div class="modal-field-row">
+        <div>
+          <label class="modal-field-label">Frequência</label>
+          <select id="manutFrequenciaInput" class="modal-text-input">
+            <option value="mensal">Mensal</option>
+            <option value="trimestral">Trimestral</option>
+            <option value="semestral">Semestral</option>
+            <option value="anual" selected>Anual</option>
+          </select>
+        </div>
+        <div>
+          <label class="modal-field-label">Custo estimado (opcional)</label>
+          <input type="text" id="manutCustoInput" class="modal-text-input" inputmode="decimal" placeholder="ex: 250,00">
+        </div>
+      </div>
+      <label class="modal-field-label">Observação (opcional)</label>
+      <input type="text" id="manutObsInput" class="modal-text-input" placeholder="ex: agendar com a oficina do Zé">
+      <div class="confirm-modal-actions">
+        <button class="btn btn-ghost btn-sm" id="manutCancelBtn">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="manutOkBtn">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NÓS DOIS -->
+  <section class="view" id="view-nosdois">
+    <div class="view-head">
+      <div>
+        <p class="eyebrow">Organizar</p>
+        <h1 class="view-title">Nós dois</h1>
+        <p class="view-desc">Coisas que vocês querem fazer juntos — sem virar tarefa nem objetivo.</p>
+      </div>
+      <button class="btn btn-primary btn-sm" id="nosdoisAddBtn">+ Adicionar</button>
+    </div>
+    <div class="panel" style="margin-bottom:18px;">
+      <p class="panel-title">Quero fazer com você</p>
+      <div id="nosdoisPendentesList"><p class="empty-state">Carregando...</p></div>
+    </div>
+    <div class="panel">
+      <p class="panel-title">Já fizemos</p>
+      <div id="nosdoisFeitosList"><p class="empty-state">Carregando...</p></div>
+    </div>
+  </section>
+
+  <!-- Modal: item de Nós dois -->
+  <div class="confirm-modal" id="nosdoisModal">
+    <div class="confirm-modal-panel">
+      <p class="confirm-modal-text" style="margin-bottom:12px;">Algo pra fazer juntos</p>
+      <input type="text" id="nosdoisTextoInput" class="modal-text-input" placeholder="ex: Assistir aquele filme, ir na praia, jantar fora..." autocomplete="off">
+      <div class="confirm-modal-actions">
+        <button class="btn btn-ghost btn-sm" id="nosdoisCancelBtn">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="nosdoisOkBtn">Adicionar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- FINANÇAS -->
   <section class="view" id="view-financas">
     <div class="view-head" style="margin-bottom:12px;">
@@ -1062,23 +1139,90 @@
   <section class="view" id="view-supermercado">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Em breve</p>
+        <p class="eyebrow">Organizar</p>
         <h1 class="view-title">Supermercado</h1>
-        <p class="view-desc">Lista de compras a partir do cardápio da semana.</p>
+        <p class="view-desc">Lista por corredor, gerada do cardápio da semana ou digitada na hora.</p>
       </div>
     </div>
-    <div class="em-breve-box">
-      <p class="em-breve-icone">🛒</p>
-      <p class="em-breve-titulo">Ainda não construída</p>
-      <p class="em-breve-texto">O plano é montar a lista de compras automaticamente a partir dos alimentos do Plano Alimentar da semana.</p>
+    <div class="subtabs">
+      <button class="subtab active" data-sub="super" data-target="super-lista">Lista</button>
+      <button class="subtab" data-sub="super" data-target="super-fixos">Itens fixos</button>
+      <button class="subtab" data-sub="super" data-target="super-historico">Histórico</button>
+    </div>
+
+    <div class="subview active" id="super-lista">
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <button class="btn btn-primary btn-sm" id="superGerarBtn">↻ Gerar da semana</button>
+        <button class="btn btn-ghost btn-sm" id="superAddItemBtn">+ Item avulso</button>
+        <button class="btn btn-ghost btn-sm" id="superModoMercadoBtn">🛒 Modo mercado</button>
+        <button class="btn btn-ghost btn-sm" id="superFinalizarBtn">✓ Finalizar compra</button>
+      </div>
+      <div id="superListaContainer"><p class="empty-state">Carregando...</p></div>
+    </div>
+
+    <div class="subview" id="super-fixos">
+      <p class="view-desc" style="margin:0 0 14px;">Itens que entram em toda geração da lista — papel higiênico, sabão, ração...</p>
+      <button class="btn btn-primary btn-sm" id="superAddFixoBtn" style="margin-bottom:14px;">+ Item fixo</button>
+      <div id="superFixosList"><p class="empty-state">Carregando...</p></div>
+    </div>
+
+    <div class="subview" id="super-historico">
+      <p class="view-desc" style="margin:0 0 14px;">Compras já finalizadas — pra saber quando foi a última vez.</p>
+      <div id="superHistoricoList"><p class="empty-state">Carregando...</p></div>
     </div>
   </section>
+
+  <!-- Modal: item avulso / editar item da lista -->
+  <div class="confirm-modal" id="superItemModal">
+    <div class="confirm-modal-panel">
+      <p class="confirm-modal-text" id="superItemModalTitle" style="margin-bottom:12px;">Item avulso</p>
+      <label class="modal-field-label">Nome</label>
+      <input type="text" class="modal-text-input" id="superItemNomeInput" placeholder="ex: Arroz, Detergente...">
+      <div class="modal-field-row">
+        <div>
+          <label class="modal-field-label">Quantidade</label>
+          <input type="text" class="modal-text-input" id="superItemQtdInput" placeholder="ex: 350g, 1kg, a gosto">
+        </div>
+        <div>
+          <label class="modal-field-label">Corredor</label>
+          <select class="modal-text-input" id="superItemSecaoInput"></select>
+        </div>
+      </div>
+      <div class="confirm-modal-actions">
+        <button class="btn btn-ghost btn-sm" id="superItemCancelBtn">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="superItemOkBtn">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: item fixo -->
+  <div class="confirm-modal" id="superFixoModal">
+    <div class="confirm-modal-panel">
+      <p class="confirm-modal-text" id="superFixoModalTitle" style="margin-bottom:12px;">Item fixo</p>
+      <label class="modal-field-label">Nome</label>
+      <input type="text" class="modal-text-input" id="superFixoNomeInput" placeholder="ex: Papel higiênico, Ração...">
+      <div class="modal-field-row">
+        <div>
+          <label class="modal-field-label">Quantidade</label>
+          <input type="text" class="modal-text-input" id="superFixoQtdInput" placeholder="ex: 1un, 500ml">
+        </div>
+        <div>
+          <label class="modal-field-label">Corredor</label>
+          <select class="modal-text-input" id="superFixoSecaoInput"></select>
+        </div>
+      </div>
+      <div class="confirm-modal-actions">
+        <button class="btn btn-ghost btn-sm" id="superFixoCancelBtn">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="superFixoOkBtn">Salvar</button>
+      </div>
+    </div>
+  </div>
 
   <!-- CÁLCULOS (em breve) -->
   <section class="view" id="view-calculos">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Em breve</p>
+        <p class="eyebrow">Organizar</p>
         <h1 class="view-title">Cálculos</h1>
         <p class="view-desc">Calculadoras do dia a dia — a primeira é a de rescisão.</p>
       </div>
@@ -1087,11 +1231,53 @@
       <button class="subtab active" data-sub="calculos" data-target="calculos-rescisao">Rescisão</button>
     </div>
     <div class="subview active" id="calculos-rescisao">
-      <div class="em-breve-box">
-        <p class="em-breve-icone">🧮</p>
-        <p class="em-breve-titulo">Ainda não construída</p>
-        <p class="em-breve-texto">Cálculo de rescisão trabalhista — aviso prévio, férias, 13º proporcional e FGTS.</p>
+      <div class="panel" style="margin-bottom:18px;">
+        <p class="panel-title">Dados da rescisão</p>
+        <p class="view-desc" style="margin:-6px 0 14px;">Modela demissão sem justa causa com aviso prévio indenizado — o cenário mais comum. Não inclui desconto de INSS/IRRF: os valores abaixo são brutos, confira o líquido com o RH ou contador antes de decidir qualquer coisa.</p>
+        <div class="fin-sim-form" id="calcRescisaoForm">
+          <div class="fin-sim-campo">
+            <span>Salário base</span>
+            <input type="text" inputmode="decimal" id="rescSalarioInput" placeholder="Ex: 5371,00">
+          </div>
+          <div class="fin-sim-campo">
+            <span>Data de admissão</span>
+            <input type="date" id="rescAdmissaoInput">
+          </div>
+          <div class="fin-sim-campo">
+            <span>Data de rescisão (aviso)</span>
+            <input type="date" id="rescDataInput">
+          </div>
+          <div class="fin-sim-campo">
+            <span>Períodos de férias vencidas</span>
+            <input type="number" min="0" step="1" id="rescFeriasVencidasInput" placeholder="0">
+          </div>
+          <div class="fin-sim-campo fin-sim-largo">
+            <span>13º já adiantado</span>
+            <label class="fin-sim-check"><input type="checkbox" id="rescDecimoAdiantadoInput"> Recebeu adiantamento do 13º este ano</label>
+          </div>
+          <div class="fin-sim-campo">
+            <span>Valor do adiantamento</span>
+            <input type="text" inputmode="decimal" id="rescValorAdiantamentoInput" placeholder="Ex: 2685,50">
+          </div>
+          <div class="fin-sim-campo">
+            <span>FGTS total depositado</span>
+            <input type="text" inputmode="decimal" id="rescFgtsTotalInput" placeholder="Base da multa de 40%">
+          </div>
+          <div class="fin-sim-campo">
+            <span>FGTS disponível na conta</span>
+            <input type="text" inputmode="decimal" id="rescFgtsDisponivelInput" placeholder="Já sacável hoje">
+          </div>
+          <div class="fin-sim-campo">
+            <span>Dívida de empréstimo FGTS</span>
+            <input type="text" inputmode="decimal" id="rescDividaInput" placeholder="0 se não houver">
+          </div>
+          <div class="fin-sim-campo">
+            <span>FGTS bloqueado como garantia</span>
+            <input type="text" inputmode="decimal" id="rescFgtsBloqueadoInput" placeholder="0 se não houver">
+          </div>
+        </div>
       </div>
+      <div class="panel" id="calcRescisaoResultado"></div>
     </div>
   </section>
 
@@ -1099,17 +1285,82 @@
   <section class="view" id="view-empreendedorismo">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Em breve</p>
+        <p class="eyebrow">Organizar</p>
         <h1 class="view-title">Empreendedorismo</h1>
-        <p class="view-desc">Ideias e projetos próprios, num lugar só.</p>
+        <p class="view-desc">Ideias e caminhos de carreira em análise, com o que cada um pesa de verdade.</p>
       </div>
     </div>
-    <div class="em-breve-box">
-      <p class="em-breve-icone">💡</p>
-      <p class="em-breve-titulo">Ainda não construída</p>
-      <p class="em-breve-texto">O conteúdo dessa tela ainda vai ser definido.</p>
+    <div class="subtabs">
+      <button class="subtab active" data-sub="empr" data-target="empr-possibilidades">Possibilidades Financeiras</button>
+    </div>
+    <div class="subview active" id="empr-possibilidades">
+      <div class="poss-filtros" id="possFiltros">
+        <button type="button" class="poss-filtro active" data-poss-filtro="todas">Todas</button>
+        <button type="button" class="poss-filtro" data-poss-filtro="guilherme">Guilherme</button>
+        <button type="button" class="poss-filtro" data-poss-filtro="julia">Júlia</button>
+      </div>
+      <button class="btn btn-primary btn-sm" id="possAddBtn" style="margin-bottom:16px;">+ Possibilidade</button>
+      <div id="possList"><p class="empty-state">Carregando...</p></div>
     </div>
   </section>
+
+  <!-- Modal: possibilidade financeira -->
+  <div class="confirm-modal" id="possModal">
+    <div class="confirm-modal-panel" style="max-width:560px;">
+      <p class="confirm-modal-text" id="possModalTitle" style="margin-bottom:12px;">Nova possibilidade</p>
+      <label class="modal-field-label">Nome</label>
+      <input type="text" class="modal-text-input" id="possNomeInput" placeholder="ex: Desenvolvedor VR no Exterior">
+      <div class="modal-field-row">
+        <div>
+          <label class="modal-field-label">De quem</label>
+          <select class="modal-text-input" id="possPessoaInput">
+            <option value="guilherme">Guilherme</option>
+            <option value="julia">Júlia</option>
+          </select>
+        </div>
+        <div>
+          <label class="modal-field-label">Estrelas (0 = sem avaliação)</label>
+          <input type="number" min="0" max="5" step="1" class="modal-text-input" id="possEstrelasInput" placeholder="0 a 5">
+        </div>
+      </div>
+      <div class="modal-field-row">
+        <div>
+          <label class="modal-field-label">Retorno financeiro</label>
+          <select class="modal-text-input" id="possRetornoInput">
+            <option value="">—</option>
+            <option value="Baixo">Baixo</option>
+            <option value="Médio">Médio</option>
+            <option value="Alto">Alto</option>
+            <option value="Muito Alto">Muito Alto</option>
+          </select>
+        </div>
+        <div>
+          <label class="modal-field-label">Risco</label>
+          <select class="modal-text-input" id="possRiscoInput">
+            <option value="">—</option>
+            <option value="Baixo">Baixo</option>
+            <option value="Médio">Médio</option>
+            <option value="Alto">Alto</option>
+            <option value="Muito Alto">Muito Alto</option>
+          </select>
+        </div>
+      </div>
+      <label class="modal-field-label">Tempo estimado</label>
+      <input type="text" class="modal-text-input" id="possTempoInput" placeholder="ex: 1 a 2 anos">
+      <label class="modal-field-label">Descrição</label>
+      <textarea class="modal-text-input" id="possDescricaoInput" rows="3" style="resize:vertical;"></textarea>
+      <label class="modal-field-label">Faixa salarial (opcional)</label>
+      <input type="text" class="modal-text-input" id="possFaixaSalarialInput" placeholder="ex: R$ 20.000 a R$ 30.000/mês">
+      <label class="modal-field-label">O que estudar (um por linha, opcional)</label>
+      <textarea class="modal-text-input" id="possEstudarInput" rows="3" style="resize:vertical;"></textarea>
+      <label class="modal-field-label">Notas pessoais</label>
+      <textarea class="modal-text-input" id="possNotasInput" rows="3" style="resize:vertical;"></textarea>
+      <div class="confirm-modal-actions">
+        <button class="btn btn-ghost btn-sm" id="possCancelBtn">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="possOkBtn">Salvar</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ÁPICE (em breve) -->
   <section class="view" id="view-apice">
@@ -1339,6 +1590,25 @@
           <div id="diarioEntriesList" class="diary-entries-scroll"><p class="empty-state">Carregando...</p></div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- RETROSPECTIVA -->
+  <section class="view" id="view-retrospectiva">
+    <div class="view-head">
+      <div>
+        <p class="eyebrow">Evoluir</p>
+        <h1 class="view-title">Retrospectiva</h1>
+        <p class="view-desc">Os últimos 7 dias, com o que já está registrado — nada novo pra preencher.</p>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:18px;">
+      <p class="panel-title">Esta semana</p>
+      <div class="fech-resumo" id="retroResumo"><p class="empty-state">Carregando...</p></div>
+    </div>
+    <div class="panel">
+      <p class="panel-title">Dia a dia</p>
+      <div id="retroDiaADia"><p class="empty-state">Carregando...</p></div>
     </div>
   </section>
 
