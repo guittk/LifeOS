@@ -414,8 +414,11 @@
   // Só o INPUT (modo edição) precisa de JS pra se ajustar — um <span> (modo
   // visualização) já encolhe pro tamanho do próprio texto sozinho. Medir em
   // "ch" (1 caractere = largura do "0") é só uma aproximação — não conta
-  // letter-spacing nem sempre bate com o peso da fonte — e deixava o fim do
-  // número cortado. Medir o texto de verdade num canvas elimina esse chute.
+  // letter-spacing nem sempre bate com o peso da fonte. Medir o texto de
+  // verdade num canvas resolve isso, mas como o app usa `*{box-sizing:
+  // border-box}` global, o `width` do elemento PRECISA incluir padding e
+  // borda — só o texto sem isso deixava o campo menor que o próprio padding
+  // horizontal (20px), cortando o conteúdo quase inteiro (ex: "00" sumia).
   let timelineMedidorCanvasCtx = null;
   function timelineAjustarLarguraValor(inp){
     if(!timelineMedidorCanvasCtx) timelineMedidorCanvasCtx = document.createElement('canvas').getContext('2d');
@@ -423,8 +426,10 @@
     const estilo = getComputedStyle(inp);
     timelineMedidorCanvasCtx.font = estilo.fontWeight + ' ' + estilo.fontSize + ' ' + estilo.fontFamily;
     const letterSpacing = parseFloat(estilo.letterSpacing) || 0;
-    const largura = timelineMedidorCanvasCtx.measureText(texto).width + texto.length * letterSpacing;
-    inp.style.width = Math.ceil(largura) + 8 + 'px'; // folga pro cursor de digitação
+    const larguraTexto = timelineMedidorCanvasCtx.measureText(texto).width + texto.length * letterSpacing;
+    const chrome = parseFloat(estilo.paddingLeft) + parseFloat(estilo.paddingRight) +
+                   parseFloat(estilo.borderLeftWidth) + parseFloat(estilo.borderRightWidth);
+    inp.style.width = Math.ceil(larguraTexto + chrome) + 8 + 'px'; // +8 = folga pro cursor de digitação
   }
   async function renderTimelineObjetivos(){
     const list = document.getElementById('timelineList');

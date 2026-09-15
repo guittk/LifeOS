@@ -504,6 +504,22 @@
      como pendente conforme a frequência. É isso que permite dar XP por elas. */
   const CASA_FREQ_DIAS = { diaria: 1, semanal: 7, quinzenal: 14, mensal: 30 };
 
+  // Dia(s) da semana é opcional e vale pra qualquer frequência: quando marcado,
+  // troca o "conta dias desde a última vez" por "fica pendente no(s) dia(s)
+  // certo(s)" — ex: uma atividade semanal trava sempre na segunda-feira, em vez
+  // de deslizar pra qualquer dia em que ela tenha sido feita por último.
+  const CASA_DIAS_SEMANA_NOMES = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+  function casaDiasSemanaTexto(dias){
+    if(!dias || !dias.length) return '';
+    const ordenados = [...dias].sort((a, b) => a - b);
+    const nomes = ordenados.map(d => CASA_DIAS_SEMANA_NOMES[d].replace('-feira', ''));
+    if(nomes.length === 1){
+      const ehFimDeSemana = ordenados[0] === 0 || ordenados[0] === 6; // domingo/sábado são masculinos: "todo domingo"
+      return (ehFimDeSemana ? 'todo ' : 'toda ') + nomes[0];
+    }
+    return 'toda ' + nomes.slice(0, -1).join(', ') + ' e ' + nomes[nomes.length - 1];
+  }
+
   function casaDiasDesde(dataStr){
     if(!dataStr) return Infinity;
     const d = new Date(dataStr + 'T00:00:00');
@@ -511,10 +527,17 @@
     return Math.floor((new Date(todayStr() + 'T00:00:00') - d) / 86400000);
   }
   // Uma atividade está pendente quando já passou o intervalo da frequência
-  // desde a última vez que foi marcada.
+  // desde a última vez que foi marcada — ou, se tem dia(s) da semana fixo(s),
+  // quando hoje é um desses dias e ainda não foi feita hoje.
   function casaAtividadeStatus(a){
-    const intervalo = CASA_FREQ_DIAS[a.frequencia] || 1;
     const dias = casaDiasDesde(a.feitaEm);
+    if(a.diasSemana && a.diasSemana.length){
+      if(dias === 0) return { pendente: false, texto: 'feita hoje' };
+      const hojeSemana = new Date(todayStr() + 'T00:00:00').getDay();
+      if(a.diasSemana.includes(hojeSemana)) return { pendente: true, texto: 'pendente hoje' };
+      return { pendente: false, texto: dias === Infinity ? 'ainda não feita' : 'feita há ' + dias + (dias === 1 ? ' dia' : ' dias') };
+    }
+    const intervalo = CASA_FREQ_DIAS[a.frequencia] || 1;
     if(dias === Infinity) return { pendente: true, texto: 'nunca feita' };
     if(dias >= intervalo) return { pendente: true, texto: dias === 0 ? 'pendente' : 'pendente há ' + dias + (dias === 1 ? ' dia' : ' dias') };
     const faltam = intervalo - dias;
@@ -537,6 +560,7 @@
     if(!entries.length){ el.innerHTML = '<p class="empty-state">Nenhuma atividade da casa cadastrada. Toque em "+ Nova atividade" pra criar uma tarefa recorrente (ex: tirar o lixo, lavar louça).</p>'; return; }
     el.innerHTML = entries.map(([id, a]) => {
       const st = casaAtividadeStatus(a);
+      const diasTexto = casaDiasSemanaTexto(a.diasSemana);
       return `
       <div class="casa-card ${st.pendente ? '' : 'casa-card-feita'}" data-id="${id}">
         <button type="button" class="casa-check" data-done-atividade="${id}"
@@ -545,13 +569,16 @@
         <div class="casa-card-main">
           <p class="casa-card-title">${escapeHtml(a.nome)}</p>
           <div class="casa-card-meta">
-            <span>${CASA_FREQ_LABELS[a.frequencia] || a.frequencia || ''}</span>
+            <span>${diasTexto ? escapeHtml(diasTexto) : (CASA_FREQ_LABELS[a.frequencia] || a.frequencia || '')}</span>
             ${a.responsavel ? `<span>· ${escapeHtml(a.responsavel)}</span>` : ''}
             <span class="casa-status ${st.pendente ? 'casa-status-pendente' : ''}">· ${escapeHtml(st.texto)}</span>
             ${st.proxima ? `<span class="casa-status">· ${escapeHtml(st.proxima)}</span>` : ''}
           </div>
         </div>
-        <div class="casa-card-actions"><button data-del-atividade="${id}">excluir</button></div>
+        <div class="casa-card-actions">
+          <button data-edit-atividade="${id}">editar</button>
+          <button data-del-atividade="${id}">excluir</button>
+        </div>
       </div>`;
     }).join('');
 
@@ -569,18 +596,35 @@
       await renderCasaAtividades();
     }));
 
+    el.querySelectorAll('[data-edit-atividade]').forEach(btn => btn.addEventListener('click', () => {
+      casaAbrirAtividadeModal(btn.getAttribute('data-edit-atividade'), data[btn.getAttribute('data-edit-atividade')]);
+    }));
+
     el.querySelectorAll('[data-del-atividade]').forEach(btn => btn.addEventListener('click', async () => {
       if(!await showConfirm('Excluir esta atividade?')) return;
       await dbDelete(userPath('/casa/atividades/' + btn.getAttribute('data-del-atividade')));
       await renderCasaAtividades();
     }));
   }
-  document.getElementById('casaAddAtividadeBtn').addEventListener('click', () => {
-    document.getElementById('casaAtividadeNomeInput').value = '';
-    document.getElementById('casaAtividadeFrequenciaInput').value = 'semanal';
+
+  let casaAtividadeEditandoId = null;
+  function casaAbrirAtividadeModal(id, a){
+    casaAtividadeEditandoId = id || null;
+    document.getElementById('casaAtividadeModalTitle').textContent = id ? 'Editar atividade da casa' : 'Nova atividade da casa';
+    document.getElementById('casaAtividadeOkBtn').textContent = id ? 'Salvar' : 'Adicionar';
+    document.getElementById('casaAtividadeNomeInput').value = a ? a.nome : '';
+    document.getElementById('casaAtividadeFrequenciaInput').value = a ? a.frequencia : 'semanal';
     populateCasaResponsavelSelects();
-    document.getElementById('casaAtividadeResponsavelInput').value = '';
+    document.getElementById('casaAtividadeResponsavelInput').value = a ? (a.responsavel || '') : '';
+    const diasSelecionados = new Set((a && a.diasSemana) || []);
+    document.querySelectorAll('#casaAtividadeDiasSemana [data-dia]').forEach(chip => {
+      chip.classList.toggle('active', diasSelecionados.has(Number(chip.getAttribute('data-dia'))));
+    });
     document.getElementById('casaAtividadeModal').classList.add('active');
+  }
+  document.getElementById('casaAddAtividadeBtn').addEventListener('click', () => casaAbrirAtividadeModal(null, null));
+  document.querySelectorAll('#casaAtividadeDiasSemana [data-dia]').forEach(chip => {
+    chip.addEventListener('click', () => chip.classList.toggle('active'));
   });
   document.getElementById('casaAtividadeCancelBtn').addEventListener('click', () => document.getElementById('casaAtividadeModal').classList.remove('active'));
   document.getElementById('casaAtividadeOkBtn').addEventListener('click', async () => {
@@ -588,7 +632,11 @@
     if(!nome){ showAppMessage('Digite o nome da atividade.', 'error'); return; }
     const frequencia = document.getElementById('casaAtividadeFrequenciaInput').value;
     const responsavel = document.getElementById('casaAtividadeResponsavelInput').value.trim();
-    await dbPut(userPath('/casa/atividades/' + newId()), { nome, frequencia, responsavel, criadoEm: new Date().toISOString() });
+    const diasSemana = Array.from(document.querySelectorAll('#casaAtividadeDiasSemana [data-dia].active'))
+      .map(chip => Number(chip.getAttribute('data-dia')));
+    const patch = { nome, frequencia, responsavel, diasSemana: diasSemana.length ? diasSemana : null };
+    if(casaAtividadeEditandoId) await dbPatch(userPath('/casa/atividades/' + casaAtividadeEditandoId), patch);
+    else await dbPut(userPath('/casa/atividades/' + newId()), { ...patch, criadoEm: new Date().toISOString() });
     document.getElementById('casaAtividadeModal').classList.remove('active');
     await renderCasaAtividades();
   });

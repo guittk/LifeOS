@@ -358,7 +358,7 @@
 <!-- MODAL — NOVA ATIVIDADE DA CASA -->
 <div class="confirm-modal" id="casaAtividadeModal">
   <div class="confirm-modal-panel">
-    <p class="confirm-modal-text" style="margin-bottom:12px;">Nova atividade da casa</p>
+    <p class="confirm-modal-text" id="casaAtividadeModalTitle" style="margin-bottom:12px;">Nova atividade da casa</p>
     <label class="modal-field-label">O que precisa ser feito</label>
     <input type="text" id="casaAtividadeNomeInput" class="modal-text-input" placeholder="ex: Lavar louça, Limpar banheiro..." autocomplete="off">
     <div class="modal-field-row">
@@ -378,6 +378,17 @@
         </select>
       </div>
     </div>
+    <label class="modal-field-label">Dia(s) da semana (opcional)</label>
+    <div class="casa-dia-chips" id="casaAtividadeDiasSemana">
+      <button type="button" class="casa-dia-chip" data-dia="0" title="Domingo">D</button>
+      <button type="button" class="casa-dia-chip" data-dia="1" title="Segunda-feira">S</button>
+      <button type="button" class="casa-dia-chip" data-dia="2" title="Terça-feira">T</button>
+      <button type="button" class="casa-dia-chip" data-dia="3" title="Quarta-feira">Q</button>
+      <button type="button" class="casa-dia-chip" data-dia="4" title="Quinta-feira">Q</button>
+      <button type="button" class="casa-dia-chip" data-dia="5" title="Sexta-feira">S</button>
+      <button type="button" class="casa-dia-chip" data-dia="6" title="Sábado">S</button>
+    </div>
+    <p class="fin-sim-nota" style="margin:8px 0 14px;">Marque pra travar em dia(s) fixo(s) — ex: toda segunda, ou terça e sábado — em vez de contar dias desde a última vez feita.</p>
     <div class="confirm-modal-actions">
       <button class="btn btn-ghost btn-sm" id="casaAtividadeCancelBtn">Cancelar</button>
       <button class="btn btn-primary btn-sm" id="casaAtividadeOkBtn">Adicionar</button>

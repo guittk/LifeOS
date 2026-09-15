@@ -1981,6 +1981,14 @@
   .casa-status{ color: var(--text-dim); }
   .casa-status-pendente{ color: var(--gold); font-weight:500; }
 
+  .casa-dia-chips{ display:flex; gap:6px; }
+  .casa-dia-chip{
+    width:32px; height:32px; border-radius:50%; border:1px solid var(--line-strong); background:var(--surface);
+    color:var(--text-mut); font-family:var(--sans); font-size:12px; font-weight:600; cursor:pointer;
+  }
+  .casa-dia-chip:hover{ border-color:var(--sage-line); color:var(--sage); }
+  .casa-dia-chip.active{ background:var(--sage); border-color:var(--sage); color:var(--on-accent); }
+
   /* ---------- Retrospectiva ---------- */
   .retro-dia-row{ display:flex; align-items:center; gap:14px; padding:9px 0; border-bottom:1px solid var(--line); font-size:12.5px; flex-wrap:wrap; }
   .retro-dia-row:last-child{ border-bottom:none; }
