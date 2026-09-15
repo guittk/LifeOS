@@ -871,9 +871,12 @@
     timelineobjetivos: [[renderTimelineObjetivos, 'a Timeline', 'timelineList']],
     acordar:        [[renderAcordarChecklist, 'a checklist de Acordar', 'acordarChecklistList']],
     supermercado:   [[renderSupermercado, 'o Supermercado', 'superListaContainer']],
-    calculos:       [[renderCalculosRescisaoInit, 'os Cálculos', 'calcRescisaoResultado']],
+    calculos: [
+      [renderCalculosRescisaoInit, 'a Rescisão',        'calcRescisaoResultado'],
+      [renderCalcMeta,             'o Tempo até a meta', 'calcMetaResultado']
+    ],
     empreendedorismo: [[renderPossibilidades, 'as Possibilidades Financeiras', 'possList']],
-    apice:          [],
+    apice:          [[renderApice, 'a Ápice', ['apiceClientesList', 'apiceRecebimentosList']]],
     config:         []
   };
 

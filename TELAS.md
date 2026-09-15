@@ -13,7 +13,7 @@ sem preocupação com custo de contexto (ao contrário do CLAUDE.md).
 
 ## Navegação global (presente em todas as telas)
 
-- **Sidebar** com grupos: Executar (Hoje), Organizar (Notas, Tarefas, Agenda, Rotina, Casa, Manutenção, Nós dois, Finanças, Supermercado, Cálculos, Decisões, Empreendedorismo, Perguntar), Evoluir (Fluência, Academia, Diário, Retrospectiva, Plano Alimentar, Objetivos, Timeline, Vision Board), Em breve (Bateria e Planejamento — uso ocasional, já funcionam de verdade; Ápice — ainda sem conteúdo), e Configurações/Sair no rodapé.
+- **Sidebar** com grupos: Executar (Hoje), Organizar (Notas, Tarefas, Agenda, Rotina, Casa, Manutenção, Nós dois, Finanças, Supermercado, Cálculos, Decisões, Empreendedorismo, Ápice, Perguntar), Evoluir (Fluência, Academia, Diário, Retrospectiva, Plano Alimentar, Objetivos, Timeline, Vision Board), Em breve (Bateria e Planejamento — uso ocasional, já funcionam de verdade, só sem um bom uso encontrado ainda), e Configurações/Sair no rodapé.
 - **Pesquisa global** (Ctrl/Cmd+K): busca em objetivos, tarefas, planejamento, diário, decisões e mais, ao mesmo tempo — e funciona como comando de navegação pra qualquer tela.
 - **Captura rápida**: modal de texto livre acessível de qualquer tela, cria uma nova Nota.
 - **Loading global**, **toasts** de notificação e **modal de confirmação** substituem os diálogos nativos do navegador em toda a aplicação.
@@ -111,11 +111,15 @@ Lista de compras por corredor, em 3 abas:
 - **Itens fixos**: o que entra em toda geração (papel higiênico, sabão, ração...). `/SupermercadoFixos`.
 - **Histórico**: compras já finalizadas, com data e quantidade de itens. `/SupermercadoCompras`.
 
-Regenerar a lista preserva o que já estava marcado (por nome) e os itens avulsos digitados na hora — só os gerados/fixos são recalculados.
+Regenerar a lista preserva o que já estava marcado (por nome) e os itens avulsos digitados na hora — só os gerados/fixos são recalculados. **Finalizar compra** aceita um valor total opcional — quando preenchido, lança um gasto (seção `compras`) no mês atual das Finanças, só se aquele mês já existir lá (Finanças sempre mantém os próximos 12 meses criados; se não existir, avisa em vez de tentar recriar a lógica de geração de mês).
 
 ## Cálculos (`view-calculos`)
 
-Calculadoras do dia a dia. Por enquanto só a aba **Rescisão**, modelando demissão sem justa causa com aviso prévio indenizado (o cenário mais comum). Fórmulas conferidas verba a verba contra um cálculo de referência real: o aviso prévio indenizado projeta a data de saída pra frente (Súmula 371 TST) — é essa data projetada, não a do aviso, que conta pros meses de 13º e férias proporcionais (regra dos 15 dias, Súmula 388 por analogia). Campos: salário, admissão, data de rescisão, períodos de férias vencidas, 13º já adiantado, FGTS total depositado (base da multa de 40%), FGTS disponível na conta, dívida de empréstimo FGTS e FGTS bloqueado como garantia. Se houver dívida de empréstimo, mostra a comparação **Cenário A** (mantém o empréstimo) x **Cenário B** (quita com a multa) lado a lado, com a diferença entre os dois. Recalcula a cada tecla; grava no Firebase ao perder o foco do campo. **De propósito, sem INSS/IRRF** — as faixas mudam todo ano e uma tabela desatualizada erraria em silêncio; confira o líquido com o RH/contador. Dados em `/CalculosRescisao`.
+Calculadoras do dia a dia, em 3 abas:
+
+- **Preço por unidade**: dois preços + quantidades (ex: `1kg` a R$22 vs `700g` a R$16,50) → qual sai mais barato e por quanto. Reaproveita o mesmo interpretador de quantidade do Supermercado (`superParseQtd`). Efêmera — não persiste nada, recalcula a cada tecla.
+- **Tempo até a meta**: cruza os marcos com valor da Timeline de Objetivos com a sobra mensal projetada das Finanças (`calcResumoMensalFinancas`, mesma fórmula do `finCalcular` original, mas operando na leitura fresca do Firebase em vez do `finState` em memória — pra funcionar mesmo sem a tela Finanças ter sido aberta ainda). Sobra média só conta os meses no azul, pra não subestimar por causa de um mês ruim isolado. Só leitura — os dados de verdade continuam na Timeline e nas Finanças.
+- **Rescisão**: modela demissão sem justa causa com aviso prévio indenizado (o cenário mais comum). Fórmulas conferidas verba a verba contra um cálculo de referência real: o aviso prévio indenizado projeta a data de saída pra frente (Súmula 371 TST) — é essa data projetada, não a do aviso, que conta pros meses de 13º e férias proporcionais (regra dos 15 dias, Súmula 388 por analogia). Campos: salário, admissão, data de rescisão, períodos de férias vencidas, 13º já adiantado, FGTS total depositado (base da multa de 40%), FGTS disponível na conta, dívida de empréstimo FGTS e FGTS bloqueado como garantia. Se houver dívida de empréstimo, mostra a comparação **Cenário A** (mantém o empréstimo) x **Cenário B** (quita com a multa) lado a lado, com a diferença entre os dois. Recalcula a cada tecla; grava no Firebase ao perder o foco do campo. **De propósito, sem INSS/IRRF** — as faixas mudam todo ano e uma tabela desatualizada erraria em silêncio; confira o líquido com o RH/contador. Dados em `/CalculosRescisao`.
 
 ## Decisões (`view-decisoes`)
 
@@ -124,6 +128,15 @@ Registro de decisões importantes com contexto, opções e critérios. Status: E
 ## Empreendedorismo (`view-empreendedorismo`)
 
 Uma aba por enquanto: **Possibilidades Financeiras** — caminhos de carreira/negócio em análise, comparados lado a lado. Cada possibilidade tem dono (Guilherme ou Júlia), estrelas (0 a 5), retorno financeiro, risco, tempo estimado, descrição, faixa salarial e "o que estudar" (quando fizer sentido), e uma nota pessoal de quem está avaliando. Filtro por pessoa no topo; cards ordenados por estrelas dentro de cada grupo. Dados em `/PossibilidadesFinanceiras`, semeado com a análise feita em 14/09/2026 (Dev VR no exterior, Plataforma de Treinamentos VR, Estúdio de Jogos, Serviço de Atualização de Treinamentos, Professor Universitário, Concurso Público, Ápice — de Guilherme; Consultório de Psicologia, Consultório Home Office, Leal ChocoArt — de Júlia).
+
+## Ápice (`view-apice`)
+
+A lente comercial da Ápice Soluções Digitais — os projetos em si moram no Planejamento (grupos → elementos → subelementos já serve pra isso), esta tela é só clientes e dinheiro. Duas abas:
+
+- **A receber**: descrição, cliente, valor, data prevista. Resumo no topo (em aberto, recebido este mês, quantos recebimentos em aberto). Marcar como recebido lança um ganho (seção `dia10`) no mês certo das Finanças — mesma ressalva do Supermercado: só se aquele mês já existir lá. Desmarcar remove o lançamento correspondente. `/ApiceRecebimentos`.
+- **Clientes**: nome, contato, observação (ex: link pro grupo correspondente no Planejamento). `/ApiceClientes`.
+
+Propostas e Acessos & renovações (do plano original) não foram construídas ainda.
 
 ## Perguntar ao LifeOS (`view-busca`)
 
@@ -182,9 +195,10 @@ Colagem de imagens que representam onde você quer chegar.
 
 ## Em breve
 
-- **Bateria** (`view-bateria`) — funciona de verdade (app externo embutido, ver Fluência/Bateria acima), só ainda sem um bom uso encontrado no dia a dia.
-- **Planejamento** (`view-monday`) — funciona de verdade: board estilo Monday.com/Trello, portado do projeto Apice: **grupos → elementos → subelementos**, cada um com status (Backlog, To Do, Em andamento, Bloqueado, Concluído, Adiado, Cancelado), prioridade, responsável e prazo. Arraste pra reorganizar. "Selecionar" pra ações em lote. Cobre um espaço parecido com Tarefas e com Atividades da Casa — as três continuam existindo, sem fronteira formal entre elas ainda.
-- **Ápice** (`view-apice`) — a única sem conteúdo de verdade: só o botão "Abrir Ápice ↗", que já funciona, pra apicesolucoesdigitais.com.br. As possibilidades financeiras ligadas à Ápice como negócio (empresa de landing pages/plataformas/inovação) estão em Empreendedorismo, não aqui.
+Só duas telas aqui agora — ambas funcionam de verdade, só ainda sem um bom uso encontrado no dia a dia. Não sobrou nenhuma tela sem conteúdo nenhum.
+
+- **Bateria** (`view-bateria`) — app externo embutido, ver Fluência/Bateria acima.
+- **Planejamento** (`view-monday`) — board estilo Monday.com/Trello, portado do projeto Apice: **grupos → elementos → subelementos**, cada um com status (Backlog, To Do, Em andamento, Bloqueado, Concluído, Adiado, Cancelado), prioridade, responsável e prazo. Arraste pra reorganizar. "Selecionar" pra ações em lote. Cobre um espaço parecido com Tarefas e com Atividades da Casa — as três continuam existindo, sem fronteira formal entre elas ainda.
 
 ---
 

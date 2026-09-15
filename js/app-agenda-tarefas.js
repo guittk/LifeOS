@@ -1415,13 +1415,29 @@
     const lista = await dbGet(userPath('/SupermercadoLista'), { fresh:true }) || {};
     const marcadosIds = Object.entries(lista).filter(([, it]) => it.marcado).map(([id]) => id);
     if(!marcadosIds.length){ showAppMessage('Marque os itens que pegou antes de finalizar.', 'error'); return; }
-    if(!await showConfirm('Finalizar compra com ' + marcadosIds.length + ' ' + (marcadosIds.length === 1 ? 'item' : 'itens') + '? Eles saem da lista.')) return;
+    document.getElementById('superFinalizarModalTexto').textContent = 'Finalizar compra com ' + marcadosIds.length + ' ' + (marcadosIds.length === 1 ? 'item' : 'itens') + '? Eles saem da lista.';
+    document.getElementById('superFinalizarValorInput').value = '';
+    document.getElementById('superFinalizarModal').classList.add('active');
+  });
+  document.getElementById('superFinalizarCancelBtn').addEventListener('click', () => document.getElementById('superFinalizarModal').classList.remove('active'));
+  document.getElementById('superFinalizarOkBtn').addEventListener('click', async () => {
+    const lista = await dbGet(userPath('/SupermercadoLista'), { fresh:true }) || {};
+    const marcados = Object.entries(lista).filter(([, it]) => it.marcado);
+    if(!marcados.length){ document.getElementById('superFinalizarModal').classList.remove('active'); return; }
     const restante = {};
     Object.entries(lista).forEach(([id, it]) => { if(!it.marcado) restante[id] = it; });
     await dbPut(userPath('/SupermercadoLista'), restante);
-    await dbPut(userPath('/SupermercadoCompras/' + newId()), { data: todayStr(), quantidadeItens: marcadosIds.length });
+    const valor = finParseNum(document.getElementById('superFinalizarValorInput').value);
+    const hoje = todayStr();
+    let lancado = null;
+    if(valor > 0) lancado = await finLancarItem(hoje, 'compras', 'Supermercado', -Math.abs(valor));
+    await dbPut(userPath('/SupermercadoCompras/' + newId()), {
+      data: hoje, quantidadeItens: marcados.length, valorTotal: valor > 0 ? valor : null,
+      lancamentoMesId: lancado ? lancado.mesId : null, lancamentoItemId: lancado ? lancado.itemId : null
+    });
+    document.getElementById('superFinalizarModal').classList.remove('active');
     await renderSuperLista();
-    showAppMessage('Compra registrada.', 'success');
+    showAppMessage(lancado ? 'Compra registrada e lançada nas Finanças.' : (valor > 0 ? 'Compra registrada — o mês atual ainda não existe nas Finanças, abra a tela Finanças e volte aqui.' : 'Compra registrada.'), lancado || !valor ? 'success' : 'error');
   });
 
   /* ---------- SUPERMERCADO: Itens fixos ---------- */
@@ -1492,7 +1508,10 @@
       <div class="casa-card">
         <div class="casa-card-main">
           <p class="casa-card-title">${fmtDatePill(new Date(c.data + 'T00:00:00'))}</p>
-          <div class="casa-card-meta"><span>${c.quantidadeItens} ${c.quantidadeItens === 1 ? 'item' : 'itens'}</span></div>
+          <div class="casa-card-meta">
+            <span>${c.quantidadeItens} ${c.quantidadeItens === 1 ? 'item' : 'itens'}</span>
+            ${c.valorTotal ? `<span>· ${finFmt(c.valorTotal)}</span>` : ''}
+          </div>
         </div>
       </div>`).join('');
   }

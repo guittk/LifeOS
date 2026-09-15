@@ -1654,6 +1654,87 @@
     });
   });
 
+  /* ---------- CÁLCULOS: Preço por unidade ----------
+     Puramente efêmera — não persiste nada, recalcula a cada tecla. Reaproveita
+     o mesmo interpretador de quantidade do Supermercado (superParseQtd), já que
+     é a mesma pergunta: "quanto tem, em qual unidade". */
+  function calcUnidCustoPorBase(precoStr, qtdStr){
+    const preco = finParseNum(precoStr);
+    const qtd = superParseQtd(qtdStr);
+    if(!preco || !qtd || !qtd.valorBase) return null;
+    return { custoPorBase: preco / qtd.valorBase, familia: qtd.familia };
+  }
+  function calcUnidRecalcular(){
+    const el = document.getElementById('calcUnidResultado');
+    if(!el) return;
+    const a = calcUnidCustoPorBase(document.getElementById('calcUnidPrecoAInput').value, document.getElementById('calcUnidQtdAInput').value);
+    const b = calcUnidCustoPorBase(document.getElementById('calcUnidPrecoBInput').value, document.getElementById('calcUnidQtdBInput').value);
+    if(!a || !b){ el.innerHTML = '<p class="empty-state">Preencha preço e quantidade das duas opções (ex: 1kg, 700g, 500ml, 6un).</p>'; return; }
+    if(a.familia !== b.familia){ el.innerHTML = '<p class="empty-state">As duas quantidades precisam ser da mesma família (peso, volume ou unidade) pra comparar.</p>'; return; }
+    const unidLabel = a.familia === 'peso' ? '/g' : a.familia === 'volume' ? '/ml' : '/un';
+    const menor = a.custoPorBase <= b.custoPorBase ? 'A' : 'B';
+    const dif = Math.abs(a.custoPorBase - b.custoPorBase) / Math.max(a.custoPorBase, b.custoPorBase) * 100;
+    el.innerHTML = `<div class="fin-sim-veredito ok"><strong>Opção ${menor} sai mais barata</strong><span>${dif.toFixed(0)}% mais em conta por ${a.familia === 'unidade' ? 'unidade' : a.familia === 'peso' ? 'grama' : 'mililitro'}</span></div>
+      <div class="fin-sim-linhas" style="margin-top:10px;">
+        <div class="fin-sim-linha"><span>Opção A</span><b class="${menor === 'A' ? 'pos' : ''}">${finMoeda.format(a.custoPorBase * (a.familia === 'peso' ? 1000 : a.familia === 'volume' ? 1000 : 1))}${a.familia === 'unidade' ? unidLabel : (a.familia === 'peso' ? '/kg' : '/l')}</b></div>
+        <div class="fin-sim-linha"><span>Opção B</span><b class="${menor === 'B' ? 'pos' : ''}">${finMoeda.format(b.custoPorBase * (b.familia === 'peso' ? 1000 : b.familia === 'volume' ? 1000 : 1))}${b.familia === 'unidade' ? unidLabel : (b.familia === 'peso' ? '/kg' : '/l')}</b></div>
+      </div>`;
+  }
+  ['calcUnidPrecoAInput','calcUnidQtdAInput','calcUnidPrecoBInput','calcUnidQtdBInput'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('input', calcUnidRecalcular);
+  });
+
+  /* ---------- CÁLCULOS: Tempo até a meta ----------
+     Cruza a Timeline (valores) com as Finanças (sobra média dos próximos
+     meses) — as duas telas que hoje se ignoram. Só leitura, nada persiste
+     aqui; os dados de verdade continuam morando na Timeline e nas Finanças. */
+  function calcResumoMensalFinancas(plano, nMeses){
+    if(!plano || !plano.meses) return [];
+    const valorDe = (item) => {
+      if(item.refId && plano.valores && plano.valores[item.refId]) return Number(plano.valores[item.refId].valor) || 0;
+      return Number(item.valor) || 0;
+    };
+    const itensDaSecao = (mes, secao) => Object.values(mes.itens || {}).filter(i => i.secao === secao);
+    const somaSecao = (mes, secao) => itensDaSecao(mes, secao).reduce((s, i) => s + valorDe(i), 0);
+    const meses = Object.values(plano.meses).sort((a, b) => (a.ano - b.ano) || (a.mes - b.mes));
+    const taxa = Number(plano.taxaEmprestimo) || 0;
+    let sobraAnterior = 0, empurradoAnterior = 0;
+    return meses.slice(0, nMeses).map(mes => {
+      const mpEstimativa = -empurradoAnterior;
+      const cartaoTotal = somaSecao(mes, 'estimativas') + somaSecao(mes, 'renovacoes') + somaSecao(mes, 'parcelas') + somaSecao(mes, 'compras') + somaSecao(mes, 'aleatorios') + mpEstimativa;
+      const ganhos = ['dia10', 'dia20'].reduce((s, sec) => s + itensDaSecao(mes, sec).reduce((s2, i) => s2 + Math.max(0, valorDe(i)), 0), 0);
+      const gastosDia = ['dia10', 'dia20'].reduce((s, sec) => s + itensDaSecao(mes, sec).reduce((s2, i) => s2 + Math.min(0, valorDe(i)), 0), 0);
+      const posVale = sobraAnterior + somaSecao(mes, 'dia10') + cartaoTotal + somaSecao(mes, 'dia20');
+      const emprestimo = posVale < 50 ? (-posVale + 50) : 0;
+      const faturaFinal = posVale + emprestimo;
+      sobraAnterior = faturaFinal;
+      empurradoAnterior = emprestimo + emprestimo * taxa;
+      return { ano: mes.ano, mes: mes.mes, sobraMensal: ganhos + gastosDia + cartaoTotal };
+    });
+  }
+  async function renderCalcMeta(){
+    const el = document.getElementById('calcMetaResultado');
+    if(!el) return;
+    const [plano, marcosRaw] = await Promise.all([dbGet(userPath(FIN_PATH)), dbGet(userPath('/TimelineMarcos'))]);
+    const marcos = Object.values(marcosRaw || {}).filter(m => m.valor && !m.ganho).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+    if(!marcos.length){ el.innerHTML = '<p class="empty-state">Nenhum marco com valor a pagar na Timeline ainda.</p>'; return; }
+    const resumo = calcResumoMensalFinancas(plano, 6);
+    const positivos = resumo.filter(r => r.sobraMensal > 0);
+    const mediaSobra = positivos.length ? positivos.reduce((s, r) => s + r.sobraMensal, 0) / positivos.length : 0;
+    const hoje = new Date();
+    let html = mediaSobra > 0
+      ? `<p class="fin-sim-nota" style="margin-bottom:14px;">Sobra média projetada dos próximos meses: <b>${finFmt(mediaSobra)}</b>/mês (só conta meses no azul — os no vermelho ficam de fora da média, pra não subestimar).</p>`
+      : `<p class="fin-sim-nota" style="margin-bottom:14px;">Nenhum dos próximos 6 meses projeta sobra positiva no ritmo atual — as datas abaixo não dá pra estimar.</p>`;
+    html += '<div class="fin-sim-linhas">' + marcos.map(m => {
+      if(mediaSobra <= 0) return `<div class="fin-sim-linha"><span>${escapeHtml(m.nome)} — ${finFmt(m.valor)}</span><b>sem previsão</b></div>`;
+      const mesesNecessarios = Math.ceil(m.valor / mediaSobra);
+      const dataAlvo = new Date(hoje.getFullYear(), hoje.getMonth() + mesesNecessarios, 1);
+      return `<div class="fin-sim-linha"><span>${escapeHtml(m.nome)} — ${finFmt(m.valor)}</span><b class="pos">${FIN_MES_NOMES[dataAlvo.getMonth()]} ${dataAlvo.getFullYear()}</b></div>`;
+    }).join('') + '</div>';
+    el.innerHTML = html;
+  }
+
   /* ---------- MANUTENÇÃO (carro, casa, documentos — intervalo longo) ----------
      Mesmo modelo de pendência por frequência da Casa (ver casaAtividadeStatus),
      só que com intervalos de meses/anos em vez de dias/semanas. */
@@ -1770,4 +1851,200 @@
     document.getElementById('nosdoisModal').classList.remove('active');
     renderNosDois();
   });
+
+  /* ---------- ÁPICE: Clientes e A receber ----------
+     Os projetos em si moram no Planejamento (grupos → elementos → subelementos,
+     já pronto pra isso). Esta tela é só a lente comercial: quem deve o quê, e
+     quando. Marcar um recebimento como recebido lança um ganho no mês certo das
+     Finanças — só quando aquele mês já existe lá (Finanças sempre mantém os
+     próximos 12 meses criados; se ainda não existir, avisa em vez de tentar
+     recriar a lógica de geração de mês, que não é desta tela). */
+  // Compartilhado com o Supermercado (fechar compra lança o gasto do mesmo jeito).
+  async function finEncontrarMesPorData(dataStr){
+    const plano = await dbGet(userPath(FIN_PATH), { fresh:true });
+    const d = new Date(dataStr + 'T00:00:00');
+    if(!plano || !plano.meses || isNaN(d)) return null;
+    const ano = d.getFullYear(), mes = d.getMonth();
+    const entry = Object.entries(plano.meses).find(([, m]) => m.ano === ano && m.mes === mes);
+    return entry ? { mesId: entry[0], mes: entry[1] } : null;
+  }
+  // `secao` decide onde a linha aparece nas Finanças (ver FIN_PATH acima: dia10
+  // pra ganho batido com o dia do mês, compras pra gasto avulso). `valor` já
+  // vem com o sinal certo — positivo é ganho, negativo é gasto.
+  async function finLancarItem(dataStr, secao, nome, valor){
+    const achado = await finEncontrarMesPorData(dataStr);
+    if(!achado) return null;
+    const itemId = newId();
+    const ordem = Object.keys(achado.mes.itens || {}).length;
+    await dbPut(userPath(FIN_PATH + '/meses/' + achado.mesId + '/itens/' + itemId), { id:itemId, secao, nome, valor, refId:null, ordem });
+    dbCacheInvalidate(userPath(FIN_PATH)); // finState em memória (se a tela Finanças já abriu) fica defasado até reabrir
+    return { mesId: achado.mesId, itemId };
+  }
+  async function finRemoverItem(mesId, itemId){
+    if(!mesId || !itemId) return;
+    await dbDelete(userPath(FIN_PATH + '/meses/' + mesId + '/itens/' + itemId)).catch(() => {});
+  }
+
+  async function renderApiceClientes(){
+    const el = document.getElementById('apiceClientesList');
+    if(!el) return;
+    const clientes = await dbGet(userPath('/ApiceClientes')) || {};
+    const entries = Object.entries(clientes).sort((a, b) => a[1].nome.localeCompare(b[1].nome, 'pt-BR'));
+    if(!entries.length){ el.innerHTML = '<p class="empty-state">Nenhum cliente cadastrado ainda.</p>'; return; }
+    el.innerHTML = entries.map(([id, c]) => `
+      <div class="casa-card" data-id="${id}">
+        <div class="casa-card-main" data-apice-cliente-edit="${id}" style="cursor:pointer;">
+          <p class="casa-card-title">${escapeHtml(c.nome)}</p>
+          <div class="casa-card-meta">
+            ${c.contato ? `<span>${escapeHtml(c.contato)}</span>` : ''}
+            ${c.observacao ? `<span>· ${escapeHtml(c.observacao)}</span>` : ''}
+          </div>
+        </div>
+        <div class="casa-card-actions"><button data-apice-cliente-del="${id}">excluir</button></div>
+      </div>`).join('');
+    el.querySelectorAll('[data-apice-cliente-edit]').forEach(row => row.addEventListener('click', () => {
+      const id = row.getAttribute('data-apice-cliente-edit');
+      apiceAbrirClienteModal(id, clientes[id]);
+    }));
+    el.querySelectorAll('[data-apice-cliente-del]').forEach(btn => btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if(!await showConfirm('Excluir este cliente? Os recebimentos ligados a ele não são excluídos.')) return;
+      await dbDelete(userPath('/ApiceClientes/' + btn.getAttribute('data-apice-cliente-del')));
+      renderApiceClientes();
+      populateApiceClienteSelect();
+    }));
+  }
+  let apiceClienteEditandoId = null;
+  function apiceAbrirClienteModal(id, c){
+    apiceClienteEditandoId = id || null;
+    document.getElementById('apiceClienteModalTitle').textContent = id ? 'Editar cliente' : 'Novo cliente';
+    document.getElementById('apiceClienteNomeInput').value = c ? c.nome : '';
+    document.getElementById('apiceClienteContatoInput').value = c ? (c.contato || '') : '';
+    document.getElementById('apiceClienteObsInput').value = c ? (c.observacao || '') : '';
+    document.getElementById('apiceClienteModal').classList.add('active');
+    document.getElementById('apiceClienteNomeInput').focus();
+  }
+  document.getElementById('apiceAddClienteBtn').addEventListener('click', () => apiceAbrirClienteModal(null, null));
+  document.getElementById('apiceClienteCancelBtn').addEventListener('click', () => document.getElementById('apiceClienteModal').classList.remove('active'));
+  document.getElementById('apiceClienteOkBtn').addEventListener('click', async () => {
+    const nome = document.getElementById('apiceClienteNomeInput').value.trim();
+    if(!nome){ showAppMessage('Digite o nome do cliente.', 'error'); return; }
+    const id = apiceClienteEditandoId || newId();
+    await dbPut(userPath('/ApiceClientes/' + id), {
+      nome, contato: document.getElementById('apiceClienteContatoInput').value.trim(),
+      observacao: document.getElementById('apiceClienteObsInput').value.trim()
+    });
+    document.getElementById('apiceClienteModal').classList.remove('active');
+    renderApiceClientes();
+    populateApiceClienteSelect();
+  });
+
+  async function populateApiceClienteSelect(){
+    const sel = document.getElementById('apiceRecebimentoClienteInput');
+    if(!sel) return;
+    const clientes = await dbGet(userPath('/ApiceClientes')) || {};
+    const anterior = sel.value;
+    const entries = Object.entries(clientes).sort((a, b) => a[1].nome.localeCompare(b[1].nome, 'pt-BR'));
+    sel.innerHTML = entries.length
+      ? entries.map(([id, c]) => `<option value="${id}">${escapeHtml(c.nome)}</option>`).join('')
+      : '<option value="">Cadastre um cliente primeiro</option>';
+    if(entries.some(([id]) => id === anterior)) sel.value = anterior;
+  }
+
+  async function renderApiceRecebimentos(){
+    const listEl = document.getElementById('apiceRecebimentosList');
+    const resumoEl = document.getElementById('apiceResumo');
+    if(!listEl || !resumoEl) return;
+    const [recebimentosRaw, clientesRaw] = await Promise.all([
+      dbGet(userPath('/ApiceRecebimentos')), dbGet(userPath('/ApiceClientes'))
+    ]);
+    const recebimentos = recebimentosRaw || {};
+    const clientes = clientesRaw || {};
+    const nomeCliente = (id) => (clientes[id] && clientes[id].nome) || '—';
+
+    const entries = Object.entries(recebimentos).sort((a, b) => (a[1].dataPrevista || '').localeCompare(b[1].dataPrevista || ''));
+    const emAberto = entries.filter(([, r]) => r.status !== 'recebido');
+    const recebidos = entries.filter(([, r]) => r.status === 'recebido');
+    const totalAberto = emAberto.reduce((s, [, r]) => s + (Number(r.valor) || 0), 0);
+    const totalRecebidoMes = recebidos
+      .filter(([, r]) => (r.dataRecebido || '').slice(0, 7) === todayStr().slice(0, 7))
+      .reduce((s, [, r]) => s + (Number(r.valor) || 0), 0);
+
+    resumoEl.innerHTML = [
+      ['Em aberto', finFmt(totalAberto)],
+      ['Recebido este mês', finFmt(totalRecebidoMes)],
+      ['Recebimentos em aberto', emAberto.length]
+    ].map(([label, valor]) => '<div class="fech-stat"><b>' + valor + '</b><span>' + label + '</span></div>').join('');
+
+    if(!entries.length){ listEl.innerHTML = '<p class="empty-state">Nenhum recebimento cadastrado ainda.</p>'; return; }
+    const linha = ([id, r]) => `
+      <div class="casa-card ${r.status === 'recebido' ? 'casa-card-feita' : ''}" data-id="${id}">
+        <button type="button" class="casa-check" data-apice-receb-toggle="${id}" title="${r.status === 'recebido' ? 'Desmarcar' : 'Marcar como recebido'}">${r.status === 'recebido' ? '✓' : ''}</button>
+        <div class="casa-card-main">
+          <p class="casa-card-title">${escapeHtml(r.descricao)} <span style="font-weight:400; color:var(--text-dim);">— ${escapeHtml(nomeCliente(r.clienteId))}</span></p>
+          <div class="casa-card-meta">
+            <span>${finFmt(r.valor)}</span>
+            <span>· ${r.status === 'recebido' ? 'recebido em ' + (r.dataRecebido || '') : 'previsto pra ' + (r.dataPrevista || '—')}</span>
+          </div>
+        </div>
+        <div class="casa-card-actions"><button data-apice-receb-del="${id}">excluir</button></div>
+      </div>`;
+    listEl.innerHTML = (emAberto.length ? '<p class="super-secao-titulo">Em aberto</p>' + emAberto.map(linha).join('') : '') +
+      (recebidos.length ? '<p class="super-secao-titulo">Recebidos</p>' + recebidos.map(linha).join('') : '');
+
+    listEl.querySelectorAll('[data-apice-receb-toggle]').forEach(btn => btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-apice-receb-toggle');
+      const r = recebimentos[id];
+      if(r.status === 'recebido'){
+        await finRemoverItem(r.lancamentoMesId, r.lancamentoItemId);
+        await dbPatch(userPath('/ApiceRecebimentos/' + id), { status:'previsto', dataRecebido:null, lancamentoMesId:null, lancamentoItemId:null });
+      }else{
+        const hoje = todayStr();
+        const lancado = await finLancarItem(hoje, 'dia10', 'Ápice — ' + nomeCliente(r.clienteId) + ': ' + r.descricao, Math.abs(Number(r.valor) || 0));
+        await dbPatch(userPath('/ApiceRecebimentos/' + id), {
+          status:'recebido', dataRecebido: hoje,
+          lancamentoMesId: lancado ? lancado.mesId : null, lancamentoItemId: lancado ? lancado.itemId : null
+        });
+        showAppMessage(lancado ? 'Recebido — lançado como ganho nas Finanças deste mês.' : 'Recebido, mas o mês atual ainda não existe nas Finanças — abra a tela Finanças pra criar os próximos meses.', lancado ? 'success' : 'error');
+      }
+      renderApiceRecebimentos();
+    }));
+    listEl.querySelectorAll('[data-apice-receb-del]').forEach(btn => btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-apice-receb-del');
+      const r = recebimentos[id];
+      if(!await showConfirm('Excluir este recebimento?')) return;
+      if(r.status === 'recebido') await finRemoverItem(r.lancamentoMesId, r.lancamentoItemId);
+      await dbDelete(userPath('/ApiceRecebimentos/' + id));
+      renderApiceRecebimentos();
+    }));
+  }
+  let apiceRecebimentoEditandoId = null;
+  async function apiceAbrirRecebimentoModal(){
+    apiceRecebimentoEditandoId = null;
+    document.getElementById('apiceRecebimentoModalTitle').textContent = 'Novo recebimento';
+    document.getElementById('apiceRecebimentoDescInput').value = '';
+    document.getElementById('apiceRecebimentoValorInput').value = '';
+    document.getElementById('apiceRecebimentoDataInput').value = todayStr();
+    await populateApiceClienteSelect();
+    document.getElementById('apiceRecebimentoModal').classList.add('active');
+    document.getElementById('apiceRecebimentoDescInput').focus();
+  }
+  document.getElementById('apiceAddRecebimentoBtn').addEventListener('click', apiceAbrirRecebimentoModal);
+  document.getElementById('apiceRecebimentoCancelBtn').addEventListener('click', () => document.getElementById('apiceRecebimentoModal').classList.remove('active'));
+  document.getElementById('apiceRecebimentoOkBtn').addEventListener('click', async () => {
+    const clienteId = document.getElementById('apiceRecebimentoClienteInput').value;
+    if(!clienteId){ showAppMessage('Cadastre e escolha um cliente.', 'error'); return; }
+    const descricao = document.getElementById('apiceRecebimentoDescInput').value.trim();
+    if(!descricao){ showAppMessage('Digite uma descrição.', 'error'); return; }
+    const valor = finParseNum(document.getElementById('apiceRecebimentoValorInput').value);
+    const dataPrevista = document.getElementById('apiceRecebimentoDataInput').value;
+    await dbPut(userPath('/ApiceRecebimentos/' + newId()), { clienteId, descricao, valor, dataPrevista, status:'previsto', dataRecebido:null, lancamentoMesId:null, lancamentoItemId:null });
+    document.getElementById('apiceRecebimentoModal').classList.remove('active');
+    renderApiceRecebimentos();
+  });
+
+  async function renderApice(){
+    if(!document.getElementById('apiceRecebimentosList')) return;
+    await Promise.all([renderApiceClientes(), renderApiceRecebimentos()]);
+  }
 

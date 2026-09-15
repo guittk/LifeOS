@@ -69,16 +69,15 @@ Na prática:
 - Padrão recorrente de CRUD simples (despertadores, categorias, grupos, etc.): estado em memória (`let algo = {}`) + `criarX`/`atualizarX`/`excluirX` que já escrevem no Firebase + `renderXConfig()` que redesenha a lista e liga os listeners a cada render.
 - "Seed on first load": features que migraram de dado hardcoded (Finanças, Timeline, checklist de Acordar) semeiam um valor padrão só quando a coleção nunca existiu (`dbGet` retorna `null`) — não repetir isso se a coleção já existe mas está vazia.
 - `Salvar`/`Cancelar` com indicador de status: padrão usado em Rotina, Academia, Plano Alimentar, Finanças — edita em memória, só grava quando confirma.
-- Telas "em breve" (Supermercado, Cálculos, Empreendedorismo, Ápice): já têm nav-item, view e `VIEW_RENDERERS` vazio — é só preencher `renderX()` quando a feature for construída de verdade.
+- Telas "em breve" (Bateria, Planejamento): já funcionam de verdade, só sem um bom uso encontrado no dia a dia ainda — ficam no grupo "Em breve" da sidebar por pedido do usuário, não por falta de conteúdo.
 
 ## Views (`index.html`, `id="view-*"`)
 
 `hoje`, `storage` (Notas), `tarefas`, `monday` (Planejamento), `agenda`, `rotina`,
 `casa`, `manutencao`, `nosdois` (Nós dois), `financas`, `supermercado`, `calculos`,
-`decisoes`, `empreendedorismo`, `busca` (Perguntar ao LifeOS), `fluencia`, `academia`,
+`decisoes`, `empreendedorismo`, `apice`, `busca` (Perguntar ao LifeOS), `fluencia`, `academia`,
 `diario`, `retrospectiva`, `planoalimentar`, `objetivos`, `timelineobjetivos`, `visionboard`,
 `bateria`, `acordar` (sem entrada na sidebar — só abre quando um despertador toca),
-`apice` (única "em breve" sem conteúdo — só o botão que leva pro site),
 `config`.
 
 O `data-view` na sidebar é o mesmo sufixo do id da `<section>` e, em geral, do nome
