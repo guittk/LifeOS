@@ -825,7 +825,7 @@
     { rotulo:'Novo objetivo',      chaves:'objetivo meta',                     run: () => { goToView('objetivos'); document.getElementById('objAddBtn').click(); } },
     { rotulo:'Nova decisão',       chaves:'decisao decidir escolha',           run: () => { goToView('decisoes'); document.getElementById('decisaoAddBtn').click(); } },
     { rotulo:'Escrever no Diário', chaves:'diario escrever humor',             run: () => goToView('diario') },
-    { rotulo:'Perguntar ao LifeOS',chaves:'perguntar ia buscar semantica',     run: () => goToView('busca') },
+    { rotulo:'Chat',chaves:'chat perguntar ia buscar semantica',     run: () => goToView('busca') },
     { rotulo:'Configurações',      chaves:'config tema cor conta quadro',      run: () => goToView('config') },
     // Ápice não é uma view — o nav-item já abre o site direto (sem tela própria,
     // de propósito). O comando de busca faz o mesmo, em vez de tentar navegar

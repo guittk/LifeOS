@@ -1833,8 +1833,14 @@
   .busca-refs{ display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
   .busca-ref-chip{ background:var(--sage-soft); border:1px solid var(--sage-line); color:var(--sage); border-radius:20px; padding:3px 11px; font-size:11px; cursor:pointer; font-family:var(--mono); }
   .busca-ref-chip:hover{ background:var(--sage); color:#0f1216; }
-  .busca-chat-input-row{ display:flex; gap:10px; padding:14px 18px; border-top:1px solid var(--line); background:var(--bg-deep); }
-  .busca-chat-input-row input{ flex:1; }
+  .busca-chat-input-row{ display:flex; gap:10px; padding:14px 18px; border-top:1px solid var(--line); background:var(--bg-deep); align-items:stretch; }
+  /* .modal-text-input tem margin-bottom:20px (pensado pra campo empilhado de
+     modal) — aqui, lado a lado com o botão, isso empurrava só o input pra
+     baixo e desalinhava as duas caixas. Zerando a margem e esticando os dois
+     (align-items:stretch) pela mesma altura, o botão passa a acompanhar o
+     input em vez de ficar mais baixo/mais alto que ele. */
+  .busca-chat-input-row input{ flex:1; margin-bottom:0; }
+  .busca-chat-input-row .btn{ display:flex; align-items:center; flex-shrink:0; }
 
   /* ============================================================================
      CYBERPUNK CARTOON — acabamento e movimento
@@ -1981,6 +1987,17 @@
   .casa-status{ color: var(--text-dim); }
   .casa-status-pendente{ color: var(--gold); font-weight:500; }
 
+  .compra-item{ display:flex; align-items:center; gap:12px; padding:12px 4px; border-bottom:1px solid var(--line); }
+  .compra-item:last-child{ border-bottom:none; }
+  .compra-item.dragging{ opacity:0.4; }
+  .compra-drag{ color:var(--text-dim); font-size:14px; cursor:grab; padding:2px 4px; touch-action:none; flex-shrink:0; }
+  .compra-drag:active{ cursor:grabbing; }
+  /* Valor é o dado mais importante aqui — vem primeiro (esquerda) e em
+     destaque, mesma lógica de leitura de um preço numa prateleira. */
+  .compra-valor{ flex-shrink:0; min-width:92px; font-family:var(--serif); font-size:17px; font-weight:700; color:var(--text); }
+  .compra-main{ flex:1; min-width:0; }
+  .compra-nome{ font-size:14px; font-weight:600; color:var(--text); margin:0; }
+  .compra-meta{ font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-top:3px; display:flex; gap:8px; flex-wrap:wrap; }
   .compra-prioridade{ font-weight:600; }
   .compra-prioridade-alta{ color:var(--coral); }
   .compra-prioridade-media{ color:var(--gold); }

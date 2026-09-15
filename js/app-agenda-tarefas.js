@@ -1945,21 +1945,27 @@
   });
 
   /* ---------- COMPRAS (lista geral, qualquer coisa — não é o Supermercado) ----------
-     Lista simples, sem aninhamento: cada item tem prioridade (ordena a lista),
-     valor estimado (opcional) e descrição (opcional). Marcar como comprado
-     lança o gasto nas Finanças, mesmo padrão de Presentes/Supermercado. */
+     Lista simples, sem aninhamento: cada item tem prioridade (só um rótulo —
+     quem ordena a lista é o próprio usuário, arrastando pela alça, mesmo
+     padrão da Timeline de Objetivos) e valor estimado em destaque à esquerda,
+     que é o dado mais importante aqui. Sem checkbox de "comprado" — bastar
+     excluir o item quando comprar já resolve, sem duplicar informação. */
   const COMPRA_PRIORIDADE_LABEL = { alta:'Alta', media:'Média', baixa:'Baixa' };
-  const COMPRA_PRIORIDADE_ORDEM = { alta:0, media:1, baixa:2 };
+  let compraDragId = null;
+
+  function compraOrdenados(dados){
+    return Object.entries(dados).sort((a, b) => (a[1].ordem || 0) - (b[1].ordem || 0));
+  }
 
   function compraItemHtml(id, c){
     return `
-      <div class="casa-card ${c.comprado ? 'casa-card-feita' : ''}" data-id="${id}">
-        <button type="button" class="casa-check" data-compra-done="${id}" title="${c.comprado ? 'Desmarcar' : 'Marcar como comprado'}">${c.comprado ? '✓' : ''}</button>
-        <div class="casa-card-main">
-          <p class="casa-card-title">${escapeHtml(c.nome)}</p>
-          <div class="casa-card-meta">
+      <div class="compra-item" data-id="${id}">
+        <span class="compra-drag" draggable="true" title="Arrastar pra reordenar">⠿</span>
+        <div class="compra-valor">${c.valor ? finFmt(c.valor) : '—'}</div>
+        <div class="compra-main">
+          <p class="compra-nome">${escapeHtml(c.nome)}</p>
+          <div class="compra-meta">
             <span class="compra-prioridade compra-prioridade-${c.prioridade}">${COMPRA_PRIORIDADE_LABEL[c.prioridade] || c.prioridade}</span>
-            ${c.valor ? `<span>· ${finFmt(c.valor)}</span>` : ''}
             ${c.descricao ? `<span>· ${escapeHtml(c.descricao)}</span>` : ''}
           </div>
         </div>
@@ -1974,32 +1980,10 @@
     const el = document.getElementById('comprasList');
     if(!el) return;
     const dados = await dbGet(userPath('/Compras')) || {};
-    const entries = Object.entries(dados).sort((a, b) => {
-      const compA = a[1].comprado ? 1 : 0, compB = b[1].comprado ? 1 : 0;
-      if(compA !== compB) return compA - compB; // pendentes primeiro
-      const pa = COMPRA_PRIORIDADE_ORDEM[a[1].prioridade] ?? 1, pb = COMPRA_PRIORIDADE_ORDEM[b[1].prioridade] ?? 1;
-      return pa - pb || (a[1].criadoEm || '').localeCompare(b[1].criadoEm || '');
-    });
+    const entries = compraOrdenados(dados);
     if(!entries.length){ el.innerHTML = '<p class="empty-state">Nada na lista ainda. Toque em "+ Nova compra" pra anotar o que precisa comprar.</p>'; return; }
     el.innerHTML = entries.map(([id, c]) => compraItemHtml(id, c)).join('');
 
-    el.querySelectorAll('[data-compra-done]').forEach(btn => btn.addEventListener('click', async () => {
-      const id = btn.getAttribute('data-compra-done');
-      const c = dados[id];
-      if(!c) return;
-      if(!c.comprado){
-        const hoje = todayStr();
-        const lancado = c.valor > 0 ? await finLancarItem(hoje, 'compras', c.nome, -c.valor) : null;
-        await dbPatch(userPath('/Compras/' + id), {
-          comprado:true, lancamentoMesId: lancado ? lancado.mesId : null, lancamentoItemId: lancado ? lancado.itemId : null
-        });
-        if(c.valor > 0) showAppMessage(lancado ? 'Comprado — lançado nas Finanças deste mês.' : 'Comprado, mas o mês atual ainda não existe nas Finanças.', lancado ? 'success' : 'error');
-      } else {
-        await finRemoverItem(c.lancamentoMesId, c.lancamentoItemId);
-        await dbPatch(userPath('/Compras/' + id), { comprado:false, lancamentoMesId:null, lancamentoItemId:null });
-      }
-      await renderCompras();
-    }));
     el.querySelectorAll('[data-compra-edit]').forEach(btn => btn.addEventListener('click', () => {
       const id = btn.getAttribute('data-compra-edit');
       compraAbrirModal(id, dados[id]);
@@ -2007,10 +1991,40 @@
     el.querySelectorAll('[data-compra-del]').forEach(btn => btn.addEventListener('click', async () => {
       const id = btn.getAttribute('data-compra-del');
       if(!await showConfirm('Excluir "' + (dados[id].nome || 'esta compra') + '"?')) return;
-      if(dados[id].comprado) await finRemoverItem(dados[id].lancamentoMesId, dados[id].lancamentoItemId);
       await dbDelete(userPath('/Compras/' + id));
       await renderCompras();
     }));
+
+    // Arrastar pela alça reordena — mesmo padrão da Timeline de Objetivos.
+    el.querySelectorAll('.compra-drag').forEach(handle => {
+      handle.addEventListener('dragstart', (e) => {
+        const item = handle.closest('.compra-item');
+        compraDragId = item.getAttribute('data-id');
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      handle.addEventListener('dragend', async () => {
+        const item = handle.closest('.compra-item');
+        item.classList.remove('dragging');
+        compraDragId = null;
+        const linhas = Array.from(el.querySelectorAll('.compra-item'));
+        await Promise.all(linhas.map((row, i) => dbPatchSilent(userPath('/Compras/' + row.getAttribute('data-id')), { ordem: i })));
+        await renderCompras();
+      });
+    });
+    el.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if(!compraDragId) return;
+      const dragEl = el.querySelector('.compra-item.dragging');
+      if(!dragEl) return;
+      const after = Array.from(el.querySelectorAll('.compra-item:not(.dragging)')).reduce((closest, row) => {
+        const box = row.getBoundingClientRect();
+        const offset = e.clientY - box.top - box.height / 2;
+        if(offset < 0 && offset > closest.offset) return { offset, element: row };
+        return closest;
+      }, { offset: -Infinity, element: null }).element;
+      if(after == null) el.appendChild(dragEl); else el.insertBefore(dragEl, after);
+    });
   }
 
   let compraEditandoId = null;
@@ -2033,8 +2047,12 @@
     const valor = finParseNum(document.getElementById('compraValorInput').value) || null;
     const descricao = document.getElementById('compraDescricaoInput').value.trim();
     const patch = { nome, prioridade, valor, descricao };
-    if(compraEditandoId) await dbPatch(userPath('/Compras/' + compraEditandoId), patch);
-    else await dbPut(userPath('/Compras/' + newId()), { ...patch, comprado:false, criadoEm: new Date().toISOString() });
+    if(compraEditandoId){
+      await dbPatch(userPath('/Compras/' + compraEditandoId), patch);
+    } else {
+      const dados = await dbGet(userPath('/Compras')) || {};
+      await dbPut(userPath('/Compras/' + newId()), { ...patch, ordem: Object.keys(dados).length, criadoEm: new Date().toISOString() });
+    }
     document.getElementById('compraModal').classList.remove('active');
     await renderCompras();
   });
