@@ -135,8 +135,8 @@
           <span>${total ? total + ' ponto' + (total === 1 ? '' : 's') + ' · progresso médio' : 'sem pontos ainda'}</span>
           <span>${pct}%</span>
           <span class="obj-foot-actions">
-            <button data-edit-obj="${id}">editar</button>
-            <button data-del-obj="${id}">excluir</button>
+            <button data-edit-obj="${id}" title="Editar">✏️</button>
+            <button data-del-obj="${id}" title="Excluir">🗑️</button>
           </span>
         </div>
         <p class="obj-group-sub-label">Pontos menores desse objetivo</p>
@@ -151,8 +151,8 @@
               <div class="obj-ponto-top">
                 <span class="obj-ponto-nome">${escapeHtml(p.nome)}</span>
                 <span class="obj-ponto-actions">
-                  <button data-edit-ponto="${pid}" data-obj-id="${id}">editar</button>
-                  <button data-del-ponto="${pid}" data-obj-id="${id}">excluir</button>
+                  <button data-edit-ponto="${pid}" data-obj-id="${id}" title="Editar">✏️</button>
+                  <button data-del-ponto="${pid}" data-obj-id="${id}" title="Excluir">🗑️</button>
                 </span>
               </div>
               ${p.descricao ? `<p class="obj-ponto-desc">${escapeHtml(p.descricao)}</p>` : ''}

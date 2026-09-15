@@ -521,7 +521,7 @@
           <span class="gaveta-count">${groupTasks.length} ${groupTasks.length===1?'tarefa':'tarefas'} · ${pending} pendente${pending===1?'':'s'}</span>
           ${isUngrouped ? '' : `<div class="gaveta-actions">
             <button data-rename-tgroup="${gid}">renomear</button>
-            <button data-del-tgroup="${gid}">excluir</button>
+            <button data-del-tgroup="${gid}" title="Excluir">🗑️</button>
           </div>`}
         </div>
         <div class="gaveta-body">
@@ -534,7 +534,7 @@
                 <td>${prazoPillHtml(t.date)}</td>
                 <td style="${t.done?'text-decoration:line-through;color:var(--text-dim);':''}">${escapeHtml(t.name)}</td>
                 <td><span class="status-pill ${t.done?'status-concluido':'status-fazer'}" data-toggle-task="${id}" style="cursor:pointer;">${t.done?'concluído':'a fazer'}</span></td>
-                <td><button class="task-del-btn" data-del-task="${id}">excluir</button></td>
+                <td><button class="task-del-btn" data-del-task="${id}" title="Excluir">🗑️</button></td>
               </tr>`).join('')}
             </tbody>
           </table>` : '<p class="gaveta-empty">Nenhuma tarefa neste grupo ainda. Use "+ Nova tarefa" e escolha este grupo.</p>'}
@@ -1332,7 +1332,7 @@
             ${it.origem === 'fixo' ? '<span>· fixo</span>' : ''}
           </div>
         </div>
-        <div class="casa-card-actions"><button data-super-del="${id}">excluir</button></div>
+        <div class="casa-card-actions"><button data-super-del="${id}" title="Excluir">🗑️</button></div>
       </div>`;
   }
 
@@ -1539,7 +1539,7 @@
             ${f.quantidade ? `<span>· ${escapeHtml(f.quantidade)}</span>` : ''}
           </div>
         </div>
-        <div class="casa-card-actions"><button data-super-fixo-del="${id}">excluir</button></div>
+        <div class="casa-card-actions"><button data-super-fixo-del="${id}" title="Excluir">🗑️</button></div>
       </div>`;
   }
   async function renderSuperFixos(){
@@ -1721,8 +1721,8 @@
         <div class="presente-ocasiao-head">
           <div class="presente-pessoa-meta">${meta}</div>
           <div class="presente-pessoa-actions">
-            <button data-presente-ocasiao-edit="${pessoaId}|${ocId}">editar</button>
-            <button data-presente-ocasiao-del="${pessoaId}|${ocId}">excluir</button>
+            <button data-presente-ocasiao-edit="${pessoaId}|${ocId}" title="Editar">✏️</button>
+            <button data-presente-ocasiao-del="${pessoaId}|${ocId}" title="Excluir">🗑️</button>
           </div>
         </div>
         <div class="presente-ideias-list">
@@ -1757,8 +1757,8 @@
         <div class="presente-pessoa-head">
           <p class="presente-pessoa-nome">${escapeHtml(p.nome)}</p>
           <div class="presente-pessoa-actions">
-            <button data-presente-pessoa-edit="${id}">editar</button>
-            <button data-presente-pessoa-del="${id}">excluir</button>
+            <button data-presente-pessoa-edit="${id}" title="Editar">✏️</button>
+            <button data-presente-pessoa-del="${id}" title="Excluir">🗑️</button>
           </div>
         </div>
         <div class="presente-ocasioes-list">
@@ -1970,8 +1970,8 @@
           </div>
         </div>
         <div class="casa-card-actions">
-          <button data-compra-edit="${id}">editar</button>
-          <button data-compra-del="${id}">excluir</button>
+          <button data-compra-edit="${id}" title="Editar">✏️</button>
+          <button data-compra-del="${id}" title="Excluir">🗑️</button>
         </div>
       </div>`;
   }

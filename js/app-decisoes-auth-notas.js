@@ -67,8 +67,8 @@
             </div>
           </div>
           <div class="dec-actions">
-            <button data-edit-decisao="${id}">editar</button>
-            <button data-del-decisao="${id}">excluir</button>
+            <button data-edit-decisao="${id}" title="Editar">✏️</button>
+            <button data-del-decisao="${id}" title="Excluir">🗑️</button>
           </div>
         </div>
         ${d.contexto ? `<p class="dec-contexto">${escapeHtml(d.contexto)}</p>` : ''}
@@ -87,8 +87,8 @@
               ${(o.pros||[]).length ? `<ul class="dec-opcao-lista pros">${(o.pros||[]).map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>` : ''}
               ${(o.contras||[]).length ? `<ul class="dec-opcao-lista contras">${(o.contras||[]).map(c => `<li>${escapeHtml(c)}</li>`).join('')}</ul>` : ''}
               <div class="dec-opcao-foot">
-                <button data-edit-opcao="${oid}" data-dec-id="${id}">editar</button>
-                <button data-del-opcao="${oid}" data-dec-id="${id}">excluir</button>
+                <button data-edit-opcao="${oid}" data-dec-id="${id}" title="Editar">✏️</button>
+                <button data-del-opcao="${oid}" data-dec-id="${id}" title="Excluir">🗑️</button>
               </div>
             </div>`).join('')}
         </div>

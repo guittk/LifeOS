@@ -576,8 +576,8 @@
           </div>
         </div>
         <div class="casa-card-actions">
-          <button data-edit-atividade="${id}">editar</button>
-          <button data-del-atividade="${id}">excluir</button>
+          <button data-edit-atividade="${id}" title="Editar">✏️</button>
+          <button data-del-atividade="${id}" title="Excluir">🗑️</button>
         </div>
       </div>`;
     }).join('');
@@ -652,7 +652,7 @@
           <p class="casa-card-title" style="white-space:pre-wrap;">${escapeHtml(r.texto)}</p>
           ${r.responsavel ? `<div class="casa-card-meta"><span>Responsável: ${escapeHtml(r.responsavel)}</span></div>` : ''}
         </div>
-        <div class="casa-card-actions"><button data-del-regra="${id}">excluir</button></div>
+        <div class="casa-card-actions"><button data-del-regra="${id}" title="Excluir">🗑️</button></div>
       </div>`).join('');
     el.querySelectorAll('[data-del-regra]').forEach(btn => btn.addEventListener('click', async () => {
       if(!await showConfirm('Excluir esta regra?')) return;
@@ -692,7 +692,7 @@
           ${er.corrigido
             ? `<button data-reabrir-erro="${id}">reabrir</button>`
             : `<button data-corrigir-erro="${id}">✓ corrigido</button>`}
-          <button data-del-erro="${id}">excluir</button>
+          <button data-del-erro="${id}" title="Excluir">🗑️</button>
         </div>
       </div>`;
   }

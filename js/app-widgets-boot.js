@@ -583,8 +583,8 @@
         ${(p.oQueEstudar && p.oQueEstudar.length) ? `<div class="poss-estudar">O que estudar:<ul>${p.oQueEstudar.map(e => `<li>${escapeHtml(e)}</li>`).join('')}</ul></div>` : ''}
         ${p.notas ? `<div class="poss-notas"><b>Nota de ${escapeHtml(POSS_PESSOA_LABEL[p.pessoa] || p.pessoa)}</b>${escapeHtml(p.notas)}</div>` : ''}
         <div class="poss-actions">
-          <button data-poss-edit="${id}">editar</button>
-          <button data-poss-del="${id}">excluir</button>
+          <button data-poss-edit="${id}" title="Editar">✏️</button>
+          <button data-poss-del="${id}" title="Excluir">🗑️</button>
         </div>
       </div>`;
   }
