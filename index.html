@@ -864,7 +864,7 @@
   <section class="view" id="view-monday">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Organizar</p>
+        <p class="eyebrow">Em breve</p>
         <h1 class="view-title">Planejamento</h1>
         <p class="view-desc">Grupos, elementos e subelementos com status, prioridade, responsável e prazo — arraste pra reorganizar.</p>
       </div>
@@ -881,7 +881,7 @@
   <section class="view" id="view-agenda">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Organizar</p>
+        <p class="eyebrow">Consultar</p>
         <h1 class="view-title">Agenda</h1>
         <p class="view-desc">Seus eventos em ordem cronológica a partir de hoje, divididos por semana e depois por mês. Importe do Google Agenda exportando um arquivo .ics (Configurações → Importar/Exportar, no Google Calendar).</p>
       </div>
@@ -900,7 +900,7 @@
   <section class="view" id="view-presentes">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Organizar</p>
+        <p class="eyebrow">Configurar</p>
         <h1 class="view-title">Presentes &amp; datas</h1>
         <p class="view-desc">Aniversários e ideias de presente anotadas o ano todo — pra nunca chegar na última hora sem ideia nenhuma.</p>
       </div>
@@ -937,7 +937,7 @@
   <section class="view" id="view-rotina">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Organizar</p>
+        <p class="eyebrow">Configurar</p>
         <h1 class="view-title">Rotina</h1>
         <p class="view-desc">Configure o que você faz em cada horário do seu dia. O TODAY usa essa rotina para saber em que momento do dia você está e quantas horas livres restam.</p>
       </div>
@@ -1002,7 +1002,7 @@
   <section class="view" id="view-manutencao">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Organizar</p>
+        <p class="eyebrow">Configurar</p>
         <h1 class="view-title">Manutenção</h1>
         <p class="view-desc">Coisas de intervalo longo, caras de esquecer — carro, casa, documentos.</p>
       </div>
@@ -1155,7 +1155,7 @@
   <section class="view" id="view-objetivos">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Evoluir</p>
+        <p class="eyebrow">Organizar</p>
         <h1 class="view-title">Objetivos</h1>
         <p class="view-desc">Onde você quer chegar — e os pontos menores que você vai conquistando pelo caminho até lá.</p>
       </div>
@@ -1167,16 +1167,17 @@
     </div>
   </section>
 
-  <!-- TIMELINE DE OBJETIVOS (estática, só pra visualizar a ordem — sem edição) -->
+  <!-- TIMELINE DE OBJETIVOS (visualização por padrão; edição é opt-in, igual Notas) -->
   <section class="view" id="view-timelineobjetivos">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Evoluir</p>
+        <p class="eyebrow">Consultar</p>
         <h1 class="view-title">Timeline de Objetivos</h1>
-        <p class="view-desc">A ordem dos grandes marcos, um depois do outro. Arraste pela alça pra reordenar.</p>
+        <p class="view-desc">A ordem dos grandes marcos, um depois do outro.</p>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn btn-primary btn-sm" id="timelineAddBtn">+ Novo marco</button>
+        <button type="button" class="board-toggle-btn" id="timelineModoToggleBtn" title="Alternar entre ver e editar os marcos">👁️ Ver</button>
+        <button class="btn btn-primary btn-sm hidden" id="timelineAddBtn">+ Novo marco</button>
       </div>
     </div>
 
@@ -1305,7 +1306,7 @@
   <section class="view" id="view-calculos">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Organizar</p>
+        <p class="eyebrow">Consultar</p>
         <h1 class="view-title">Cálculos</h1>
         <p class="view-desc">Calculadora de rescisão.</p>
       </div>
@@ -1364,7 +1365,7 @@
   <section class="view" id="view-empreendedorismo">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Organizar</p>
+        <p class="eyebrow">Consultar</p>
         <h1 class="view-title">Empreendedorismo</h1>
         <p class="view-desc">Ideias e caminhos de carreira em análise, com o que cada um pesa de verdade.</p>
       </div>
@@ -1449,7 +1450,7 @@
   <section class="view" id="view-decisoes">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Evoluir</p>
+        <p class="eyebrow">Organizar</p>
         <h1 class="view-title">Central de Decisões</h1>
         <p class="view-desc">Registre decisões importantes com contexto, opções e critérios — meses depois, entenda exatamente por que decidiu o que decidiu.</p>
       </div>
@@ -1477,7 +1478,7 @@
   <section class="view" id="view-busca">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Evoluir</p>
+        <p class="eyebrow">Organizar</p>
         <h1 class="view-title">Perguntar ao LifeOS</h1>
         <p class="view-desc">Converse com sua própria vida — pergunte sobre tarefas, capturas, objetivos, diário, agenda e decisões, em linguagem natural.</p>
       </div>
@@ -1500,7 +1501,7 @@
   <section class="view" id="view-visionboard">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Evoluir</p>
+        <p class="eyebrow">Consultar</p>
         <h1 class="view-title">Vision Board</h1>
         <p class="view-desc">Adicione imagens que representam onde você quer chegar — o board se monta sozinho, em colagem, com tamanhos e ângulos variados.</p>
       </div>
@@ -1546,7 +1547,7 @@
   <section class="view" id="view-fluencia">
     <div class="view-head" style="margin-bottom:12px;">
       <div>
-        <p class="eyebrow">Evoluir</p>
+        <p class="eyebrow">Organizar</p>
         <h1 class="view-title">Fluência</h1>
         <p class="view-desc" id="fluenciaEmbedNote">Carregando...</p>
       </div>
@@ -1561,7 +1562,7 @@
   <section class="view" id="view-bateria">
     <div class="view-head" style="margin-bottom:12px;">
       <div>
-        <p class="eyebrow">Evoluir</p>
+        <p class="eyebrow">Em breve</p>
         <h1 class="view-title">Bateria</h1>
         <p class="view-desc" id="bateriaEmbedNote">Carregando...</p>
       </div>
@@ -1575,7 +1576,7 @@
   <section class="view" id="view-academia">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Evoluir</p>
+        <p class="eyebrow">Configurar</p>
         <h1 class="view-title">Academia</h1>
         <p class="view-desc">Monte seu cronograma semanal de treino. O que estiver marcado para hoje entra na sua % de conclusão em "Hoje".</p>
       </div>
@@ -1619,7 +1620,7 @@
   <section class="view" id="view-diario">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Evoluir</p>
+        <p class="eyebrow">Organizar</p>
         <h1 class="view-title">Diário</h1>
         <p class="view-desc">Seu registro pessoal — só suas palavras, do jeito que você escreveu.</p>
       </div>
@@ -1661,7 +1662,7 @@
   <section class="view" id="view-retrospectiva">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Evoluir</p>
+        <p class="eyebrow">Consultar</p>
         <h1 class="view-title">Retrospectiva</h1>
         <p class="view-desc">Os últimos 7 dias, com o que já está registrado — nada novo pra preencher.</p>
       </div>
@@ -1679,7 +1680,7 @@
   <section class="view" id="view-planoalimentar">
     <div class="view-head">
       <div>
-        <p class="eyebrow">Evoluir</p>
+        <p class="eyebrow">Configurar</p>
         <h1 class="view-title">Plano Alimentar</h1>
         <p class="view-desc">Monte suas refeições de cada dia da semana — nome, horário e os alimentos com as quantidades.</p>
       </div>

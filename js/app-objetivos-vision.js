@@ -405,8 +405,18 @@
   ];
   let timelineMarcos = {};
   let timelineDragId = null;
+  const TIMELINE_MODO_KEY = 'lifeos-timeline-modo';
+  // Padrão igual ao de Notas: fica só olhando por padrão, edição é opt-in.
+  let timelineModoEdicao = localStorage.getItem(TIMELINE_MODO_KEY) === 'edicao';
   function timelineOrdenados(){
     return Object.values(timelineMarcos).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  }
+  // O input de valor usa fonte monoespaçada, então 1 caractere = 1ch — dá pra
+  // encolher/esticar o campo (ou a pill de visualização) pro tamanho exato do texto.
+  function timelineAjustarLarguraValor(el){
+    const texto = 'value' in el ? el.value : el.textContent;
+    const len = Math.max((texto || el.placeholder || '').length, 4);
+    el.style.width = (len + 2) + 'ch';
   }
   async function renderTimelineObjetivos(){
     const list = document.getElementById('timelineList');
@@ -421,7 +431,24 @@
     }
     const itens = timelineOrdenados();
     if(!itens.length){
-      list.innerHTML = '<p class="empty-state">Nenhum marco ainda. Clique em "+ Novo marco" pra começar a traçar o caminho.</p>';
+      list.innerHTML = '<p class="empty-state">Nenhum marco ainda. Clique em "Editar" e depois "+ Novo marco" pra começar a traçar o caminho.</p>';
+      return;
+    }
+    if(!timelineModoEdicao){
+      // Visualização: só o essencial. A cor da pill já diz se é valor a pagar
+      // (coral) ou a receber (verde) — sem precisar de uma tag "Paga/Recebe" —
+      // e prazo/valor somem quando o marco não tem essa informação.
+      list.innerHTML = itens.map((m, i) => `
+        <li class="obj-timeline-item" data-marco-id="${m.id}">
+          <span class="obj-timeline-num">${i + 1}</span>
+          <span class="obj-timeline-nome-view">${escapeHtml(m.nome || '(sem nome)')}</span>
+          ${(m.prazo || m.valor != null) ? `
+          <div class="obj-timeline-meta">
+            ${m.prazo ? `<span class="obj-timeline-prazo-view">${escapeHtml(m.prazo)}</span>` : ''}
+            ${m.valor != null ? `<span class="obj-timeline-valor-view${m.ganho ? ' ganho' : ''}">${finFmtNum(m.valor)}</span>` : ''}
+          </div>` : ''}
+        </li>`).join('');
+      list.querySelectorAll('.obj-timeline-valor-view').forEach(timelineAjustarLarguraValor);
       return;
     }
     list.innerHTML = itens.map((m, i) => `
@@ -446,6 +473,8 @@
       inp.addEventListener('change', () => timelineAtualizar(inp.getAttribute('data-marco-prazo'), { prazo: inp.value || null }));
     });
     list.querySelectorAll('[data-marco-valor]').forEach(inp => {
+      timelineAjustarLarguraValor(inp);
+      inp.addEventListener('input', () => timelineAjustarLarguraValor(inp));
       inp.addEventListener('change', async () => {
         const id = inp.getAttribute('data-marco-valor');
         const texto = inp.value.trim();
@@ -512,6 +541,20 @@
     timelineMarcos[id] = { ...timelineMarcos[id], ...patch };
     await dbPatchSilent(userPath('/TimelineMarcos/' + id), patch);
   }
+  function timelineAtualizarBotaoModo(){
+    const btn = document.getElementById('timelineModoToggleBtn');
+    if(!btn) return;
+    btn.textContent = timelineModoEdicao ? '✏️ Editar' : '👁️ Ver';
+    btn.classList.toggle('on', timelineModoEdicao);
+    document.getElementById('timelineAddBtn').classList.toggle('hidden', !timelineModoEdicao);
+  }
+  document.getElementById('timelineModoToggleBtn').addEventListener('click', () => {
+    timelineModoEdicao = !timelineModoEdicao;
+    localStorage.setItem(TIMELINE_MODO_KEY, timelineModoEdicao ? 'edicao' : 'visualizacao');
+    timelineAtualizarBotaoModo();
+    renderTimelineObjetivos();
+  });
+  timelineAtualizarBotaoModo();
   document.getElementById('timelineAddBtn').addEventListener('click', async () => {
     const id = newId();
     const ordem = timelineOrdenados().length;
