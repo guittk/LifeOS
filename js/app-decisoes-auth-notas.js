@@ -1237,11 +1237,23 @@
   function notasFecharPops(){ document.querySelectorAll('.board-card-pop, .color-picker').forEach(el => el.remove()); }
 
   const NOTAS_ICONES = ['📝','💡','📌','✅','📋','📚','🎯','💰','🏠','🍽️','🎬','🎮','💻','🔧','🌱','❤️','⭐','🗓️','✈️','🎨'];
-  function notasAbrirIconePopover(anchorEl, onEscolher){
+  // Pede pra IA escolher, dentre os ícones fixos acima, o que melhor representa
+  // o conteúdo atual da nota (título + itens) — usado pelo botão de refresh do popover.
+  async function notasSugerirIcone(nota){
+    const contexto = ((nota.titulo || '') + '\n' + notasParaMarkdown(nota)).trim();
+    const system = 'Você escolhe, dentre uma lista fixa de emojis, o que melhor representa o conteúdo ' +
+      'de uma nota pessoal. Responda só com o emoji escolhido, sem nenhum texto junto.';
+    const prompt = 'Ícones disponíveis: ' + NOTAS_ICONES.join(' ') + '\n\nConteúdo da nota:\n' + (contexto || '(nota vazia)');
+    const resposta = (await chamarIA(system, prompt)).trim();
+    return NOTAS_ICONES.find(ic => resposta.includes(ic)) || null;
+  }
+  function notasAbrirIconePopover(anchorEl, nota, onEscolher){
     notasFecharPops();
     const pop = document.createElement('div');
     pop.className = 'board-card-pop notas-icone-pop';
-    pop.innerHTML = NOTAS_ICONES.map(ic => '<button type="button" class="notas-icone-opcao" data-icone="' + ic + '">' + ic + '</button>').join('');
+    pop.innerHTML =
+      '<button type="button" class="notas-icone-auto" data-icone-auto="1" title="Sugerir ícone automaticamente com IA, de acordo com o conteúdo da nota">🔄 Sugerir</button>' +
+      NOTAS_ICONES.map(ic => '<button type="button" class="notas-icone-opcao" data-icone="' + ic + '">' + ic + '</button>').join('');
     document.body.appendChild(pop);
     const rect = anchorEl.getBoundingClientRect();
     pop.style.left = Math.min(rect.left + window.scrollX, window.innerWidth - 210) + 'px';
@@ -1250,6 +1262,20 @@
     function onDoc(e){ if(!pop.contains(e.target) && e.target !== anchorEl) fechar(); }
     pop.querySelectorAll('[data-icone]').forEach(btn => {
       btn.addEventListener('click', () => { fechar(); onEscolher(btn.getAttribute('data-icone')); });
+    });
+    const autoBtn = pop.querySelector('[data-icone-auto]');
+    autoBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      autoBtn.disabled = true;
+      autoBtn.textContent = '⏳ Analisando...';
+      try{
+        const icone = await notasSugerirIcone(nota);
+        if(icone){ fechar(); onEscolher(icone); return; }
+        autoBtn.textContent = '⚠️ Não achei um ícone';
+      } catch(err){
+        autoBtn.textContent = '⚠️ ' + (err.message || 'Erro na IA');
+      }
+      setTimeout(() => { if(!pop.isConnected) return; autoBtn.textContent = '🔄 Sugerir'; autoBtn.disabled = false; }, 2200);
     });
     setTimeout(() => document.addEventListener('click', onDoc), 10);
   }
@@ -1341,7 +1367,7 @@
       const iconeBtn = card.querySelector('[data-icone-item]');
       if(iconeBtn) iconeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        notasAbrirIconePopover(iconeBtn, (icone) => { notasUpdateNota(notaId, { icone }).then(notasRender); });
+        notasAbrirIconePopover(iconeBtn, nota, (icone) => { notasUpdateNota(notaId, { icone }).then(notasRender); });
       });
 
       if(notasModoEdicao && !notasModoSelecao){

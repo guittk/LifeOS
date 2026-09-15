@@ -2175,7 +2175,7 @@
     border: var(--bw) solid color-mix(in srgb, var(--card-cor, var(--text-dim)) 45%, var(--outline));
     position:relative; transition: box-shadow .15s ease;
   }
-  .board-card:hover{ box-shadow:3px 3px 0 var(--shadow); }
+  .board-card:hover{ box-shadow:3px 3px 0 color-mix(in srgb, var(--card-cor, var(--text-dim)) 45%, var(--outline)); }
   .board-card.arrastando{ opacity:.35; }
   .board-card.alvo-drop{ outline:2px dashed var(--sage); outline-offset:3px; }
   .board-card.flash-new{ animation: notas-flash-new 1400ms ease-out; }
@@ -2209,6 +2209,13 @@
     border:none; background:none; cursor:pointer; font-size:18px; line-height:1; padding:6px; border-radius:7px;
   }
   .notas-icone-opcao:hover{ background:var(--hover); }
+  .notas-icone-auto{
+    grid-column:1 / -1; display:flex; align-items:center; justify-content:center; gap:5px;
+    border:none; background:var(--surface); color:var(--text-mut); font-family:var(--sans);
+    font-size:11px; font-weight:600; padding:6px; border-radius:6px; cursor:pointer; margin-bottom:3px;
+  }
+  .notas-icone-auto:hover:not(:disabled){ background:var(--hover); color:var(--text); }
+  .notas-icone-auto:disabled{ cursor:default; opacity:.75; }
 
   .board-card-corpo{ font-family:var(--sans); font-size:13px; line-height:1.6; color:var(--text-mut); }
   .board-card-corpo .l-secao{ font-family:var(--serif); font-weight:600; color:var(--text); margin-top:10px; }
@@ -2228,9 +2235,11 @@
 
   .board-card-textarea{
     display:block; width:100%; resize:none; overflow:hidden; font-family:var(--sans); font-size:13px; line-height:1.6;
-    color:var(--text); border:1px solid var(--line); background:var(--bg); border-radius:8px; padding:8px 9px;
+    color:var(--text); border:none; box-sizing:border-box;
+    background: color-mix(in srgb, var(--card-cor, var(--text-dim)) 24%, var(--surface));
+    border-radius:6px; padding:2px 5px; margin:0 -5px;
   }
-  .board-card-textarea:focus{ outline:none; border-color:var(--outline); }
+  .board-card-textarea:focus{ outline:none; box-shadow:0 0 0 1px color-mix(in srgb, var(--card-cor, var(--text-dim)) 45%, var(--outline)); }
 
   .board-card-progresso{ display:flex; align-items:center; gap:6px; margin-top:12px; }
   .board-card-progresso .dots{ display:flex; gap:3px; flex:1; }
