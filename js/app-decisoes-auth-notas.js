@@ -1115,8 +1115,8 @@
       (totalItens ? '<span class="board-card-count-badge">' + totalItens + (totalItens === 1 ? ' item' : ' itens') + '</span>' : '') +
       '<div class="board-card-top">' +
       '<span class="board-card-icon-check" data-select="1"></span>' +
-      '<button type="button" tabindex="-1" class="board-card-pin-btn' + (nota.fixada ? ' on' : '') + '" data-pin="1" title="' + (nota.fixada ? 'Desfixar' : 'Fixar') + '">📌</button>' +
       '<button type="button" tabindex="-1" class="board-card-menu-btn" data-menu="1" title="Mais">⋯</button>' +
+      '<button type="button" tabindex="-1" class="board-card-pin-btn' + (nota.fixada ? ' on' : '') + '" data-pin="1" title="' + (nota.fixada ? 'Desfixar' : 'Fixar') + '">📌</button>' +
       '</div>' +
       '<div class="board-card-titulo-row">' +
       '<button type="button" tabindex="-1" class="board-card-icone-btn" data-icone-item="' + nota.id + '" title="Mudar ícone">' + escapeHtml(nota.icone || '📝') + '</button>' +

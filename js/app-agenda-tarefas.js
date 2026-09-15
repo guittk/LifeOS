@@ -1610,13 +1610,15 @@
   }
 
   /* ---------- PRESENTES & DATAS ----------
-     Aniversário só guarda dia+mês (sem ano — é recorrente por natureza; ver
-     nota no modal). Ideias de presente ficam aninhadas em cada pessoa
-     (`/PresentesPessoas/{id}/ideias/{id}`, mesmo espírito dos pontos dentro
-     de um objetivo). Marcar uma ideia como comprada lança o gasto nas
-     Finanças (reaproveita finLancarItem, o mesmo helper do Supermercado e
-     que sobrou da Ápice) — só quando um valor foi preenchido, e só se o mês
-     atual já existir lá; desmarcar desfaz o lançamento. */
+     Cada pessoa tem uma lista de OCASIÕES (`/PresentesPessoas/{id}/ocasioes/{id}`):
+     Aniversário, Natal, Dia dos Namorados, Aniversário de casamento ou qualquer
+     nome livre — anuais (só dia+mês, sem ano — repete todo ano, ver nota no
+     modal) ou avulsas (presente único, sem nenhuma data ligada). Ideias de
+     presente ficam aninhadas em cada ocasião (`.../ocasioes/{id}/ideias/{id}`,
+     mesmo espírito dos pontos dentro de um objetivo). Marcar uma ideia como
+     comprada lança o gasto nas Finanças (reaproveita finLancarItem, o mesmo
+     helper do Supermercado e que sobrou da Ápice) — só quando um valor foi
+     preenchido, e só se o mês atual já existir lá; desmarcar desfaz o lançamento. */
   function presenteProximaData(dia, mes){
     const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
     let data = new Date(hoje.getFullYear(), mes - 1, dia);
@@ -1631,55 +1633,120 @@
     if(dias <= 30) return { texto: 'em ' + dias + ' dias', classe: 'proximo' };
     return { texto: 'em ' + dias + ' dias', classe: '' };
   }
+  function presenteOcasiaoIcone(nome){
+    const n = (nome || '').toLowerCase();
+    if(n.includes('casamento')) return '💍';
+    if(n.includes('anivers')) return '🎂';
+    if(n.includes('natal')) return '🎄';
+    if(n.includes('namorad')) return '💘';
+    return '🎁';
+  }
+  // Migração de quem cadastrou pessoa antes de existir ocasião: o aniversário
+  // (e as ideias que já existiam soltas na pessoa) viram a primeira ocasião.
+  async function presenteMigrarSeNecessario(pessoas){
+    for(const [id, p] of Object.entries(pessoas)){
+      if(!p.aniversarioDia || p.ocasioes) continue;
+      const ocId = newId();
+      const ocasiao = {
+        id: ocId, nome:'Aniversário', anual:true, dia:p.aniversarioDia, mes:p.aniversarioMes,
+        orcamento: p.orcamento || null, ideias: p.ideias || {}, criadoEm: new Date().toISOString()
+      };
+      await dbPatchSilent(userPath('/PresentesPessoas/' + id), {
+        aniversarioDia:null, aniversarioMes:null, orcamento:null, ideias:null,
+        ocasioes: { [ocId]: ocasiao }
+      });
+      p.ocasioes = { [ocId]: ocasiao };
+      delete p.aniversarioDia; delete p.aniversarioMes; delete p.orcamento; delete p.ideias;
+    }
+    return pessoas;
+  }
 
-  function presenteIdeiaRowHtml(pessoaId, ideiaId, ideia){
+  function presenteIdeiaRowHtml(pessoaId, ocId, ideiaId, ideia){
     return `
       <div class="presente-ideia-row ${ideia.comprado ? 'comprado' : ''}" data-ideia="${ideiaId}">
-        <input type="checkbox" data-presente-ideia-comprado="${pessoaId}|${ideiaId}" ${ideia.comprado ? 'checked' : ''} title="${ideia.comprado ? 'Desmarcar' : 'Marcar como comprado'}">
+        <input type="checkbox" data-presente-ideia-comprado="${pessoaId}|${ocId}|${ideiaId}" ${ideia.comprado ? 'checked' : ''} title="${ideia.comprado ? 'Desmarcar' : 'Marcar como comprado'}">
         <span class="txt">${escapeHtml(ideia.texto)}</span>
-        <input type="text" class="presente-ideia-valor" inputmode="decimal" placeholder="R$" value="${ideia.valor ? finFmtNum(ideia.valor) : ''}" data-presente-ideia-valor="${pessoaId}|${ideiaId}">
-        <button class="presente-ideia-del" data-presente-ideia-del="${pessoaId}|${ideiaId}" title="Excluir">✕</button>
+        <input type="text" class="presente-ideia-valor" inputmode="decimal" placeholder="R$" value="${ideia.valor ? finFmtNum(ideia.valor) : ''}" data-presente-ideia-valor="${pessoaId}|${ocId}|${ideiaId}">
+        <button class="presente-ideia-del" data-presente-ideia-del="${pessoaId}|${ocId}|${ideiaId}" title="Excluir">✕</button>
       </div>`;
   }
 
+  function presenteOcasiaoCardHtml(pessoaId, ocId, oc){
+    const ideias = Object.entries(oc.ideias || {}).sort((a, b) => (a[1].criadoEm || '').localeCompare(b[1].criadoEm || ''));
+    let meta = `<span>${presenteOcasiaoIcone(oc.nome)} ${escapeHtml(oc.nome)}</span>`;
+    if(oc.anual && oc.dia && oc.mes){
+      const rotulo = presenteDiasRotulo(presenteProximaData(oc.dia, oc.mes));
+      meta += `<span>${String(oc.dia).padStart(2, '0')}/${String(oc.mes).padStart(2, '0')}</span>` +
+              `<span class="${rotulo.classe}">${rotulo.texto}</span>`;
+    } else {
+      meta += `<span>avulsa</span>`;
+    }
+    if(oc.orcamento) meta += `<span>· orçamento ${finFmt(oc.orcamento)}</span>`;
+    return `
+      <div class="presente-ocasiao-card" data-ocasiao="${ocId}">
+        <div class="presente-ocasiao-head">
+          <div class="presente-pessoa-meta">${meta}</div>
+          <div class="presente-pessoa-actions">
+            <button data-presente-ocasiao-edit="${pessoaId}|${ocId}">editar</button>
+            <button data-presente-ocasiao-del="${pessoaId}|${ocId}">excluir</button>
+          </div>
+        </div>
+        <div class="presente-ideias-list">
+          ${ideias.length ? ideias.map(([iid, i]) => presenteIdeiaRowHtml(pessoaId, ocId, iid, i)).join('') : '<p class="empty-state" style="margin:2px 0;">Nenhuma ideia de presente ainda.</p>'}
+        </div>
+        <div class="presente-ideia-add-row">
+          <input type="text" placeholder="Ideia de presente..." data-presente-ideia-input="${pessoaId}|${ocId}">
+          <button data-presente-ideia-add="${pessoaId}|${ocId}">+</button>
+        </div>
+      </div>`;
+  }
+
+  // Data mais próxima entre as ocasiões anuais da pessoa — usada só pra
+  // ordenar a lista de pessoas; quem só tem ocasião avulsa fica no fim.
+  function presentePessoaProximaData(p){
+    const anuais = Object.values(p.ocasioes || {}).filter(o => o.anual && o.dia && o.mes);
+    if(!anuais.length) return null;
+    return anuais.map(o => presenteProximaData(o.dia, o.mes)).sort((a, b) => a - b)[0];
+  }
+
   function presentePessoaCardHtml(id, p){
-    const proxima = presenteProximaData(p.aniversarioDia, p.aniversarioMes);
-    const rotulo = presenteDiasRotulo(proxima);
-    const ideias = Object.entries(p.ideias || {}).sort((a, b) => (a[1].criadoEm || '').localeCompare(b[1].criadoEm || ''));
-    const dataFmt = String(p.aniversarioDia).padStart(2, '0') + '/' + String(p.aniversarioMes).padStart(2, '0');
+    const ocasioes = Object.entries(p.ocasioes || {}).sort((a, b) => {
+      const da = a[1].anual && a[1].dia ? presenteProximaData(a[1].dia, a[1].mes) : null;
+      const db = b[1].anual && b[1].dia ? presenteProximaData(b[1].dia, b[1].mes) : null;
+      if(da && db) return da - db;
+      if(da) return -1;
+      if(db) return 1;
+      return (a[1].criadoEm || '').localeCompare(b[1].criadoEm || '');
+    });
     return `
       <div class="presente-pessoa-card" data-id="${id}">
         <div class="presente-pessoa-head">
-          <div>
-            <p class="presente-pessoa-nome">${escapeHtml(p.nome)}</p>
-            <div class="presente-pessoa-meta">
-              <span>🎂 ${dataFmt}</span>
-              <span class="${rotulo.classe}">${rotulo.texto}</span>
-              ${p.orcamento ? `<span>· orçamento ${finFmt(p.orcamento)}</span>` : ''}
-            </div>
-          </div>
+          <p class="presente-pessoa-nome">${escapeHtml(p.nome)}</p>
           <div class="presente-pessoa-actions">
             <button data-presente-pessoa-edit="${id}">editar</button>
             <button data-presente-pessoa-del="${id}">excluir</button>
           </div>
         </div>
-        <div class="presente-ideias-list">
-          ${ideias.length ? ideias.map(([iid, i]) => presenteIdeiaRowHtml(id, iid, i)).join('') : '<p class="empty-state" style="margin:2px 0;">Nenhuma ideia de presente ainda.</p>'}
+        <div class="presente-ocasioes-list">
+          ${ocasioes.length ? ocasioes.map(([oid, o]) => presenteOcasiaoCardHtml(id, oid, o)).join('') : '<p class="empty-state" style="margin:8px 0;">Nenhuma ocasião ainda.</p>'}
         </div>
-        <div class="presente-ideia-add-row">
-          <input type="text" placeholder="Ideia de presente..." data-presente-ideia-input="${id}">
-          <button data-presente-ideia-add="${id}">+</button>
-        </div>
+        <button type="button" class="presente-ocasiao-add-btn" data-presente-ocasiao-add-btn="${id}">+ Ocasião</button>
       </div>`;
   }
 
   async function renderPresentes(){
     const el = document.getElementById('presentesList');
     if(!el) return;
-    const pessoas = await dbGet(userPath('/PresentesPessoas')) || {};
-    const entries = Object.entries(pessoas).sort((a, b) =>
-      presenteProximaData(a[1].aniversarioDia, a[1].aniversarioMes) - presenteProximaData(b[1].aniversarioDia, b[1].aniversarioMes)
-    );
+    let pessoas = await dbGet(userPath('/PresentesPessoas')) || {};
+    pessoas = await presenteMigrarSeNecessario(pessoas);
+    const entries = Object.entries(pessoas).sort((a, b) => {
+      const da = presentePessoaProximaData(a[1]);
+      const db = presentePessoaProximaData(b[1]);
+      if(da && db) return da - db;
+      if(da) return -1;
+      if(db) return 1;
+      return (a[1].nome || '').localeCompare(b[1].nome || '');
+    });
     if(!entries.length){ el.innerHTML = '<p class="empty-state">Ninguém cadastrado ainda. Adicione uma pessoa pra começar a anotar ideias de presente.</p>'; return; }
     el.innerHTML = entries.map(([id, p]) => presentePessoaCardHtml(id, p)).join('');
 
@@ -1688,17 +1755,34 @@
       presenteAbrirPessoaModal(id, pessoas[id]);
     }));
     el.querySelectorAll('[data-presente-pessoa-del]').forEach(btn => btn.addEventListener('click', async () => {
-      if(!await showConfirm('Excluir esta pessoa e as ideias de presente dela?')) return;
+      if(!await showConfirm('Excluir esta pessoa, com todas as ocasiões e ideias de presente dela?')) return;
       await dbDelete(userPath('/PresentesPessoas/' + btn.getAttribute('data-presente-pessoa-del')));
+      renderPresentes();
+    }));
+    el.querySelectorAll('[data-presente-ocasiao-add-btn]').forEach(btn => btn.addEventListener('click', () => {
+      presenteAbrirOcasiaoModal(btn.getAttribute('data-presente-ocasiao-add-btn'), null, null);
+    }));
+    el.querySelectorAll('[data-presente-ocasiao-edit]').forEach(btn => btn.addEventListener('click', () => {
+      const [pessoaId, ocId] = btn.getAttribute('data-presente-ocasiao-edit').split('|');
+      presenteAbrirOcasiaoModal(pessoaId, ocId, pessoas[pessoaId].ocasioes[ocId]);
+    }));
+    el.querySelectorAll('[data-presente-ocasiao-del]').forEach(btn => btn.addEventListener('click', async () => {
+      const [pessoaId, ocId] = btn.getAttribute('data-presente-ocasiao-del').split('|');
+      if(!await showConfirm('Excluir esta ocasião e as ideias de presente nela?')) return;
+      const oc = (pessoas[pessoaId] && pessoas[pessoaId].ocasioes && pessoas[pessoaId].ocasioes[ocId]) || {};
+      for(const ideia of Object.values(oc.ideias || {})){
+        if(ideia.comprado) await finRemoverItem(ideia.lancamentoMesId, ideia.lancamentoItemId);
+      }
+      await dbDelete(userPath('/PresentesPessoas/' + pessoaId + '/ocasioes/' + ocId));
       renderPresentes();
     }));
 
     el.querySelectorAll('[data-presente-ideia-add]').forEach(btn => btn.addEventListener('click', async () => {
-      const pessoaId = btn.getAttribute('data-presente-ideia-add');
-      const input = el.querySelector(`[data-presente-ideia-input="${pessoaId}"]`);
+      const [pessoaId, ocId] = btn.getAttribute('data-presente-ideia-add').split('|');
+      const input = el.querySelector(`[data-presente-ideia-input="${pessoaId}|${ocId}"]`);
       const texto = input.value.trim();
       if(!texto) return;
-      await dbPut(userPath('/PresentesPessoas/' + pessoaId + '/ideias/' + newId()), { texto, comprado:false, valor:null, criadoEm: new Date().toISOString() });
+      await dbPut(userPath('/PresentesPessoas/' + pessoaId + '/ocasioes/' + ocId + '/ideias/' + newId()), { texto, comprado:false, valor:null, criadoEm: new Date().toISOString() });
       renderPresentes();
     }));
     el.querySelectorAll('[data-presente-ideia-input]').forEach(input => {
@@ -1708,36 +1792,38 @@
     });
     el.querySelectorAll('[data-presente-ideia-valor]').forEach(input => {
       input.addEventListener('change', async () => {
-        const [pessoaId, ideiaId] = input.getAttribute('data-presente-ideia-valor').split('|');
-        await dbPatch(userPath('/PresentesPessoas/' + pessoaId + '/ideias/' + ideiaId), { valor: finParseNum(input.value) || null });
+        const [pessoaId, ocId, ideiaId] = input.getAttribute('data-presente-ideia-valor').split('|');
+        await dbPatch(userPath('/PresentesPessoas/' + pessoaId + '/ocasioes/' + ocId + '/ideias/' + ideiaId), { valor: finParseNum(input.value) || null });
       });
     });
     el.querySelectorAll('[data-presente-ideia-del]').forEach(btn => btn.addEventListener('click', async () => {
-      const [pessoaId, ideiaId] = btn.getAttribute('data-presente-ideia-del').split('|');
-      const ideia = (pessoas[pessoaId] && pessoas[pessoaId].ideias && pessoas[pessoaId].ideias[ideiaId]) || {};
+      const [pessoaId, ocId, ideiaId] = btn.getAttribute('data-presente-ideia-del').split('|');
+      const oc = (pessoas[pessoaId] && pessoas[pessoaId].ocasioes && pessoas[pessoaId].ocasioes[ocId]) || {};
+      const ideia = (oc.ideias && oc.ideias[ideiaId]) || {};
       if(!await showConfirm('Excluir esta ideia?')) return;
       if(ideia.comprado) await finRemoverItem(ideia.lancamentoMesId, ideia.lancamentoItemId);
-      await dbDelete(userPath('/PresentesPessoas/' + pessoaId + '/ideias/' + ideiaId));
+      await dbDelete(userPath('/PresentesPessoas/' + pessoaId + '/ocasioes/' + ocId + '/ideias/' + ideiaId));
       renderPresentes();
     }));
     el.querySelectorAll('[data-presente-ideia-comprado]').forEach(input => {
       input.addEventListener('change', async () => {
-        const [pessoaId, ideiaId] = input.getAttribute('data-presente-ideia-comprado').split('|');
+        const [pessoaId, ocId, ideiaId] = input.getAttribute('data-presente-ideia-comprado').split('|');
         const pessoa = pessoas[pessoaId] || {};
-        const ideia = (pessoa.ideias && pessoa.ideias[ideiaId]) || {};
-        const valorInput = el.querySelector(`[data-presente-ideia-valor="${pessoaId}|${ideiaId}"]`);
+        const oc = (pessoa.ocasioes && pessoa.ocasioes[ocId]) || {};
+        const ideia = (oc.ideias && oc.ideias[ideiaId]) || {};
+        const valorInput = el.querySelector(`[data-presente-ideia-valor="${pessoaId}|${ocId}|${ideiaId}"]`);
         const valor = finParseNum(valorInput ? valorInput.value : 0);
         if(input.checked){
           const hoje = todayStr();
-          const lancado = valor > 0 ? await finLancarItem(hoje, 'compras', 'Presente — ' + pessoa.nome + ': ' + ideia.texto, -valor) : null;
-          await dbPatch(userPath('/PresentesPessoas/' + pessoaId + '/ideias/' + ideiaId), {
+          const lancado = valor > 0 ? await finLancarItem(hoje, 'compras', 'Presente — ' + pessoa.nome + ' (' + oc.nome + '): ' + ideia.texto, -valor) : null;
+          await dbPatch(userPath('/PresentesPessoas/' + pessoaId + '/ocasioes/' + ocId + '/ideias/' + ideiaId), {
             comprado:true, valor: valor || null,
             lancamentoMesId: lancado ? lancado.mesId : null, lancamentoItemId: lancado ? lancado.itemId : null
           });
           if(valor > 0) showAppMessage(lancado ? 'Comprado — lançado nas Finanças deste mês.' : 'Comprado, mas o mês atual ainda não existe nas Finanças.', lancado ? 'success' : 'error');
         }else{
           await finRemoverItem(ideia.lancamentoMesId, ideia.lancamentoItemId);
-          await dbPatch(userPath('/PresentesPessoas/' + pessoaId + '/ideias/' + ideiaId), { comprado:false, lancamentoMesId:null, lancamentoItemId:null });
+          await dbPatch(userPath('/PresentesPessoas/' + pessoaId + '/ocasioes/' + ocId + '/ideias/' + ideiaId), { comprado:false, lancamentoMesId:null, lancamentoItemId:null });
         }
         renderPresentes();
       });
@@ -1749,10 +1835,6 @@
     presentePessoaEditandoId = id || null;
     document.getElementById('presentePessoaModalTitle').textContent = id ? 'Editar pessoa' : 'Nova pessoa';
     document.getElementById('presentePessoaNomeInput').value = p ? p.nome : '';
-    document.getElementById('presentePessoaDataInput').value = p
-      ? (new Date().getFullYear()) + '-' + String(p.aniversarioMes).padStart(2, '0') + '-' + String(p.aniversarioDia).padStart(2, '0')
-      : '';
-    document.getElementById('presentePessoaOrcamentoInput').value = p && p.orcamento ? finFmtNum(p.orcamento) : '';
     document.getElementById('presentePessoaModal').classList.add('active');
     document.getElementById('presentePessoaNomeInput').focus();
   }
@@ -1760,16 +1842,64 @@
   document.getElementById('presentePessoaCancelBtn').addEventListener('click', () => document.getElementById('presentePessoaModal').classList.remove('active'));
   document.getElementById('presentePessoaOkBtn').addEventListener('click', async () => {
     const nome = document.getElementById('presentePessoaNomeInput').value.trim();
-    const dataStr = document.getElementById('presentePessoaDataInput').value;
     if(!nome){ showAppMessage('Digite o nome.', 'error'); return; }
-    if(!dataStr){ showAppMessage('Escolha uma data de aniversário.', 'error'); return; }
-    const [, mesStr, diaStr] = dataStr.split('-');
-    const orcamento = finParseNum(document.getElementById('presentePessoaOrcamentoInput').value) || null;
+    const eraNovo = !presentePessoaEditandoId;
     const id = presentePessoaEditandoId || newId();
-    await dbPatch(userPath('/PresentesPessoas/' + id), {
-      nome, aniversarioDia: parseInt(diaStr, 10), aniversarioMes: parseInt(mesStr, 10), orcamento
-    });
+    await dbPatch(userPath('/PresentesPessoas/' + id), { nome });
     document.getElementById('presentePessoaModal').classList.remove('active');
+    await renderPresentes();
+    // Pessoa recém-criada não serve de muito sem nenhuma ocasião — já emenda pedindo a primeira.
+    if(eraNovo) presenteAbrirOcasiaoModal(id, null, null);
+  });
+
+  let presenteOcasiaoContexto = null;
+  function presenteAbrirOcasiaoModal(pessoaId, ocId, oc){
+    presenteOcasiaoContexto = { pessoaId, ocId: ocId || null };
+    const dataInput = document.getElementById('presenteOcasiaoDataInput');
+    const semDataToggle = document.getElementById('presenteOcasiaoSemDataToggle');
+    document.getElementById('presenteOcasiaoModalTitle').textContent = ocId ? 'Editar ocasião' : 'Nova ocasião';
+    document.getElementById('presenteOcasiaoNomeInput').value = oc ? oc.nome : '';
+    dataInput.value = '';
+    dataInput.disabled = false;
+    semDataToggle.classList.remove('active');
+    if(oc && oc.anual && oc.dia){
+      dataInput.value = (new Date().getFullYear()) + '-' + String(oc.mes).padStart(2, '0') + '-' + String(oc.dia).padStart(2, '0');
+    } else if(oc){
+      semDataToggle.classList.add('active');
+      dataInput.disabled = true;
+    }
+    document.getElementById('presenteOcasiaoOrcamentoInput').value = oc && oc.orcamento ? finFmtNum(oc.orcamento) : '';
+    document.getElementById('presenteOcasiaoModal').classList.add('active');
+    document.getElementById('presenteOcasiaoNomeInput').focus();
+  }
+  document.getElementById('presenteOcasiaoSemDataToggle').addEventListener('click', () => {
+    const toggle = document.getElementById('presenteOcasiaoSemDataToggle');
+    const input = document.getElementById('presenteOcasiaoDataInput');
+    const nowActive = !toggle.classList.contains('active');
+    toggle.classList.toggle('active', nowActive);
+    input.disabled = nowActive;
+    if(nowActive) input.value = '';
+  });
+  document.getElementById('presenteOcasiaoCancelBtn').addEventListener('click', () => document.getElementById('presenteOcasiaoModal').classList.remove('active'));
+  document.getElementById('presenteOcasiaoOkBtn').addEventListener('click', async () => {
+    const nome = document.getElementById('presenteOcasiaoNomeInput').value.trim();
+    if(!nome){ showAppMessage('Digite o nome da ocasião.', 'error'); return; }
+    const semData = document.getElementById('presenteOcasiaoSemDataToggle').classList.contains('active');
+    const dataStr = document.getElementById('presenteOcasiaoDataInput').value;
+    if(!semData && !dataStr){ showAppMessage('Escolha uma data ou marque "Avulsa".', 'error'); return; }
+    const orcamento = finParseNum(document.getElementById('presenteOcasiaoOrcamentoInput').value) || null;
+    const patch = { nome, anual: !semData, orcamento };
+    if(semData){
+      patch.dia = null; patch.mes = null;
+    } else {
+      const [, mesStr, diaStr] = dataStr.split('-');
+      patch.dia = parseInt(diaStr, 10); patch.mes = parseInt(mesStr, 10);
+    }
+    const { pessoaId, ocId } = presenteOcasiaoContexto;
+    const id = ocId || newId();
+    if(ocId) await dbPatch(userPath('/PresentesPessoas/' + pessoaId + '/ocasioes/' + id), patch);
+    else await dbPut(userPath('/PresentesPessoas/' + pessoaId + '/ocasioes/' + id), { ...patch, criadoEm: new Date().toISOString() });
+    document.getElementById('presenteOcasiaoModal').classList.remove('active');
     renderPresentes();
   });
 

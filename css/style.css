@@ -2029,9 +2029,32 @@
   .presente-pessoa-actions{ display:flex; gap:6px; flex-shrink:0; }
   .presente-pessoa-actions button{ background:none; border:1px solid var(--line-strong); color:var(--text-mut); border-radius:6px; padding:4px 8px; font-size:11px; cursor:pointer; font-family:var(--sans); }
   .presente-pessoa-actions button:hover{ border-color:var(--coral); color:var(--coral); }
+  .presente-ocasioes-list{ display:grid; gap:10px; margin-top:12px; }
+  .presente-ocasiao-card{
+    background:var(--surface-hi); border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px 13px;
+  }
+  .presente-ocasiao-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .presente-ocasiao-add-btn{
+    margin-top:10px; background:none; border:1px dashed var(--line-strong); color:var(--text-mut);
+    border-radius:7px; padding:6px 12px; font-size:12px; cursor:pointer; font-family:var(--sans); font-weight:600;
+  }
+  .presente-ocasiao-add-btn:hover{ border-color:var(--sage); border-style:solid; color:var(--sage); }
   .presente-ideias-list{ display:grid; gap:7px; margin:12px 0 0; }
   .presente-ideia-row{ display:flex; align-items:center; gap:9px; font-size:13px; }
-  .presente-ideia-row input[type="checkbox"]{ accent-color:var(--sage); flex-shrink:0; width:16px; height:16px; }
+  /* Checkbox cartoon (2px de contorno + sombra dura, igual ao resto do app) —
+     substitui a caixinha nativa do navegador, que destoava do resto do visual. */
+  .presente-ideia-row input[type="checkbox"]{
+    appearance:none; -webkit-appearance:none; margin:0; flex-shrink:0; cursor:pointer;
+    width:17px; height:17px; border-radius:5px; border:var(--bw) solid var(--outline);
+    background:var(--surface); box-shadow:2px 2px 0 var(--shadow); position:relative;
+    transition: background var(--t-fast) ease, border-color var(--t-fast) ease;
+  }
+  .presente-ideia-row input[type="checkbox"]:hover{ border-color:var(--sage); }
+  .presente-ideia-row input[type="checkbox"]:checked{ background:var(--sage); border-color:var(--sage); }
+  .presente-ideia-row input[type="checkbox"]:checked::after{
+    content:''; position:absolute; left:5px; top:1px; width:4px; height:8px;
+    border:solid var(--on-accent); border-width:0 2px 2px 0; transform:rotate(45deg);
+  }
   .presente-ideia-row .txt{ flex:1; min-width:0; overflow-wrap:break-word; }
   .presente-ideia-row.comprado .txt{ color:var(--text-dim); text-decoration:line-through; }
   .presente-ideia-valor{
@@ -2460,7 +2483,7 @@
   .hidden{ display:none !important; }
 
   /* ---------- Timeline de Objetivos (editável, dados em /TimelineMarcos) ---------- */
-  .obj-timeline{ list-style:none; margin:0; padding:4px 0 4px 4px; max-width:560px; position:relative; }
+  .obj-timeline{ list-style:none; margin:0; padding:4px 6px 4px 4px; max-width:560px; position:relative; }
   .obj-timeline-item{
     position:relative; display:flex; align-items:center; flex-wrap:wrap; gap:10px 16px; padding:0 0 22px 0;
   }

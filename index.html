@@ -902,33 +902,52 @@
       <div>
         <p class="eyebrow">Configurar</p>
         <h1 class="view-title">Presentes &amp; datas</h1>
-        <p class="view-desc">Aniversários e ideias de presente anotadas o ano todo — pra nunca chegar na última hora sem ideia nenhuma.</p>
+        <p class="view-desc">Aniversário, Natal, Dia dos Namorados ou qualquer outra ocasião — anual ou avulsa — com ideias de presente anotadas o ano todo, pra nunca chegar na última hora sem ideia nenhuma.</p>
       </div>
       <button class="btn btn-primary btn-sm" id="presenteAddPessoaBtn">+ Pessoa</button>
     </div>
     <div id="presentesList"><p class="empty-state">Carregando...</p></div>
   </section>
 
-  <!-- Modal: pessoa (Presentes & datas) -->
+  <!-- Modal: pessoa (Presentes & datas) — só o nome; as datas ficam nas ocasiões dela -->
   <div class="confirm-modal" id="presentePessoaModal">
     <div class="confirm-modal-panel">
       <p class="confirm-modal-text" id="presentePessoaModalTitle" style="margin-bottom:12px;">Nova pessoa</p>
       <label class="modal-field-label">Nome</label>
       <input type="text" id="presentePessoaNomeInput" class="modal-text-input" placeholder="Nome da pessoa" autocomplete="off">
-      <div class="modal-field-row">
-        <div>
-          <label class="modal-field-label">Aniversário</label>
-          <input type="date" id="presentePessoaDataInput" class="modal-text-input">
-        </div>
-        <div>
-          <label class="modal-field-label">Orçamento (opcional)</label>
-          <input type="text" id="presentePessoaOrcamentoInput" class="modal-text-input" inputmode="decimal" placeholder="ex: 150,00">
-        </div>
-      </div>
-      <p class="fin-sim-nota" style="margin:-8px 0 14px;">Só o dia e o mês são usados — o ano do calendário é ignorado, o aniversário se repete todo ano.</p>
       <div class="confirm-modal-actions">
         <button class="btn btn-ghost btn-sm" id="presentePessoaCancelBtn">Cancelar</button>
         <button class="btn btn-primary btn-sm" id="presentePessoaOkBtn">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: ocasião de uma pessoa (Presentes & datas) — aniversário, Natal, Dia dos
+       Namorados, aniversário de casamento etc, ou avulsa (presente único, sem data). -->
+  <div class="confirm-modal" id="presenteOcasiaoModal">
+    <div class="confirm-modal-panel">
+      <p class="confirm-modal-text" id="presenteOcasiaoModalTitle" style="margin-bottom:12px;">Nova ocasião</p>
+      <label class="modal-field-label">Ocasião</label>
+      <input type="text" id="presenteOcasiaoNomeInput" class="modal-text-input" list="presenteOcasiaoSugestoes" placeholder="Aniversário, Natal, Dia dos Namorados..." autocomplete="off">
+      <datalist id="presenteOcasiaoSugestoes">
+        <option value="Aniversário">
+        <option value="Natal">
+        <option value="Dia dos Namorados">
+        <option value="Aniversário de casamento">
+      </datalist>
+      <div class="modal-field-row">
+        <div>
+          <label class="modal-field-label">Data</label>
+          <input type="date" id="presenteOcasiaoDataInput" class="modal-text-input">
+        </div>
+        <button type="button" class="nodate-toggle" id="presenteOcasiaoSemDataToggle">Avulsa</button>
+      </div>
+      <p class="fin-sim-nota" style="margin:-8px 0 14px;">Com data, só o dia e o mês contam — a ocasião se repete todo ano. "Avulsa" é pra presente único, sem nenhuma data comemorativa fixa.</p>
+      <label class="modal-field-label">Orçamento (opcional)</label>
+      <input type="text" id="presenteOcasiaoOrcamentoInput" class="modal-text-input" inputmode="decimal" placeholder="ex: 150,00">
+      <div class="confirm-modal-actions">
+        <button class="btn btn-ghost btn-sm" id="presenteOcasiaoCancelBtn">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="presenteOcasiaoOkBtn">Salvar</button>
       </div>
     </div>
   </div>
@@ -1176,8 +1195,8 @@
         <p class="view-desc">A ordem dos grandes marcos, um depois do outro.</p>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button type="button" class="board-toggle-btn" id="timelineModoToggleBtn" title="Alternar entre ver e editar os marcos">👁️ Ver</button>
         <button class="btn btn-primary btn-sm hidden" id="timelineAddBtn">+ Novo marco</button>
+        <button type="button" class="board-toggle-btn" id="timelineModoToggleBtn" title="Alternar entre ver e editar os marcos">👁️ Ver</button>
       </div>
     </div>
 
