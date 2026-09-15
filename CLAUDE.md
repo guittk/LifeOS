@@ -73,7 +73,7 @@ Na prática:
 
 ## Views (`index.html`, `id="view-*"`)
 
-`hoje`, `storage` (Notas), `tarefas`, `monday` (Planejamento), `agenda`, `rotina`,
+`hoje`, `storage` (Notas), `tarefas`, `monday` (Planejamento), `agenda`, `presentes`, `rotina`,
 `casa`, `manutencao`, `nosdois` (Nós dois), `financas`, `supermercado`, `calculos`,
 `decisoes`, `empreendedorismo`, `busca` (Perguntar ao LifeOS), `fluencia`, `academia`,
 `diario`, `retrospectiva`, `planoalimentar`, `objetivos`, `timelineobjetivos`, `visionboard`,

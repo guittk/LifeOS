@@ -13,7 +13,7 @@ sem preocupação com custo de contexto (ao contrário do CLAUDE.md).
 
 ## Navegação global (presente em todas as telas)
 
-- **Sidebar** com grupos: Executar (Hoje), Organizar (Notas, Tarefas, Agenda, Rotina, Casa, Manutenção, Nós dois, Finanças, Supermercado, Cálculos, Decisões, Empreendedorismo, Perguntar), Evoluir (Fluência, Academia, Diário, Retrospectiva, Plano Alimentar, Objetivos, Timeline, Vision Board), Em breve (Bateria e Planejamento — uso ocasional, já funcionam de verdade, só sem um bom uso encontrado ainda), e Configurações/Sair no rodapé. **Ápice** também mora na sidebar (grupo Organizar) mas não é uma view — é um link direto pro site.
+- **Sidebar** com grupos: Executar (Hoje), Organizar (Notas, Tarefas, Agenda, Presentes & datas, Rotina, Casa, Manutenção, Nós dois, Finanças, Supermercado, Cálculos, Decisões, Empreendedorismo, Perguntar), Evoluir (Fluência, Academia, Diário, Retrospectiva, Plano Alimentar, Objetivos, Timeline, Vision Board), Em breve (Bateria e Planejamento — uso ocasional, já funcionam de verdade, só sem um bom uso encontrado ainda), e Configurações/Sair no rodapé. **Ápice** também mora na sidebar (grupo Organizar) mas não é uma view — é um link direto pro site.
 - **Pesquisa global** (Ctrl/Cmd+K): busca em objetivos, tarefas, planejamento, diário, decisões e mais, ao mesmo tempo — e funciona como comando de navegação pra qualquer tela.
 - **Captura rápida**: modal de texto livre acessível de qualquer tela, cria uma nova Nota.
 - **Loading global**, **toasts** de notificação e **modal de confirmação** substituem os diálogos nativos do navegador em toda a aplicação.
@@ -60,6 +60,10 @@ Mural de notas (substituiu o antigo modelo "Arquivo" de Gavetas/Capturas/Revisã
 
 - Eventos futuros em ordem cronológica, agrupados por semana e depois por mês.
 - "+ Novo evento" e **importação de .ics** (exportado do Google Calendar).
+
+## Presentes & datas (`view-presentes`)
+
+Uma pessoa por card, ordenados pelo aniversário mais próximo primeiro. Cada pessoa guarda só dia+mês (sem ano — é recorrente por natureza) e um orçamento opcional. Dentro do card, a lista de ideias de presente daquela pessoa: texto, um campo de valor sempre editável, checkbox de comprado e excluir. Marcar como comprado lança o valor (quando preenchido) como gasto nas Finanças do mês atual — mesma ressalva do Supermercado/Ápice: só se aquele mês já existir lá; desmarcar desfaz o lançamento. Dados em `/PresentesPessoas/{id}` com `ideias/{id}` aninhado.
 
 ## Rotina (`view-rotina`)
 

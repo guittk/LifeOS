@@ -1609,3 +1609,167 @@
     await Promise.all([renderSuperLista(), renderSuperDespensa(), renderSuperFixos(), renderSuperHistorico()]);
   }
 
+  /* ---------- PRESENTES & DATAS ----------
+     Aniversário só guarda dia+mês (sem ano — é recorrente por natureza; ver
+     nota no modal). Ideias de presente ficam aninhadas em cada pessoa
+     (`/PresentesPessoas/{id}/ideias/{id}`, mesmo espírito dos pontos dentro
+     de um objetivo). Marcar uma ideia como comprada lança o gasto nas
+     Finanças (reaproveita finLancarItem, o mesmo helper do Supermercado e
+     que sobrou da Ápice) — só quando um valor foi preenchido, e só se o mês
+     atual já existir lá; desmarcar desfaz o lançamento. */
+  function presenteProximaData(dia, mes){
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    let data = new Date(hoje.getFullYear(), mes - 1, dia);
+    if(data < hoje) data = new Date(hoje.getFullYear() + 1, mes - 1, dia);
+    return data;
+  }
+  function presenteDiasRotulo(data){
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const dias = Math.round((data - hoje) / 86400000);
+    if(dias === 0) return { texto: 'é hoje!', classe: 'hoje' };
+    if(dias === 1) return { texto: 'é amanhã', classe: 'proximo' };
+    if(dias <= 30) return { texto: 'em ' + dias + ' dias', classe: 'proximo' };
+    return { texto: 'em ' + dias + ' dias', classe: '' };
+  }
+
+  function presenteIdeiaRowHtml(pessoaId, ideiaId, ideia){
+    return `
+      <div class="presente-ideia-row ${ideia.comprado ? 'comprado' : ''}" data-ideia="${ideiaId}">
+        <input type="checkbox" data-presente-ideia-comprado="${pessoaId}|${ideiaId}" ${ideia.comprado ? 'checked' : ''} title="${ideia.comprado ? 'Desmarcar' : 'Marcar como comprado'}">
+        <span class="txt">${escapeHtml(ideia.texto)}</span>
+        <input type="text" class="presente-ideia-valor" inputmode="decimal" placeholder="R$" value="${ideia.valor ? finFmtNum(ideia.valor) : ''}" data-presente-ideia-valor="${pessoaId}|${ideiaId}">
+        <button class="presente-ideia-del" data-presente-ideia-del="${pessoaId}|${ideiaId}" title="Excluir">✕</button>
+      </div>`;
+  }
+
+  function presentePessoaCardHtml(id, p){
+    const proxima = presenteProximaData(p.aniversarioDia, p.aniversarioMes);
+    const rotulo = presenteDiasRotulo(proxima);
+    const ideias = Object.entries(p.ideias || {}).sort((a, b) => (a[1].criadoEm || '').localeCompare(b[1].criadoEm || ''));
+    const dataFmt = String(p.aniversarioDia).padStart(2, '0') + '/' + String(p.aniversarioMes).padStart(2, '0');
+    return `
+      <div class="presente-pessoa-card" data-id="${id}">
+        <div class="presente-pessoa-head">
+          <div>
+            <p class="presente-pessoa-nome">${escapeHtml(p.nome)}</p>
+            <div class="presente-pessoa-meta">
+              <span>🎂 ${dataFmt}</span>
+              <span class="${rotulo.classe}">${rotulo.texto}</span>
+              ${p.orcamento ? `<span>· orçamento ${finFmt(p.orcamento)}</span>` : ''}
+            </div>
+          </div>
+          <div class="presente-pessoa-actions">
+            <button data-presente-pessoa-edit="${id}">editar</button>
+            <button data-presente-pessoa-del="${id}">excluir</button>
+          </div>
+        </div>
+        <div class="presente-ideias-list">
+          ${ideias.length ? ideias.map(([iid, i]) => presenteIdeiaRowHtml(id, iid, i)).join('') : '<p class="empty-state" style="margin:2px 0;">Nenhuma ideia de presente ainda.</p>'}
+        </div>
+        <div class="presente-ideia-add-row">
+          <input type="text" placeholder="Ideia de presente..." data-presente-ideia-input="${id}">
+          <button data-presente-ideia-add="${id}">+</button>
+        </div>
+      </div>`;
+  }
+
+  async function renderPresentes(){
+    const el = document.getElementById('presentesList');
+    if(!el) return;
+    const pessoas = await dbGet(userPath('/PresentesPessoas')) || {};
+    const entries = Object.entries(pessoas).sort((a, b) =>
+      presenteProximaData(a[1].aniversarioDia, a[1].aniversarioMes) - presenteProximaData(b[1].aniversarioDia, b[1].aniversarioMes)
+    );
+    if(!entries.length){ el.innerHTML = '<p class="empty-state">Ninguém cadastrado ainda. Adicione uma pessoa pra começar a anotar ideias de presente.</p>'; return; }
+    el.innerHTML = entries.map(([id, p]) => presentePessoaCardHtml(id, p)).join('');
+
+    el.querySelectorAll('[data-presente-pessoa-edit]').forEach(btn => btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-presente-pessoa-edit');
+      presenteAbrirPessoaModal(id, pessoas[id]);
+    }));
+    el.querySelectorAll('[data-presente-pessoa-del]').forEach(btn => btn.addEventListener('click', async () => {
+      if(!await showConfirm('Excluir esta pessoa e as ideias de presente dela?')) return;
+      await dbDelete(userPath('/PresentesPessoas/' + btn.getAttribute('data-presente-pessoa-del')));
+      renderPresentes();
+    }));
+
+    el.querySelectorAll('[data-presente-ideia-add]').forEach(btn => btn.addEventListener('click', async () => {
+      const pessoaId = btn.getAttribute('data-presente-ideia-add');
+      const input = el.querySelector(`[data-presente-ideia-input="${pessoaId}"]`);
+      const texto = input.value.trim();
+      if(!texto) return;
+      await dbPut(userPath('/PresentesPessoas/' + pessoaId + '/ideias/' + newId()), { texto, comprado:false, valor:null, criadoEm: new Date().toISOString() });
+      renderPresentes();
+    }));
+    el.querySelectorAll('[data-presente-ideia-input]').forEach(input => {
+      input.addEventListener('keydown', (e) => {
+        if(e.key === 'Enter'){ e.preventDefault(); el.querySelector(`[data-presente-ideia-add="${input.getAttribute('data-presente-ideia-input')}"]`).click(); }
+      });
+    });
+    el.querySelectorAll('[data-presente-ideia-valor]').forEach(input => {
+      input.addEventListener('change', async () => {
+        const [pessoaId, ideiaId] = input.getAttribute('data-presente-ideia-valor').split('|');
+        await dbPatch(userPath('/PresentesPessoas/' + pessoaId + '/ideias/' + ideiaId), { valor: finParseNum(input.value) || null });
+      });
+    });
+    el.querySelectorAll('[data-presente-ideia-del]').forEach(btn => btn.addEventListener('click', async () => {
+      const [pessoaId, ideiaId] = btn.getAttribute('data-presente-ideia-del').split('|');
+      const ideia = (pessoas[pessoaId] && pessoas[pessoaId].ideias && pessoas[pessoaId].ideias[ideiaId]) || {};
+      if(!await showConfirm('Excluir esta ideia?')) return;
+      if(ideia.comprado) await finRemoverItem(ideia.lancamentoMesId, ideia.lancamentoItemId);
+      await dbDelete(userPath('/PresentesPessoas/' + pessoaId + '/ideias/' + ideiaId));
+      renderPresentes();
+    }));
+    el.querySelectorAll('[data-presente-ideia-comprado]').forEach(input => {
+      input.addEventListener('change', async () => {
+        const [pessoaId, ideiaId] = input.getAttribute('data-presente-ideia-comprado').split('|');
+        const pessoa = pessoas[pessoaId] || {};
+        const ideia = (pessoa.ideias && pessoa.ideias[ideiaId]) || {};
+        const valorInput = el.querySelector(`[data-presente-ideia-valor="${pessoaId}|${ideiaId}"]`);
+        const valor = finParseNum(valorInput ? valorInput.value : 0);
+        if(input.checked){
+          const hoje = todayStr();
+          const lancado = valor > 0 ? await finLancarItem(hoje, 'compras', 'Presente — ' + pessoa.nome + ': ' + ideia.texto, -valor) : null;
+          await dbPatch(userPath('/PresentesPessoas/' + pessoaId + '/ideias/' + ideiaId), {
+            comprado:true, valor: valor || null,
+            lancamentoMesId: lancado ? lancado.mesId : null, lancamentoItemId: lancado ? lancado.itemId : null
+          });
+          if(valor > 0) showAppMessage(lancado ? 'Comprado — lançado nas Finanças deste mês.' : 'Comprado, mas o mês atual ainda não existe nas Finanças.', lancado ? 'success' : 'error');
+        }else{
+          await finRemoverItem(ideia.lancamentoMesId, ideia.lancamentoItemId);
+          await dbPatch(userPath('/PresentesPessoas/' + pessoaId + '/ideias/' + ideiaId), { comprado:false, lancamentoMesId:null, lancamentoItemId:null });
+        }
+        renderPresentes();
+      });
+    });
+  }
+
+  let presentePessoaEditandoId = null;
+  function presenteAbrirPessoaModal(id, p){
+    presentePessoaEditandoId = id || null;
+    document.getElementById('presentePessoaModalTitle').textContent = id ? 'Editar pessoa' : 'Nova pessoa';
+    document.getElementById('presentePessoaNomeInput').value = p ? p.nome : '';
+    document.getElementById('presentePessoaDataInput').value = p
+      ? (new Date().getFullYear()) + '-' + String(p.aniversarioMes).padStart(2, '0') + '-' + String(p.aniversarioDia).padStart(2, '0')
+      : '';
+    document.getElementById('presentePessoaOrcamentoInput').value = p && p.orcamento ? finFmtNum(p.orcamento) : '';
+    document.getElementById('presentePessoaModal').classList.add('active');
+    document.getElementById('presentePessoaNomeInput').focus();
+  }
+  document.getElementById('presenteAddPessoaBtn').addEventListener('click', () => presenteAbrirPessoaModal(null, null));
+  document.getElementById('presentePessoaCancelBtn').addEventListener('click', () => document.getElementById('presentePessoaModal').classList.remove('active'));
+  document.getElementById('presentePessoaOkBtn').addEventListener('click', async () => {
+    const nome = document.getElementById('presentePessoaNomeInput').value.trim();
+    const dataStr = document.getElementById('presentePessoaDataInput').value;
+    if(!nome){ showAppMessage('Digite o nome.', 'error'); return; }
+    if(!dataStr){ showAppMessage('Escolha uma data de aniversário.', 'error'); return; }
+    const [, mesStr, diaStr] = dataStr.split('-');
+    const orcamento = finParseNum(document.getElementById('presentePessoaOrcamentoInput').value) || null;
+    const id = presentePessoaEditandoId || newId();
+    await dbPatch(userPath('/PresentesPessoas/' + id), {
+      nome, aniversarioDia: parseInt(diaStr, 10), aniversarioMes: parseInt(mesStr, 10), orcamento
+    });
+    document.getElementById('presentePessoaModal').classList.remove('active');
+    renderPresentes();
+  });
+

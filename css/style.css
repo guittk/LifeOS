@@ -2016,6 +2016,40 @@
   .poss-actions button{ background:none; border:1px solid var(--line-strong); color:var(--text-mut); border-radius:6px; padding:4px 8px; font-size:11px; cursor:pointer; font-family:var(--sans); }
   .poss-actions button:hover{ border-color:var(--coral); color:var(--coral); }
 
+  /* ---------- Presentes & datas ---------- */
+  .presente-pessoa-card{
+    background:var(--surface); border:var(--bw) solid var(--outline); border-radius:var(--radius-sm);
+    box-shadow:3px 3px 0 var(--shadow); padding:16px; margin-bottom:14px;
+  }
+  .presente-pessoa-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .presente-pessoa-nome{ font-size:15px; font-weight:700; margin:0; }
+  .presente-pessoa-meta{ font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-top:3px; display:flex; gap:8px; flex-wrap:wrap; }
+  .presente-pessoa-meta .proximo{ color:var(--gold); font-weight:600; }
+  .presente-pessoa-meta .hoje{ color:var(--coral); font-weight:600; }
+  .presente-pessoa-actions{ display:flex; gap:6px; flex-shrink:0; }
+  .presente-pessoa-actions button{ background:none; border:1px solid var(--line-strong); color:var(--text-mut); border-radius:6px; padding:4px 8px; font-size:11px; cursor:pointer; font-family:var(--sans); }
+  .presente-pessoa-actions button:hover{ border-color:var(--coral); color:var(--coral); }
+  .presente-ideias-list{ display:grid; gap:7px; margin:12px 0 0; }
+  .presente-ideia-row{ display:flex; align-items:center; gap:9px; font-size:13px; }
+  .presente-ideia-row input[type="checkbox"]{ accent-color:var(--sage); flex-shrink:0; width:16px; height:16px; }
+  .presente-ideia-row .txt{ flex:1; min-width:0; overflow-wrap:break-word; }
+  .presente-ideia-row.comprado .txt{ color:var(--text-dim); text-decoration:line-through; }
+  .presente-ideia-valor{
+    width:84px; flex-shrink:0; background:var(--surface-hi); border:1px solid var(--line-strong); border-radius:6px;
+    padding:4px 7px; font-size:12px; font-family:var(--mono); color:var(--text); text-align:right;
+  }
+  .presente-ideia-del{ background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:13px; flex-shrink:0; padding:2px 4px; }
+  .presente-ideia-del:hover{ color:var(--coral); }
+  .presente-ideia-add-row{ display:flex; gap:7px; margin-top:10px; }
+  .presente-ideia-add-row input{
+    flex:1; background:var(--surface-hi); border:1px solid var(--line-strong); border-radius:7px;
+    padding:6px 10px; font-size:12.5px; color:var(--text); font-family:var(--sans);
+  }
+  .presente-ideia-add-row button{
+    background:var(--sage-soft); color:var(--sage); border:1px solid var(--sage); border-radius:7px;
+    padding:5px 12px; font-size:12.5px; cursor:pointer; font-family:var(--sans); font-weight:600;
+  }
+
   /* ---------- Supermercado ---------- */
   .super-secao-titulo{
     font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase;

@@ -176,6 +176,7 @@
     { key:'tarefas', label:'Tarefas' },
     { key:'monday', label:'Planejamento' },
     { key:'agenda', label:'Agenda' },
+    { key:'presentes', label:'Presentes & datas' },
     { key:'storage', label:'Notas' },
     { key:'academia', label:'Academia' },
     { key:'diario', label:'Diário' },

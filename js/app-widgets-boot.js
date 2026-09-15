@@ -849,6 +849,7 @@
     ],
     monday:         [[renderPlanejamento, 'o Planejamento', 'planGruposList']],
     agenda:         [[renderAgenda, 'a Agenda', 'agendaList']],
+    presentes:      [[renderPresentes, 'Presentes & datas', 'presentesList']],
     rotina:         [[renderRotina, 'a Rotina', 'rotinaDaysGrid']],
     casa: [
       [renderCasaAtividades, 'as atividades da Casa', 'casaAtividadesList'],
