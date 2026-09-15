@@ -30,7 +30,7 @@
     const id = newId();
     await dbPut(userPath('/Events/' + id), { title, date, time: allDay ? '' : time, allDay, createdAt: new Date().toISOString() });
     closeEventModal();
-    await renderAgenda(); await renderHojeAvisosEventos();
+    await renderAgenda(); await renderHojeEventos();
   });
 
   document.getElementById('importIcsBtn').addEventListener('click', () => document.getElementById('importIcsInput').click());
@@ -54,7 +54,7 @@
         await dbPatch(userPath('/Events'), eventsObj);
       }
       await renderAgenda();
-      await renderHojeAvisosEventos();
+      await renderHojeEventos();
       showAppMessage(events.length + ' evento(s) importado(s) do .ics.', 'success');
     }catch(err){
       showAppMessage('Erro ao importar .ics: ' + err.message, 'error');

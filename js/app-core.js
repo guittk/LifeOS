@@ -640,7 +640,13 @@
   /* ---------- Navegação principal ---------- */
   const navItems = document.querySelectorAll('.nav-item[data-view]');
 
-  function goToView(target){
+  // Sem histórico, o botão Voltar do Android fechava o app inteiro em vez de
+  // voltar uma tela — goToView() nunca empilhava nada em history. currentView
+  // evita empilhar de novo quando o popstate já está aplicando a troca.
+  let currentView = 'hoje';
+
+  function aplicarView(target){
+    currentView = target;
     navItems.forEach(i => i.classList.remove('active'));
     const navMatch = document.querySelector('.nav-item[data-view="' + target + '"]');
     if(navMatch){ navMatch.classList.add('active'); }
@@ -654,6 +660,20 @@
     // troca de tela é imediata e cada seção mostra seu próprio "Carregando...".
     renderView(target);
   }
+
+  function goToView(target){
+    if(target !== currentView){
+      history.pushState({ lifeosView: target }, '', location.pathname + location.search);
+    }
+    aplicarView(target);
+  }
+
+  window.addEventListener('popstate', (e) => {
+    aplicarView((e.state && e.state.lifeosView) || 'hoje');
+  });
+  // Ponto de partida da pilha: sem isso, o primeiro Voltar já não teria pra
+  // onde ir e o navegador tentaria sair do app.
+  history.replaceState({ lifeosView: currentView }, '', location.pathname + location.search);
 
   navItems.forEach(item => {
     item.addEventListener('click', () => goToView(item.getAttribute('data-view')));
@@ -1133,7 +1153,8 @@
 
   const FLOW_KIND_META = {
     tarefa:  { label:'Tarefa',  cls:'tag-gold' },
-    treino:  { label:'Treino',  cls:'tag-sage' }
+    treino:  { label:'Treino',  cls:'tag-sage' },
+    casa:    { label:'Casa',    cls:'tag-blue' }
   };
   function renderFlowList(){
     const nextIdx = getNextIndex();
@@ -1155,6 +1176,7 @@
           ${idx === nextIdx && a.porque ? `<div class="flow-porque">${escapeHtml(a.porque)}</div>` : ''}
           <div class="flow-meta">
             <span class="tag ${meta.cls}">${meta.label}</span>${a.time ? '<span class="queue-time">' + escapeHtml(a.time) + '</span>' : ''}
+            ${a.responsavel ? `<span class="tag">${escapeHtml(a.responsavel)}</span>` : ''}
             ${a.atraso > 0 ? `<span class="tag flow-atraso">${a.atraso === 1 ? '1 dia atrasada' : a.atraso + ' dias atrasada'}</span>` : ''}
             ${a.semData ? '<span class="tag flow-semdata">quando der</span>' : ''}
             ${a.recorrencia ? `<span class="tag flow-recorrente">↻ ${escapeHtml(TAREFA_RECORRENCIA_LABEL[a.recorrencia] || a.recorrencia)}</span>` : ''}

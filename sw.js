@@ -74,7 +74,6 @@ const SHELL = [
   './',
   './index.html',
   './css/style.css',
-  './js/gamification.js',
   './js/app-core.js',
   './js/app-db-casa.js',
   './js/app-objetivos-vision.js',
@@ -145,8 +144,16 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() => caches.open(DATA_CACHE)
           .then((c) => c.match(chaveDeDados(request.url)))
-          .then((hit) => hit || new Response('null', {
-            status: 200, headers: { 'Content-Type': 'application/json' }
+          // Só existe "último estado conhecido" quando já houve uma leitura bem-
+          // sucedida desse caminho antes. Sem cache, devolver 200 com `null`
+          // mentia "este caminho nunca existiu" — e as telas com seed on first
+          // load (Finanças, Timeline, checklist de Acordar) tratam null como
+          // "conta nova", podendo regravar o padrão por cima do dado real assim
+          // que a rede voltar. Sem cache, o status precisa continuar sendo erro:
+          // dbFetch() já sabe transformar isso num "tentar novamente" visível.
+          .then((hit) => hit || new Response(JSON.stringify({ erro: 'offline-sem-cache' }), {
+            status: 503, statusText: 'Offline sem dado em cache',
+            headers: { 'Content-Type': 'application/json' }
           })))
     );
     return;

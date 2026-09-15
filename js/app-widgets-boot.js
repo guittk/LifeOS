@@ -5,14 +5,18 @@
     // Atenção: o default precisa vir DEPOIS do await. Escrever `dbGet(x) || {}`
     // aqui dentro aplicaria o `||` na Promise (sempre truthy), nunca no valor —
     // e o Firebase devolve null para caminhos vazios (conta nova).
-    const [tasksRaw, academiaRaw, skipsRaw] = await Promise.all([
+    const [tasksRaw, academiaRaw, skipsRaw, casaRaw, academiaConcluidosRaw] = await Promise.all([
       dbGet(userPath('/Tasks')),
       dbGet(userPath('/AcademiaDias')),
-      dbGet(userPath('/HojeSkips/' + today))
+      dbGet(userPath('/HojeSkips/' + today)),
+      dbGet(userPath('/casa/atividades')),
+      dbGet(userPath('/AcademiaConcluidos/' + today))
     ]);
     const tasksData = tasksRaw || {};
     const academiaDias = academiaRaw || {};
     const skips = skipsRaw || {};
+    const casaData = casaRaw || {};
+    const academiaConcluidosHoje = academiaConcluidosRaw || {};
 
     // Antes isto era `t.date === today`, e o efeito era grave: uma tarefa
     // atrasada de ontem — ou sem data nenhuma — sumia da tela Hoje. Ela seguia
@@ -26,6 +30,13 @@
     const diaHoje = academiaDias[dow] || {};
     const exerciciosHoje = diaHoje.ativo ? Object.entries(diaHoje.exercicios || {}).sort((a,b) => (a[1].order||0) - (b[1].order||0)) : [];
     const treinoHorario = diaHoje.horario || '';
+
+    // Combinados da casa (louça, lixo, faxina...) pendentes segundo a mesma
+    // regra de frequência da tela Casa — mais a que foi feita hoje, só pra
+    // aparecer riscada e contar no progresso do dia, igual tarefa e treino.
+    const casaHoje = Object.entries(casaData).filter(([id, a]) => {
+      return casaAtividadeStatus(a).pendente || a.feitaEm === today;
+    });
 
     const janela = await calcularJanelaLivre();
 
@@ -53,11 +64,26 @@
       ...exerciciosHoje.map(([eid,e]) => {
         const key = 'treino_' + eid;
         return {
-          kind:'treino', obj: 'Academia', name: e.nome, time: treinoHorario, done: !!(e.doneDates && e.doneDates[today]), skipped: !!skips[key],
+          // A conclusão de cada exercício vai pra /AcademiaConcluidos/{data}, não
+          // pra dentro do próprio exercício (ver migrarAcademiaConcluidos): o
+          // exercício é o cadastro do cronograma, lido a cada abertura da Hoje —
+          // não é onde um histórico que só cresce deveria morar.
+          kind:'treino', obj: 'Academia', name: e.nome, time: treinoHorario, done: !!academiaConcluidosHoje[eid], skipped: !!skips[key],
           semData: false, atraso: 0,
           onComplete: async () => {
-            await dbPatch(userPath('/AcademiaDias/' + dow + '/exercicios/' + eid + '/doneDates'), { [today]: true });
+            await dbPatch(userPath('/AcademiaConcluidos/' + today), { [eid]: true });
           },
+          onSkip: async (skipped) => { await dbPatch(userPath('/HojeSkips/' + today), { [key]: skipped ? true : null }); }
+        };
+      }),
+      ...casaHoje.map(([id,a]) => {
+        const key = 'casa_' + id;
+        const doneHoje = a.feitaEm === today;
+        return {
+          kind:'casa', obj: 'Casa', name: a.nome, time: '', done: doneHoje, skipped: !!skips[key],
+          semData: false, atraso: 0, responsavel: a.responsavel || '',
+          casaFrequencia: a.frequencia, casaFeitaEm: a.feitaEm,
+          onComplete: async () => { await dbPatch(userPath('/casa/atividades/' + id), { feitaEm: today }); },
           onSkip: async (skipped) => { await dbPatch(userPath('/HojeSkips/' + today), { [key]: skipped ? true : null }); }
         };
       })
@@ -108,7 +134,32 @@
   /* Pontuação de urgência + a frase que explica a escolha.
      Os pesos são deliberados: atraso domina tudo, horário vencido vem em
      seguida, e "sem data" é empurrado pro fim sem nunca sumir da tela. */
+  /* Combinado da casa não tem hora nem data — tem frequência. A régua de
+     atraso das tarefas não serve (dias desde a última vez pode ser Infinity,
+     "nunca feita"), então ganha sua própria conta, calibrada pra ficar entre
+     "é de hoje" (tarefa, 200) e "já passou da hora" (tarefa, 600+): um
+     combinado nunca visto ou muito atrasado pode superar uma tarefa comum,
+     mas não uma tarefa já vencida ou de verdade atrasada. */
+  const CASA_QUEUE_BASE = 500;
+  function pontuarCasa(a){
+    if(a.done || a.skipped) return { score: -5000, porque: '' };
+    const intervalo = CASA_FREQ_DIAS[a.casaFrequencia] || 1;
+    const dias = casaDiasDesde(a.casaFeitaEm);
+    if(dias === Infinity){
+      return { score: CASA_QUEUE_BASE + 400, porque: 'Nunca foi feita — combinado da casa.' };
+    }
+    const diasAtraso = Math.max(0, dias - intervalo);
+    if(diasAtraso > 0){
+      return {
+        score: CASA_QUEUE_BASE + Math.min(300, diasAtraso * 20),
+        porque: diasAtraso === 1 ? 'Pendente há 1 dia — combinado da casa.' : 'Pendente há ' + diasAtraso + ' dias — combinado da casa.'
+      };
+    }
+    return { score: CASA_QUEUE_BASE, porque: 'Pendente hoje — combinado da casa.' };
+  }
+
   function pontuarUrgencia(a, janela){
+    if(a.kind === 'casa') return pontuarCasa(a);
     const nowMin = janela.nowMin;
     const horaMin = a.time ? rotToMinutes(a.time) : null;
     let score = 0;
@@ -279,31 +330,24 @@
   }
 
 
-  /* ---------- HOJE — painel "Avisos & eventos" (unificado) ----------
-     Um único container: mostra os eventos de hoje e os avisos ativos juntos,
-     com uma divisória apenas quando os dois tipos coexistem. Só mostra a
-     mensagem de "nada por hoje" quando os dois estiverem realmente vazios. */
-  async function renderHojeAvisosEventos(){
+  /* ---------- HOJE — painel "Eventos" ----------
+     Eventos de hoje, da Agenda. (Chamava-se "Avisos & eventos": o lado de
+     avisos lia /Avisos, um caminho que nenhuma tela do app jamais escreve —
+     o bloco nunca teve conteúdo pra mostrar. Removido; se voltar a fazer
+     sentido um aviso avulso aqui, entra como feature nova, não como leitura
+     de um caminho morto.) */
+  async function renderHojeEventos(){
     const el = document.getElementById('hojeAvisosEventosList');
-    const [eventsRaw, avisosRaw] = await Promise.all([
-      dbGet(userPath('/Events')),
-      dbGet(userPath('/Avisos'))
-    ]);
-    const eventsData = eventsRaw || {};
-    const avisosData = avisosRaw || {};
+    const eventsData = await dbGet(userPath('/Events')) || {};
     const today = todayStr();
     const todaysEvents = Object.values(eventsData).filter(ev => ev.date === today).sort((a,b) => (a.time||'').localeCompare(b.time||''));
-    const ativos = Object.values(avisosData).filter(a => a.active !== false);
 
-    if(!todaysEvents.length && !ativos.length){
-      el.innerHTML = '<p class="empty-state">Nenhum aviso ou evento por hoje.</p>';
+    if(!todaysEvents.length){
+      el.innerHTML = '<p class="empty-state">Nenhum evento por hoje.</p>';
       return;
     }
 
-    const eventsHtml = todaysEvents.map(ev => `<div class="event-row"><div class="event-time">${ev.allDay?'dia todo':(ev.time||'—')}</div><div class="event-title">${escapeHtml(ev.title)}</div></div>`).join('');
-    const avisosHtml = ativos.map(a => `<div class="notice" style="margin-top:0;">✳ ${escapeHtml(a.text)}</div>`).join('');
-    const divider = (todaysEvents.length && ativos.length) ? '<div style="height:1px; background:var(--line); margin:8px 0;"></div>' : '';
-    el.innerHTML = eventsHtml + divider + avisosHtml;
+    el.innerHTML = todaysEvents.map(ev => `<div class="event-row"><div class="event-time">${ev.allDay?'dia todo':(ev.time||'—')}</div><div class="event-title">${escapeHtml(ev.title)}</div></div>`).join('');
   }
 
   async function renderHojeHeader(){
@@ -511,7 +555,7 @@
   const VIEW_RENDERERS = {
     hoje: [
       [renderHojeQueue,          'a fila de hoje',              []],
-      [renderHojeAvisosEventos,  'os avisos e eventos',         'hojeAvisosEventosList'],
+      [renderHojeEventos,  'os eventos de hoje',          'hojeAvisosEventosList'],
       [renderHojeHidratacao,     'água & creatina',             'hojeHidratacaoList'],
       [renderHojePlanoAlimentar, 'o plano alimentar de hoje',   'hojePlanoAlimentarList'],
       [renderHojeInsulina,       'a insulina de hoje',          'hojeInsulinaList'],
@@ -578,6 +622,7 @@
     // qualquer exceção aqui matava o boot inteiro e deixava as 17 telas em
     // "Carregando..." para sempre. Cada passo agora falha sozinho.
     const preludio = [
+      ['a migração do histórico da Academia', migrarAcademiaConcluidos],
       ['os membros da Casa', loadCasaMembros],
       ['a cor principal',    loadCorPrincipal],
       ['o tema do Diário',   loadDiarioTheme],

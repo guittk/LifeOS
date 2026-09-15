@@ -14,7 +14,7 @@ sem preocupação com custo de contexto (ao contrário do CLAUDE.md).
 
 ## Navegação global (presente em todas as telas)
 
-- **Sidebar** com grupos: Executar (Hoje), Organizar (Notas, Tarefas, Planejamento, Agenda, Rotina, Casa, Finanças, Decisões, Perguntar), Evoluir (Fluência, Academia, Diário, Plano Alimentar, Objetivos, Timeline, Vision Board), Bateria (uso ocasional), Em breve (Supermercado, Cálculos, Empreendedorismo, Ápice), e Configurações/Sair no rodapé.
+- **Sidebar** com grupos: Executar (Hoje), Organizar (Notas, Tarefas, Agenda, Rotina, Casa, Finanças, Decisões, Perguntar), Evoluir (Fluência, Academia, Diário, Plano Alimentar, Objetivos, Timeline, Vision Board), Em breve (Bateria e Planejamento — uso ocasional, já funcionam de verdade; Supermercado, Cálculos, Empreendedorismo, Ápice — ainda sem conteúdo), e Configurações/Sair no rodapé.
 - **Pesquisa global** (Ctrl/Cmd+K): busca em objetivos, tarefas, planejamento, diário, decisões e mais, ao mesmo tempo — e funciona como comando de navegação pra qualquer tela.
 - **Captura rápida**: modal de texto livre acessível de qualquer tela, cria uma nova Nota.
 - **Loading global**, **toasts** de notificação e **modal de confirmação** substituem os diálogos nativos do navegador em toda a aplicação.
@@ -25,10 +25,10 @@ sem preocupação com custo de contexto (ao contrário do CLAUDE.md).
 
 Tela inicial — só o que importa para o dia de hoje. Três sub-abas: **Dia**, **Corpo**, **Mente**.
 
-- **Hero card**: a próxima atividade da fila (tarefa ou treino), com botão para concluir.
-- **Depois disso**: fila combinada de tarefas + treino de hoje, na ordem em que devem ser feitos.
+- **Hero card**: a próxima atividade da fila (tarefa, treino ou combinado da Casa), com botão para concluir.
+- **Depois disso**: fila combinada de tarefas + treino de hoje + atividades pendentes da Casa (por frequência — ver `casaAtividadeStatus()`), na ordem em que devem ser feitos.
 - **Minha rotina hoje**: timeline de 24h mostrando os blocos da Rotina, estatísticas de "agora" e horas livres.
-- **O que falta hoje** / **Eventos**: avisos ativos da Casa + eventos de hoje da Agenda.
+- **Eventos**: eventos de hoje da Agenda.
 - **Água & creatina hoje**: consumo do dia vs. metas definidas em Academia.
 - **Plano alimentar hoje**: próxima refeição pendente, com "Fiz essa refeição" / "Não fiz" / "Fiz outra refeição", e o painel de Insulina.
 - **Fluência hoje**: progresso de cards estudados hoje vs. meta, sequência de dias.
@@ -54,14 +54,6 @@ Mural de notas (substituiu o antigo modelo "Arquivo" de Gavetas/Capturas/Revisã
 - Tarefas organizadas em **grupos** nomeados, cada grupo em tabela (Prazo, Tarefa, Status, Excluir), ordenadas por data.
 - Toggle de status direto na tabela. Suporta recorrência.
 - "+ Nova tarefa", "+ Novo grupo", "Maximizar/Minimizar todos".
-
-## Planejamento (`view-monday`)
-
-Board estilo Monday.com/Trello, portado do projeto Apice: **grupos → elementos → subelementos**, cada um com status (Backlog, To Do, Em andamento, Bloqueado, Concluído, Adiado, Cancelado), prioridade, responsável e prazo. Arraste pra reorganizar. "Selecionar" pra ações em lote.
-
-> Tarefas e Planejamento cobrem um espaço parecido — ainda em teste de qual
-> (ou os dois) faz mais sentido no uso do dia a dia. Mesma dúvida vale pra
-> Atividades da Casa. Nada a resolver aqui até decidir.
 
 ---
 
@@ -104,7 +96,7 @@ Registro de decisões importantes com contexto, opções e critérios. Status: E
 
 ## Perguntar ao LifeOS (`view-busca`)
 
-Chat com IA (Claude, via `iaProxy`) que responde sobre os dados do app — tarefas, objetivos, diário, agenda, decisões — em linguagem natural. Ex: "O que estou esquecendo?", "Quais decisões tomei este mês?".
+Chat com IA (Claude, via `iaProxy`) que responde sobre os dados do app — tarefas, notas, objetivos, diário, agenda, decisões, finanças (resumo dos próximos meses + custo de vida), rotina semanal, atividades e regras da Casa (sem os Erros — registro de falha entre vocês, não organização), plano alimentar da semana e Timeline de Objetivos — em linguagem natural. Ex: "O que estou esquecendo?", "Dá pra comprar algo de R$500 em dezembro?", "Quem lava a louça essa semana?". Mantém as últimas perguntas e respostas da sessão como contexto curto pra perguntas de seguimento ("e em fevereiro?") — só na memória do navegador, não é salvo no Firebase.
 
 ---
 
@@ -148,12 +140,18 @@ Colagem de imagens que representam onde você quer chegar.
 
 ---
 
-## Em breve (sem conteúdo ainda — só o lugar reservado)
+## Em breve
 
-- **Supermercado** (`view-supermercado`) — lista de compras a partir do cardápio do Plano Alimentar.
-- **Cálculos** (`view-calculos`) — calculadoras do dia a dia; já tem a aba **Rescisão** criada dentro (vazia).
-- **Empreendedorismo** (`view-empreendedorismo`) — conteúdo ainda não definido.
-- **Ápice** (`view-apice`) — Ápice Soluções Digitais; já tem o botão "Abrir Ápice ↗" funcionando pra apicesolucoesdigitais.com.br.
+Dois grupos diferentes no mesmo lugar da sidebar: **Bateria e Planejamento** já
+funcionam de verdade, só ainda sem um bom uso encontrado no dia a dia; as
+outras quatro é que não têm conteúdo nenhum.
+
+- **Bateria** (`view-bateria`) — app externo (drum.guilherme-oliveira.com) embutido via iframe. Ver Fluência/Bateria acima.
+- **Planejamento** (`view-monday`) — board estilo Monday.com/Trello, portado do projeto Apice: **grupos → elementos → subelementos**, cada um com status (Backlog, To Do, Em andamento, Bloqueado, Concluído, Adiado, Cancelado), prioridade, responsável e prazo. Arraste pra reorganizar. "Selecionar" pra ações em lote. Cobre um espaço parecido com Tarefas e com Atividades da Casa — as três continuam existindo, sem fronteira formal entre elas ainda.
+- **Supermercado** (`view-supermercado`) — sem conteúdo. Lista de compras a partir do cardápio do Plano Alimentar.
+- **Cálculos** (`view-calculos`) — sem conteúdo. Calculadoras do dia a dia; já tem a aba **Rescisão** criada dentro (vazia).
+- **Empreendedorismo** (`view-empreendedorismo`) — sem conteúdo definido.
+- **Ápice** (`view-apice`) — sem conteúdo além do botão "Abrir Ápice ↗", que já funciona, pra apicesolucoesdigitais.com.br.
 
 ---
 

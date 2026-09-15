@@ -205,6 +205,42 @@
     }).join('');
   }
 
+  /* ---------- Migração: histórico de treino sai de dentro do exercício ----------
+     Até 14/09/2026 cada exercício guardava suas próprias conclusões em
+     `doneDates: { [data]: true }`, dentro de /AcademiaDias — o cadastro do
+     cronograma semanal (7 dias fixos), lido inteiro toda vez que a Hoje ou a
+     Academia abrem. Isso crescia pra sempre dentro de um documento pequeno que
+     devia continuar pequeno. Agora a conclusão vai pra /AcademiaConcluidos/{data},
+     no mesmo padrão de /HojeSkips e /AcademiaConsumo (uma coleção por dia).
+
+     Roda uma vez só: se /AcademiaConcluidos ainda não existe mas há doneDates
+     sobrando em /AcademiaDias, migra o que já foi feito e limpa a origem —
+     sem isso, o histórico usado no auto-progresso dos Objetivos zeraria do
+     nada pra quem já tinha treinos concluídos antes desta mudança. */
+  async function migrarAcademiaConcluidos(){
+    const [academiaDias, jaMigrado] = await Promise.all([
+      dbGet(userPath('/AcademiaDias')),
+      dbGet(userPath('/AcademiaConcluidos'))
+    ]);
+    if(jaMigrado != null) return; // já rodou (mesmo que tenha migrado um conjunto vazio)
+    const porData = {};
+    let achouAlgo = false;
+    const academiaDiasLimpo = JSON.parse(JSON.stringify(academiaDias || {}));
+    Object.values(academiaDiasLimpo).forEach(dia => {
+      Object.entries((dia && dia.exercicios) || {}).forEach(([exId, ex]) => {
+        Object.keys(ex.doneDates || {}).forEach(data => {
+          achouAlgo = true;
+          if(!porData[data]) porData[data] = {};
+          porData[data][exId] = true;
+        });
+        delete ex.doneDates;
+      });
+    });
+    if(!achouAlgo) return; // nada pra migrar — não grava coleção vazia à toa
+    await dbPut(userPath('/AcademiaConcluidos'), porData);
+    await dbPut(userPath('/AcademiaDias'), academiaDiasLimpo);
+  }
+
   /* ---------- ACADEMIA (cronograma semanal) ----------
      Mesmo padrão da Rotina: edições ficam num rascunho em memória e só vão
      pro Firebase ao clicar "Salvar alterações". "Cancelar" descarta e recarrega. */
@@ -212,7 +248,7 @@
 
   let academiaDraft = null;
   let academiaDirty = false;
-  function cloneAcademia(data){ return JSON.parse(JSON.stringify(data || {})); }
+  function cloneAcademia(data){ return cloneValue(data) || {}; } // cloneValue: app-db-casa.js
   function setAcademiaDirty(dirty){
     academiaDirty = dirty;
     const status = document.getElementById('academiaSaveStatus');
@@ -403,7 +439,7 @@
 
   let paDraft = null;
   let paDirty = false;
-  function clonePa(data){ return JSON.parse(JSON.stringify(data || {})); }
+  function clonePa(data){ return cloneValue(data) || {}; } // cloneValue: app-db-casa.js
   function setPaDirty(dirty){
     paDirty = dirty;
     const status = document.getElementById('paSaveStatus');
@@ -632,7 +668,7 @@
   let rotinaDraft = null;
   let rotinaDirty = false;
 
-  function cloneRotina(data){ return JSON.parse(JSON.stringify(data || {})); }
+  function cloneRotina(data){ return cloneValue(data) || {}; } // cloneValue: app-db-casa.js
 
   function setRotinaDirty(dirty){
     rotinaDirty = dirty;

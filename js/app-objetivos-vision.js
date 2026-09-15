@@ -32,19 +32,19 @@
     monday: 'elementos concluídos no Planejamento'
   };
   async function fetchAutoActionCounts(){
-    const [cards, academiaDias, tasks, diario, planItens] = await Promise.all([
+    const [cards, academiaConcluidos, tasks, diario, planItens] = await Promise.all([
       dbGet(userPath('/Cards')).catch(() => null),
-      dbGet(userPath('/AcademiaDias')).catch(() => null),
+      dbGet(userPath('/AcademiaConcluidos')).catch(() => null),
       dbGet(userPath('/Tasks')).catch(() => null),
       dbGet(userPath('/DiarioEntradas')).catch(() => null),
       dbGet(userPath('/PlanItens')).catch(() => null)
     ]);
     let fluencia = 0;
     Object.values(cards || {}).forEach(c => { fluencia += (c.History || []).length; });
+    // Histórico de treino concluído vive em /AcademiaConcluidos/{data}/{exId},
+    // não mais dentro do próprio exercício — ver migrarAcademiaConcluidos().
     let academia = 0;
-    Object.values(academiaDias || {}).forEach(dia => {
-      Object.values((dia && dia.exercicios) || {}).forEach(ex => { academia += Object.keys(ex.doneDates || {}).length; });
-    });
+    Object.values(academiaConcluidos || {}).forEach(dia => { academia += Object.keys(dia || {}).length; });
     const tarefas = Object.values(tasks || {}).filter(t => t.done).length;
     const diarioCount = Object.keys(diario || {}).length;
     const planCount = Object.values(planItens || {}).filter(t => t.status === 'done').length;

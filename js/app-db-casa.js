@@ -752,7 +752,7 @@
 
   let finState = null;
   let finStateSalvo = null; // último estado gravado no Firebase — pra onde "Cancelar" volta
-  function finClone(obj){ return JSON.parse(JSON.stringify(obj)); }
+  function finClone(obj){ return cloneValue(obj); } // cloneValue: ver "Cache de leitura", acima
 
   const finMoeda = new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' });
   function finFmt(v){ return finMoeda.format(Number(v) || 0); }
@@ -950,9 +950,13 @@
     finRenderCustoVida();
     finRenderSimulador();
   });
-  // Fechar/recarregar a aba com edição pendente em Finanças perderia o que não foi salvo.
+  // Fechar/recarregar a aba com edição pendente perderia o que não foi salvo.
+  // Rotina, Academia e Plano Alimentar usam o mesmo padrão de rascunho +
+  // "dirty" que Finanças (ver setRotinaDirty/setAcademiaDirty/setPaDirty em
+  // app-diario-hoje.js) — o aviso vale pros quatro, não só pro primeiro que
+  // ganhou essa proteção.
   window.addEventListener('beforeunload', (e) => {
-    if(!finDirty) return;
+    if(!finDirty && !rotinaDirty && !academiaDirty && !paDirty) return;
     e.preventDefault();
     e.returnValue = '';
   });

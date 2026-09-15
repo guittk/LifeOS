@@ -297,16 +297,65 @@
   });
 
   /* ---------- Busca Semântica (Perguntar ao LifeOS) ---------- */
-  const BUSCA_TIPO_VIEW = { tarefas: 'tarefas', storage: 'storage', objetivos: 'objetivos', diario: 'diario', agenda: 'agenda', decisoes: 'decisoes' };
-  const BUSCA_TIPO_LABEL = { tarefas: 'Tarefa', storage: 'Nota', objetivos: 'Objetivo', diario: 'Diário', agenda: 'Agenda', decisoes: 'Decisão' };
+  const BUSCA_TIPO_VIEW = {
+    tarefas: 'tarefas', storage: 'storage', objetivos: 'objetivos', diario: 'diario', agenda: 'agenda',
+    decisoes: 'decisoes', financas: 'financas', rotina: 'rotina', casa: 'casa',
+    planoalimentar: 'planoalimentar', timeline: 'timelineobjetivos'
+  };
+  const BUSCA_TIPO_LABEL = {
+    tarefas: 'Tarefa', storage: 'Nota', objetivos: 'Objetivo', diario: 'Diário', agenda: 'Agenda',
+    decisoes: 'Decisão', financas: 'Finanças', rotina: 'Rotina', casa: 'Casa',
+    planoalimentar: 'Plano Alimentar', timeline: 'Timeline'
+  };
 
   function buscaTruncate(s, n){ s = String(s || ''); return s.length > n ? s.slice(0, n) + '…' : s; }
 
+  /* Resumo mês a mês de Finanças pra IA — não reaproveita finCalcular() porque
+     ela lê o finState em memória, que só existe depois que a tela Finanças foi
+     aberta ao menos uma vez na sessão. Aqui a leitura é direto do Firebase, e
+     precisa funcionar mesmo que ninguém tenha aberto aquela tela ainda. Mesma
+     conta, encadeada mês a mês (sobra e empréstimo empurram pro próximo). */
+  function buscaResumoFinancas(plano){
+    if(!plano || !plano.meses) return null;
+    const valorDe = (item) => {
+      if(item.refId && plano.valores && plano.valores[item.refId]) return Number(plano.valores[item.refId].valor) || 0;
+      return Number(item.valor) || 0;
+    };
+    const somaSecao = (mes, secao) => Object.values(mes.itens || {}).filter(i => i.secao === secao).reduce((s, i) => s + valorDe(i), 0);
+    const meses = Object.values(plano.meses).sort((a, b) => (a.ano - b.ano) || (a.mes - b.mes));
+    const taxa = Number(plano.taxaEmprestimo) || 0;
+    let sobraAnterior = 0, empurradoAnterior = 0;
+    const porMes = meses.slice(0, 6).map(mes => {
+      const mpEstimativa = -empurradoAnterior;
+      const cartaoTotal = somaSecao(mes, 'estimativas') + somaSecao(mes, 'renovacoes') + somaSecao(mes, 'parcelas') + somaSecao(mes, 'compras') + somaSecao(mes, 'aleatorios') + mpEstimativa;
+      const posVale = sobraAnterior + somaSecao(mes, 'dia10') + cartaoTotal + somaSecao(mes, 'dia20');
+      const emprestimo = posVale < 50 ? (-posVale + 50) : 0;
+      const faturaFinal = posVale + emprestimo;
+      const orcamentoAleatorio = mes.orcamentoAleatorio != null ? Math.abs(Number(mes.orcamentoAleatorio) || 0) : Math.abs(Number(plano.orcamentoAleatorio) || 0);
+      const gastoAleatorio = -somaSecao(mes, 'aleatorios');
+      sobraAnterior = faturaFinal;
+      empurradoAnterior = emprestimo + emprestimo * taxa;
+      return {
+        mes: (FIN_MES_NOMES[mes.mes] || '') + '/' + mes.ano,
+        sobraNoFimDoMes: Math.round(faturaFinal),
+        precisouEmprestimoNoMes: emprestimo > 0,
+        orcamentoAleatorioRestante: Math.round(orcamentoAleatorio - gastoAleatorio)
+      };
+    });
+    const custoDeVidaMensal = Object.values(plano.custoVida || {}).reduce((s, i) => s + valorDe(i), 0);
+    return { taxaDeJurosDoEmprestimo: taxa, custoDeVidaMensalEstimado: Math.round(custoDeVidaMensal), proximosMeses: porMes };
+  }
+
   async function buscaColetarContexto(){
-    const [tasks, notasAreas, notas, objetivos, diario, events, decisoes] = await Promise.all([
+    const [
+      tasks, notasAreas, notas, objetivos, diario, events, decisoes,
+      financasPlano, rotina, casaAtividades, casaRegras, planoAlimentar, timelineMarcos
+    ] = await Promise.all([
       dbGet(userPath('/Tasks')), dbGet(userPath('/NotasAreas')), dbGet(userPath('/Notas')),
       dbGet(userPath('/objetivos')), dbGet(userPath('/DiarioEntradas')), dbGet(userPath('/Events')),
-      dbGet(userPath('/Decisoes'))
+      dbGet(userPath('/Decisoes')), dbGet(userPath(FIN_PATH)), dbGet(userPath('/Rotina')),
+      dbGet(userPath('/casa/atividades')), dbGet(userPath('/casa/regras')),
+      dbGet(userPath('/PlanoAlimentar')), dbGet(userPath('/TimelineMarcos'))
     ]);
     const ctx = {};
     ctx.tarefas = Object.values(tasks || {}).slice(-80).map(t => ({ nome: t.name, data: t.date, feita: !!t.done }));
@@ -326,6 +375,27 @@
       resultado: d.resultado ? { escolha: d.resultado.escolhaNome, justificativa: d.resultado.justificativa } : null,
       revisao: d.revisao || null
     }));
+    ctx.financas = buscaResumoFinancas(financasPlano);
+    ctx.rotina = Object.entries(rotina || {}).map(([dow, dia]) => ({
+      dia: ACADEMIA_DAY_NAMES[Number(dow)] || dow,
+      blocos: Object.values((dia && dia.blocos) || {}).sort((a,b) => (a.inicio||'').localeCompare(b.inicio||'')).map(b => (b.nome||'Sem nome') + ' ' + (b.inicio||'') + '-' + (b.fim||''))
+    }));
+    // "Erros" da Casa fica de fora de propósito: é registro de falha entre as
+    // duas pessoas, não organização — não é o tipo de coisa que devia voltar
+    // como resposta de chat.
+    ctx.casaAtividades = Object.values(casaAtividades || {}).map(a => ({
+      nome: a.nome, frequencia: a.frequencia, responsavel: a.responsavel || null, pendente: casaAtividadeStatus(a).pendente
+    }));
+    ctx.casaRegras = Object.values(casaRegras || {}).map(r => ({ texto: r.texto, responsavel: r.responsavel || null }));
+    ctx.planoAlimentarSemana = Object.entries(planoAlimentar || {}).map(([dow, dia]) => ({
+      dia: ACADEMIA_DAY_NAMES[Number(dow)] || dow,
+      refeicoes: Object.values((dia && dia.refeicoes) || {}).sort((a,b) => (a.horario||'').localeCompare(b.horario||'')).map(r =>
+        (r.nome||'') + ' (' + (r.horario||'') + '): ' + Object.values(r.alimentos || {}).map(f => buscaTruncate((f.quantidade?f.quantidade+' ':'') + (f.nome||''), 40)).join(', ')
+      )
+    }));
+    ctx.timeline = Object.values(timelineMarcos || {}).sort((a,b) => (a.ordem||0) - (b.ordem||0)).map(m => ({
+      nome: m.nome, prazo: m.prazo || null, valor: m.valor || null, ganho: !!m.ganho
+    }));
     return ctx;
   }
 
@@ -341,6 +411,12 @@
     return el;
   }
 
+  // Memória curta da conversa: só nesta sessão (não vai pro Firebase). O proxy
+  // recebe system+prompt como texto solto, sem histórico de mensagens — então
+  // quem carrega o contexto entre perguntas ("e em fevereiro?") é este array,
+  // embutido no prompt seguinte.
+  let buscaHistorico = [];
+
   async function buscaEnviarPergunta(){
     const input = document.getElementById('buscaChatInput');
     const pergunta = input.value.trim();
@@ -355,14 +431,21 @@
 
     try{
       const ctx = await buscaColetarContexto();
-      const systemPrompt = 'Você é um assistente que responde perguntas em português sobre a vida pessoal de um usuário do LifeOS, usando apenas os dados fornecidos abaixo (tarefas, notas, objetivos, diário, agenda e decisões). ' +
-        'Seja direto e específico, citando datas e nomes quando existirem. Se não houver informação suficiente, diga isso claramente em vez de inventar. ' +
-        'Responda APENAS com um objeto JSON, sem markdown, no formato exato: {"resposta": "texto da resposta em português", "referencias": [{"tipo": "tarefas|storage|objetivos|diario|agenda|decisoes", "texto": "trecho curto de referência"}]}. ' +
-        'Inclua no máximo 6 referências, só das fontes realmente usadas na resposta.\n\nDados do usuário (JSON): ' + JSON.stringify(ctx);
+      const historicoTexto = buscaHistorico.length
+        ? '\n\nConversa até agora nesta sessão, pra manter o contexto entre perguntas seguidas:\n' +
+          buscaHistorico.map(h => 'Usuário perguntou: ' + h.pergunta + '\nVocê respondeu: ' + h.resposta).join('\n\n')
+        : '';
+      const systemPrompt = 'Você é um assistente que responde perguntas em português sobre a vida pessoal de um usuário do LifeOS, usando apenas os dados fornecidos abaixo (tarefas, notas, objetivos, diário, agenda, decisões, finanças, rotina semanal, combinados e atividades da casa, plano alimentar da semana e timeline de metas). ' +
+        'Seja direto e específico, citando datas, nomes e valores quando existirem. Se não houver informação suficiente, diga isso claramente em vez de inventar. ' +
+        'Responda APENAS com um objeto JSON, sem markdown, no formato exato: {"resposta": "texto da resposta em português", "referencias": [{"tipo": "tarefas|storage|objetivos|diario|agenda|decisoes|financas|rotina|casa|planoalimentar|timeline", "texto": "trecho curto de referência"}]}. ' +
+        'Inclua no máximo 6 referências, só das fontes realmente usadas na resposta.\n\nDados do usuário (JSON): ' + JSON.stringify(ctx) + historicoTexto;
 
       const parsed = extractJson(await chamarIA(systemPrompt, pergunta));
       const resposta = parsed.resposta || '(sem resposta)';
       const refs = Array.isArray(parsed.referencias) ? parsed.referencias.slice(0, 6) : [];
+
+      buscaHistorico.push({ pergunta, resposta });
+      if(buscaHistorico.length > 6) buscaHistorico.shift(); // só o suficiente pra manter o fio, sem inflar o prompt
 
       loadingEl.classList.remove('loading');
       loadingEl.innerHTML = escapeHtml(resposta) +

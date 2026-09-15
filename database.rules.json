@@ -11,14 +11,6 @@
         "Profile": {
           "Email":       { ".validate": "newData.isString() && newData.val().length <= 320" },
           "DisplayName": { ".validate": "newData.isString() && newData.val().length <= 80" }
-        },
-
-        "Progresso": {
-          "xp": {
-            "$attr": {
-              ".validate": "newData.isNumber() && newData.val() >= 0"
-            }
-          }
         }
       }
     },
