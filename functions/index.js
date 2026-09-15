@@ -19,9 +19,9 @@
    Pra publicar de novo depois de mexer no código:
      cd functions && firebase deploy --only functions:iaProxy --project basehub-135f5
 
-   Ainda pendente, sem urgência: apagar o nó /openAiKey do Realtime Database
-   e revogar a chave antiga da OpenAI (já circulou por navegadores antes
-   desta function existir).
+   Feito em 14/09/2026: nó /openAiKey apagado do Realtime Database e a chave
+   antiga da OpenAI (que já tinha circulado por navegadores antes desta
+   function existir) revogada em platform.openai.com.
    ---------------------------------------------------------------------------
    ============================================================================= */
 

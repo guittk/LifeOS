@@ -826,16 +826,22 @@
     { rotulo:'Nova decisão',       chaves:'decisao decidir escolha',           run: () => { goToView('decisoes'); document.getElementById('decisaoAddBtn').click(); } },
     { rotulo:'Escrever no Diário', chaves:'diario escrever humor',             run: () => goToView('diario') },
     { rotulo:'Perguntar ao LifeOS',chaves:'perguntar ia buscar semantica',     run: () => goToView('busca') },
-    { rotulo:'Configurações',      chaves:'config tema cor conta quadro',      run: () => goToView('config') }
+    { rotulo:'Configurações',      chaves:'config tema cor conta quadro',      run: () => goToView('config') },
+    // Ápice não é uma view — o nav-item já abre o site direto (sem tela própria,
+    // de propósito). O comando de busca faz o mesmo, em vez de tentar navegar
+    // pra uma view que não existe.
+    { rotulo:'Abrir Ápice',        chaves:'apice site empresa',                run: () => window.open('https://apicesolucoesdigitais.com.br', '_blank', 'noopener') }
   ];
   // Toda view também é um comando de navegação.
   const SEARCH_VIEWS = [
     ['hoje','Hoje'], ['storage','Notas'], ['tarefas','Tarefas'], ['monday','Planejamento'],
-    ['agenda','Agenda'], ['rotina','Rotina'], ['casa','Casa'], ['financas','Finanças'],
+    ['agenda','Agenda'], ['rotina','Rotina'], ['casa','Casa'], ['manutencao','Manutenção'],
+    ['nosdois','Nós dois'], ['financas','Finanças'],
     ['fluencia','Fluência'], ['bateria','Bateria'], ['academia','Academia'], ['diario','Diário'],
+    ['retrospectiva','Retrospectiva'],
     ['planoalimentar','Plano Alimentar'], ['objetivos','Objetivos'], ['timelineobjetivos','Timeline'], ['decisoes','Decisões'],
     ['visionboard','Vision Board'], ['supermercado','Supermercado'], ['calculos','Cálculos'],
-    ['empreendedorismo','Empreendedorismo'], ['apice','Ápice']
+    ['empreendedorismo','Empreendedorismo']
   ].map(([v, nome]) => ({
     rotulo: 'Ir para ' + nome, chaves: 'ir abrir ' + nome + ' ' + v, run: () => goToView(v)
   }));

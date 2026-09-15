@@ -92,7 +92,9 @@
     <div class="nav-item" data-view="calculos" title="Cálculos"><span class="nav-icon">🧮</span><span class="nav-label">Cálculos</span></div>
     <div class="nav-item" data-view="decisoes" title="Decisões"><span class="nav-icon">🧭</span><span class="nav-label">Decisões</span></div>
     <div class="nav-item" data-view="empreendedorismo" title="Empreendedorismo"><span class="nav-icon">💡</span><span class="nav-label">Empreendedorismo</span></div>
-    <div class="nav-item" data-view="apice" title="Ápice"><span class="nav-icon">🏔️</span><span class="nav-label">Ápice</span></div>
+    <!-- Sem tela própria de propósito: sem data-view, então nem entra na fila de
+         navegação por view nem na de permissão de Quadro — é só um link. -->
+    <a class="nav-item" href="https://apicesolucoesdigitais.com.br" target="_blank" rel="noopener" title="Ápice — abre em outra aba"><span class="nav-icon">🏔️</span><span class="nav-label">Ápice ↗</span></a>
     <div class="nav-item" data-view="busca" title="Perguntar"><span class="nav-icon">💬</span><span class="nav-label">Perguntar</span></div>
   </nav>
 
@@ -1236,44 +1238,10 @@
       <div>
         <p class="eyebrow">Organizar</p>
         <h1 class="view-title">Cálculos</h1>
-        <p class="view-desc">Calculadoras do dia a dia.</p>
-      </div>
-    </div>
-    <div class="subtabs">
-      <button class="subtab active" data-sub="calculos" data-target="calculos-unidade">Preço por unidade</button>
-      <button class="subtab" data-sub="calculos" data-target="calculos-meta">Tempo até a meta</button>
-      <button class="subtab" data-sub="calculos" data-target="calculos-rescisao">Rescisão</button>
-    </div>
-
-    <div class="subview active" id="calculos-unidade">
-      <div class="panel">
-        <p class="panel-title">Preço por unidade</p>
-        <p class="view-desc" style="margin:-6px 0 14px;">Compare dois tamanhos do mesmo produto e veja qual sai mais barato de verdade.</p>
-        <div class="grid-2" style="gap:18px;">
-          <div class="fin-sim-form" style="grid-template-columns:1fr;">
-            <p class="super-secao-titulo" style="margin:0;">Opção A</p>
-            <div class="fin-sim-campo"><span>Preço</span><input type="text" inputmode="decimal" id="calcUnidPrecoAInput" placeholder="ex: 22,00"></div>
-            <div class="fin-sim-campo"><span>Quantidade</span><input type="text" id="calcUnidQtdAInput" placeholder="ex: 1kg, 700g, 500ml, 6un"></div>
-          </div>
-          <div class="fin-sim-form" style="grid-template-columns:1fr;">
-            <p class="super-secao-titulo" style="margin:0;">Opção B</p>
-            <div class="fin-sim-campo"><span>Preço</span><input type="text" inputmode="decimal" id="calcUnidPrecoBInput" placeholder="ex: 16,50"></div>
-            <div class="fin-sim-campo"><span>Quantidade</span><input type="text" id="calcUnidQtdBInput" placeholder="ex: 1kg, 700g, 500ml, 6un"></div>
-          </div>
-        </div>
-        <div id="calcUnidResultado" style="margin-top:16px;"></div>
+        <p class="view-desc">Calculadora de rescisão.</p>
       </div>
     </div>
 
-    <div class="subview" id="calculos-meta">
-      <div class="panel">
-        <p class="panel-title">Tempo até a meta</p>
-        <p class="view-desc" style="margin:-6px 0 14px;">Cruza o que sobra por mês nas Finanças com os valores da Timeline de Objetivos — cada marco com valor ganha uma data estimada.</p>
-        <div id="calcMetaResultado"><p class="empty-state">Carregando...</p></div>
-      </div>
-    </div>
-
-    <div class="subview" id="calculos-rescisao">
       <div class="panel" style="margin-bottom:18px;">
         <p class="panel-title">Dados da rescisão</p>
         <p class="view-desc" style="margin:-6px 0 14px;">Modela demissão sem justa causa com aviso prévio indenizado — o cenário mais comum. Não inclui desconto de INSS/IRRF: os valores abaixo são brutos, confira o líquido com o RH ou contador antes de decidir qualquer coisa.</p>
@@ -1321,7 +1289,6 @@
         </div>
       </div>
       <div class="panel" id="calcRescisaoResultado"></div>
-    </div>
   </section>
 
   <!-- EMPREENDEDORISMO (em breve) -->
@@ -1405,76 +1372,9 @@
     </div>
   </div>
 
-  <!-- ÁPICE (em breve) -->
-  <section class="view" id="view-apice">
-    <div class="view-head">
-      <div>
-        <p class="eyebrow">Organizar</p>
-        <h1 class="view-title">Ápice</h1>
-        <p class="view-desc">Clientes e o que está a receber — os projetos em si moram no Planejamento.</p>
-      </div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <a class="btn btn-primary btn-sm" href="https://apicesolucoesdigitais.com.br" target="_blank" rel="noopener">Abrir Ápice ↗</a>
-      </div>
-    </div>
-    <div class="subtabs">
-      <button class="subtab active" data-sub="apice" data-target="apice-receber">A receber</button>
-      <button class="subtab" data-sub="apice" data-target="apice-clientes">Clientes</button>
-    </div>
-
-    <div class="subview active" id="apice-receber">
-      <div class="fech-resumo" id="apiceResumo" style="margin-bottom:18px;"><p class="empty-state">Carregando...</p></div>
-      <button class="btn btn-primary btn-sm" id="apiceAddRecebimentoBtn" style="margin-bottom:16px;">+ Recebimento</button>
-      <div id="apiceRecebimentosList"><p class="empty-state">Carregando...</p></div>
-    </div>
-
-    <div class="subview" id="apice-clientes">
-      <button class="btn btn-primary btn-sm" id="apiceAddClienteBtn" style="margin-bottom:16px;">+ Cliente</button>
-      <div id="apiceClientesList"><p class="empty-state">Carregando...</p></div>
-    </div>
-  </section>
-
-  <!-- Modal: cliente da Ápice -->
-  <div class="confirm-modal" id="apiceClienteModal">
-    <div class="confirm-modal-panel">
-      <p class="confirm-modal-text" id="apiceClienteModalTitle" style="margin-bottom:12px;">Novo cliente</p>
-      <label class="modal-field-label">Nome</label>
-      <input type="text" id="apiceClienteNomeInput" class="modal-text-input" placeholder="Nome do cliente ou empresa" autocomplete="off">
-      <label class="modal-field-label">Contato (opcional)</label>
-      <input type="text" id="apiceClienteContatoInput" class="modal-text-input" placeholder="E-mail, telefone...">
-      <label class="modal-field-label">Observação (opcional)</label>
-      <input type="text" id="apiceClienteObsInput" class="modal-text-input" placeholder="ex: projeto ligado no grupo X do Planejamento">
-      <div class="confirm-modal-actions">
-        <button class="btn btn-ghost btn-sm" id="apiceClienteCancelBtn">Cancelar</button>
-        <button class="btn btn-primary btn-sm" id="apiceClienteOkBtn">Salvar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal: recebimento da Ápice -->
-  <div class="confirm-modal" id="apiceRecebimentoModal">
-    <div class="confirm-modal-panel">
-      <p class="confirm-modal-text" id="apiceRecebimentoModalTitle" style="margin-bottom:12px;">Novo recebimento</p>
-      <label class="modal-field-label">Cliente</label>
-      <select id="apiceRecebimentoClienteInput" class="modal-text-input"></select>
-      <label class="modal-field-label">Descrição</label>
-      <input type="text" id="apiceRecebimentoDescInput" class="modal-text-input" placeholder="ex: 2ª parcela do site institucional">
-      <div class="modal-field-row">
-        <div>
-          <label class="modal-field-label">Valor</label>
-          <input type="text" id="apiceRecebimentoValorInput" class="modal-text-input" inputmode="decimal" placeholder="ex: 1500,00">
-        </div>
-        <div>
-          <label class="modal-field-label">Data prevista</label>
-          <input type="date" id="apiceRecebimentoDataInput" class="modal-text-input">
-        </div>
-      </div>
-      <div class="confirm-modal-actions">
-        <button class="btn btn-ghost btn-sm" id="apiceRecebimentoCancelBtn">Cancelar</button>
-        <button class="btn btn-primary btn-sm" id="apiceRecebimentoOkBtn">Salvar</button>
-      </div>
-    </div>
-  </div>
+  <!-- ÁPICE: sem tela própria de propósito — o nav-item na sidebar é um <a>
+       de verdade pro site (sem data-view, então nem entra na navegação por
+       view). Ver o comando "Abrir Ápice" da busca global em app-core.js. -->
 
   <!-- DECISÕES -->
   <section class="view" id="view-decisoes">

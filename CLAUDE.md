@@ -50,7 +50,7 @@ Sem servidor próprio pra dados/auth. O app fala direto com APIs externas:
 - **Firebase Cloud Messaging** — push dos despertadores/lembretes, mesmo com o app fechado/celular bloqueado (ver `sw.js` e `checarDespertadores` abaixo).
 - **Claude (Anthropic)** via Cloud Function própria (`iaProxy`) — a chave nunca chega ao navegador.
 
-⚠️ Pendência de segurança real, ainda em aberto: a chave `/openAiKey` que existia no Realtime Database (sobra de antes da `iaProxy`) circulou pelo navegador de qualquer pessoa logada antes de o node ser apagado (14/09/2026). O node já foi removido do banco, mas **a chave em si ainda não foi revogada em platform.openai.com** — isso só o dono da conta OpenAI pode fazer.
+Pendência de segurança resolvida (14/09/2026): a chave `/openAiKey` que existia no Realtime Database (sobra de antes da `iaProxy`) circulou pelo navegador de qualquer pessoa logada antes de o node ser apagado. O node foi removido do banco **e a chave em si foi revogada** em platform.openai.com.
 
 ### ⚠️ Dois projetos Firebase diferentes — a armadilha mais recorrente deste repo
 
@@ -75,10 +75,14 @@ Na prática:
 
 `hoje`, `storage` (Notas), `tarefas`, `monday` (Planejamento), `agenda`, `rotina`,
 `casa`, `manutencao`, `nosdois` (Nós dois), `financas`, `supermercado`, `calculos`,
-`decisoes`, `empreendedorismo`, `apice`, `busca` (Perguntar ao LifeOS), `fluencia`, `academia`,
+`decisoes`, `empreendedorismo`, `busca` (Perguntar ao LifeOS), `fluencia`, `academia`,
 `diario`, `retrospectiva`, `planoalimentar`, `objetivos`, `timelineobjetivos`, `visionboard`,
 `bateria`, `acordar` (sem entrada na sidebar — só abre quando um despertador toca),
 `config`.
+
+"Ápice" tem nav-item na sidebar mas **não é uma view** — de propósito, a pedido
+do usuário: o link `<a>` abre apicesolucoesdigitais.com.br direto, sem `data-view`
+e sem `id="view-apice"`. Não recriar a tela sem pedido explícito.
 
 O `data-view` na sidebar é o mesmo sufixo do id da `<section>` e, em geral, do nome
 do bloco correspondente em `js/app-*.js`/`style.css`.
