@@ -850,13 +850,13 @@
     monday:         [[renderPlanejamento, 'o Planejamento', 'planGruposList']],
     agenda:         [[renderAgenda, 'a Agenda', 'agendaList']],
     presentes:      [[renderPresentes, 'Presentes & datas', 'presentesList']],
+    compras:        [[renderCompras, 'Compras', 'comprasList']],
     rotina:         [[renderRotina, 'a Rotina', 'rotinaDaysGrid']],
     casa: [
       [renderCasaAtividades, 'as atividades da Casa', 'casaAtividadesList'],
       [renderCasaRegras,     'as regras da Casa',     'casaRegrasList'],
       [renderCasaErros,      'os erros da Casa',      'casaErrosList']
     ],
-    manutencao:     [[renderManutencao, 'a Manutenção', 'manutList']],
     financas:       [[renderFinancas, 'as Finanças', 'finMesesList']],
     objetivos:      [[renderObjetivos, 'os Objetivos', 'objetivosList']],
     decisoes:       [[renderDecisoes, 'as Decisões', 'decisoesList']],

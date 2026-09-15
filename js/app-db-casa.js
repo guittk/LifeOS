@@ -168,7 +168,6 @@
      do resto do app passam a ler/gravar os dados daquele quadro automaticamente. */
   const BOARD_VIEW_OPTIONS = [
     { key:'casa', label:'Casa' },
-    { key:'manutencao', label:'Manutenção' },
     { key:'retrospectiva', label:'Retrospectiva' },
     { key:'hoje', label:'Hoje' },
     { key:'rotina', label:'Rotina' },
@@ -176,6 +175,7 @@
     { key:'monday', label:'Planejamento' },
     { key:'agenda', label:'Agenda' },
     { key:'presentes', label:'Presentes & datas' },
+    { key:'compras', label:'Compras' },
     { key:'storage', label:'Notas' },
     { key:'academia', label:'Academia' },
     { key:'diario', label:'Diário' },
@@ -1712,79 +1712,6 @@
     });
   });
 
-  /* ---------- MANUTENÇÃO (carro, casa, documentos — intervalo longo) ----------
-     Mesmo modelo de pendência por frequência da Casa (ver casaAtividadeStatus),
-     só que com intervalos de meses/anos em vez de dias/semanas. */
-  const MANUT_FREQ_DIAS = { mensal:30, trimestral:90, semestral:180, anual:365 };
-  const MANUT_FREQ_LABEL = { mensal:'Mensal', trimestral:'Trimestral', semestral:'Semestral', anual:'Anual' };
-
-  function manutStatus(m){
-    const intervalo = MANUT_FREQ_DIAS[m.frequencia] || 365;
-    const dias = casaDiasDesde(m.feitaEm); // reaproveita a mesma conta de dias-desde da Casa
-    if(dias === Infinity) return { pendente:true, texto:'nunca feita' };
-    if(dias >= intervalo) return { pendente:true, texto: 'pendente há ' + dias + (dias === 1 ? ' dia' : ' dias') };
-    const faltam = intervalo - dias;
-    return { pendente:false, texto:'feita há ' + dias + (dias === 1 ? ' dia' : ' dias'), proxima: faltam === 1 ? 'volta amanhã' : 'volta em ' + faltam + ' dias' };
-  }
-
-  async function renderManutencao(){
-    const el = document.getElementById('manutList');
-    if(!el) return;
-    const dados = await dbGet(userPath('/Manutencao')) || {};
-    const entries = Object.entries(dados).sort((a, b) => {
-      const pa = manutStatus(a[1]).pendente ? 0 : 1, pb = manutStatus(b[1]).pendente ? 0 : 1;
-      return pa - pb || (a[1].criadoEm || '').localeCompare(b[1].criadoEm || '');
-    });
-    if(!entries.length){ el.innerHTML = '<p class="empty-state">Nenhuma manutenção cadastrada. Troca de óleo, revisão, IPVA, filtro de água...</p>'; return; }
-    el.innerHTML = entries.map(([id, m]) => {
-      const st = manutStatus(m);
-      return `
-      <div class="casa-card ${st.pendente ? '' : 'casa-card-feita'}" data-id="${id}">
-        <button type="button" class="casa-check" data-manut-done="${id}" title="${st.pendente ? 'Marcar como feita' : 'Desmarcar'}">${st.pendente ? '' : '✓'}</button>
-        <div class="casa-card-main">
-          <p class="casa-card-title">${escapeHtml(m.nome)}</p>
-          <div class="casa-card-meta">
-            <span>${MANUT_FREQ_LABEL[m.frequencia] || m.frequencia}</span>
-            ${m.custo ? `<span>· ${finFmt(m.custo)}</span>` : ''}
-            <span class="casa-status ${st.pendente ? 'casa-status-pendente' : ''}">· ${escapeHtml(st.texto)}</span>
-            ${st.proxima ? `<span class="casa-status">· ${escapeHtml(st.proxima)}</span>` : ''}
-            ${m.observacao ? `<span>· ${escapeHtml(m.observacao)}</span>` : ''}
-          </div>
-        </div>
-        <div class="casa-card-actions"><button data-manut-del="${id}">excluir</button></div>
-      </div>`;
-    }).join('');
-    el.querySelectorAll('[data-manut-done]').forEach(btn => btn.addEventListener('click', async () => {
-      const id = btn.getAttribute('data-manut-done');
-      const m = dados[id];
-      const st = manutStatus(m);
-      await dbPatch(userPath('/Manutencao/' + id), { feitaEm: st.pendente ? todayStr() : null });
-      renderManutencao();
-    }));
-    el.querySelectorAll('[data-manut-del]').forEach(btn => btn.addEventListener('click', async () => {
-      if(!await showConfirm('Excluir esta manutenção?')) return;
-      await dbDelete(userPath('/Manutencao/' + btn.getAttribute('data-manut-del')));
-      renderManutencao();
-    }));
-  }
-  document.getElementById('manutAddBtn').addEventListener('click', () => {
-    document.getElementById('manutNomeInput').value = '';
-    document.getElementById('manutFrequenciaInput').value = 'anual';
-    document.getElementById('manutCustoInput').value = '';
-    document.getElementById('manutObsInput').value = '';
-    document.getElementById('manutModal').classList.add('active');
-  });
-  document.getElementById('manutCancelBtn').addEventListener('click', () => document.getElementById('manutModal').classList.remove('active'));
-  document.getElementById('manutOkBtn').addEventListener('click', async () => {
-    const nome = document.getElementById('manutNomeInput').value.trim();
-    if(!nome){ showAppMessage('Digite o que precisa ser feito.', 'error'); return; }
-    const frequencia = document.getElementById('manutFrequenciaInput').value;
-    const custo = finParseNum(document.getElementById('manutCustoInput').value) || null;
-    const observacao = document.getElementById('manutObsInput').value.trim();
-    await dbPut(userPath('/Manutencao/' + newId()), { nome, frequencia, custo, observacao, criadoEm: new Date().toISOString() });
-    document.getElementById('manutModal').classList.remove('active');
-    renderManutencao();
-  });
 
   /* ---------- Lançar item avulso nas Finanças (usado pelo Supermercado) ----------
      "Finalizar compra" no Supermercado lança o gasto no mês certo das Finanças —

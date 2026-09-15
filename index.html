@@ -83,13 +83,14 @@
     <div class="nav-item" data-view="storage" title="Notas"><span class="nav-icon">🗂️</span><span class="nav-label">Notas</span></div>
     <div class="nav-item" data-view="tarefas" title="Tarefas"><span class="nav-icon">✅</span><span class="nav-label">Tarefas</span></div>
     <div class="nav-item" data-view="casa" title="Casa"><span class="nav-icon">🏡</span><span class="nav-label">Casa</span></div>
-    <div class="nav-item" data-view="financas" title="Finanças"><span class="nav-icon">💰</span><span class="nav-label">Finanças</span></div>
-    <div class="nav-item" data-view="supermercado" title="Supermercado"><span class="nav-icon">🛒</span><span class="nav-label">Supermercado</span></div>
     <div class="nav-item" data-view="fluencia" title="Fluência"><span class="nav-icon">🗣️</span><span class="nav-label">Fluência</span></div>
-    <div class="nav-item" data-view="decisoes" title="Decisões"><span class="nav-icon">🧭</span><span class="nav-label">Decisões</span></div>
+    <div class="nav-item" data-view="financas" title="Finanças"><span class="nav-icon">💰</span><span class="nav-label">Finanças</span></div>
     <div class="nav-item" data-view="diario" title="Diário"><span class="nav-icon">📓</span><span class="nav-label">Diário</span></div>
     <div class="nav-item" data-view="objetivos" title="Objetivos"><span class="nav-icon">🎯</span><span class="nav-label">Objetivos</span></div>
+    <div class="nav-item" data-view="decisoes" title="Decisões"><span class="nav-icon">🧭</span><span class="nav-label">Decisões</span></div>
     <div class="nav-item" data-view="busca" title="Perguntar"><span class="nav-icon">💬</span><span class="nav-label">Perguntar</span></div>
+    <div class="nav-item" data-view="supermercado" title="Supermercado"><span class="nav-icon">🛒</span><span class="nav-label">Supermercado</span></div>
+    <div class="nav-item" data-view="compras" title="Compras"><span class="nav-icon">🛍️</span><span class="nav-label">Compras</span></div>
   </nav>
 
   <!-- Telas de configuração: não são de uso diário, só onde se ajusta o que
@@ -101,7 +102,6 @@
     <div class="nav-item" data-view="academia" title="Academia"><span class="nav-icon">🏋️</span><span class="nav-label">Academia</span></div>
     <div class="nav-item" data-view="planoalimentar" title="Plano Alimentar"><span class="nav-icon">🍽️</span><span class="nav-label">Plano Alimentar</span></div>
     <div class="nav-item" data-view="presentes" title="Presentes &amp; datas"><span class="nav-icon">🎁</span><span class="nav-label">Presentes</span></div>
-    <div class="nav-item" data-view="manutencao" title="Manutenção"><span class="nav-icon">🔧</span><span class="nav-label">Manutenção</span></div>
   </nav>
 
   <!-- Telas de consulta: só pra olhar/visualizar algo já registrado em outro
@@ -957,6 +957,12 @@
           <input type="number" min="1" max="31" id="presenteOcasiaoDiaMesInput" class="modal-text-input" placeholder="ex: 15">
         </div>
       </div>
+      <div class="modal-field-row" id="presenteOcasiaoDataAvulsoRow">
+        <div>
+          <label class="modal-field-label">Data de entrega (opcional)</label>
+          <input type="date" id="presenteOcasiaoDataEntregaInput" class="modal-text-input">
+        </div>
+      </div>
       <p class="fin-sim-nota" id="presenteOcasiaoNota" style="margin:-8px 0 14px;">Só o dia e o mês são usados — o ano do calendário é ignorado.</p>
       <label class="modal-field-label">Orçamento (opcional)</label>
       <input type="text" id="presenteOcasiaoOrcamentoInput" class="modal-text-input" inputmode="decimal" placeholder="ex: 150,00">
@@ -1032,48 +1038,6 @@
     </div>
   </section>
 
-  <!-- MANUTENÇÃO -->
-  <section class="view" id="view-manutencao">
-    <div class="view-head">
-      <div>
-        <p class="eyebrow">Configurar</p>
-        <h1 class="view-title">Manutenção</h1>
-        <p class="view-desc">Coisas de intervalo longo, caras de esquecer — carro, casa, documentos.</p>
-      </div>
-      <button class="btn btn-primary btn-sm" id="manutAddBtn">+ Nova manutenção</button>
-    </div>
-    <div id="manutList"><p class="empty-state">Carregando...</p></div>
-  </section>
-
-  <!-- Modal: manutenção -->
-  <div class="confirm-modal" id="manutModal">
-    <div class="confirm-modal-panel">
-      <p class="confirm-modal-text" style="margin-bottom:12px;">Nova manutenção</p>
-      <label class="modal-field-label">O que precisa ser feito</label>
-      <input type="text" id="manutNomeInput" class="modal-text-input" placeholder="ex: Troca de óleo, IPVA, Filtro de água..." autocomplete="off">
-      <div class="modal-field-row">
-        <div>
-          <label class="modal-field-label">Frequência</label>
-          <select id="manutFrequenciaInput" class="modal-text-input">
-            <option value="mensal">Mensal</option>
-            <option value="trimestral">Trimestral</option>
-            <option value="semestral">Semestral</option>
-            <option value="anual" selected>Anual</option>
-          </select>
-        </div>
-        <div>
-          <label class="modal-field-label">Custo estimado (opcional)</label>
-          <input type="text" id="manutCustoInput" class="modal-text-input" inputmode="decimal" placeholder="ex: 250,00">
-        </div>
-      </div>
-      <label class="modal-field-label">Observação (opcional)</label>
-      <input type="text" id="manutObsInput" class="modal-text-input" placeholder="ex: agendar com a oficina do Zé">
-      <div class="confirm-modal-actions">
-        <button class="btn btn-ghost btn-sm" id="manutCancelBtn">Cancelar</button>
-        <button class="btn btn-primary btn-sm" id="manutOkBtn">Salvar</button>
-      </div>
-    </div>
-  </div>
 
   <!-- FINANÇAS -->
   <section class="view" id="view-financas">
@@ -1300,6 +1264,49 @@
       <div class="confirm-modal-actions">
         <button class="btn btn-ghost btn-sm" id="superDespensaCancelBtn">Cancelar</button>
         <button class="btn btn-primary btn-sm" id="superDespensaOkBtn">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPRAS (lista geral do que precisa comprar — não é o Supermercado, que é
+       só compra de mercado; aqui é qualquer coisa, com prioridade e valor) -->
+  <section class="view" id="view-compras">
+    <div class="view-head">
+      <div>
+        <p class="eyebrow">Organizar</p>
+        <h1 class="view-title">Compras</h1>
+        <p class="view-desc">Tudo que precisa comprar — não é mercado, é qualquer coisa — com valor e prioridade.</p>
+      </div>
+      <button class="btn btn-primary btn-sm" id="compraAddBtn">+ Nova compra</button>
+    </div>
+    <div id="comprasList"><p class="empty-state">Carregando...</p></div>
+  </section>
+
+  <!-- Modal: item de compra -->
+  <div class="confirm-modal" id="compraModal">
+    <div class="confirm-modal-panel">
+      <p class="confirm-modal-text" id="compraModalTitle" style="margin-bottom:12px;">Nova compra</p>
+      <label class="modal-field-label">O que precisa comprar</label>
+      <input type="text" id="compraNomeInput" class="modal-text-input" placeholder="ex: Cadeira de escritório, presente pro João..." autocomplete="off">
+      <div class="modal-field-row">
+        <div>
+          <label class="modal-field-label">Prioridade</label>
+          <select id="compraPrioridadeInput" class="modal-text-input">
+            <option value="alta">Alta</option>
+            <option value="media" selected>Média</option>
+            <option value="baixa">Baixa</option>
+          </select>
+        </div>
+        <div>
+          <label class="modal-field-label">Valor estimado (opcional)</label>
+          <input type="text" id="compraValorInput" class="modal-text-input" inputmode="decimal" placeholder="ex: 250,00">
+        </div>
+      </div>
+      <label class="modal-field-label">Descrição (opcional)</label>
+      <textarea id="compraDescricaoInput" class="modal-text-input" rows="2" placeholder="Detalhe, link, onde comprar..." style="resize:vertical;"></textarea>
+      <div class="confirm-modal-actions">
+        <button class="btn btn-ghost btn-sm" id="compraCancelBtn">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="compraOkBtn">Salvar</button>
       </div>
     </div>
   </div>

@@ -1640,6 +1640,7 @@
     const tipo = presenteOcasiaoTipo(oc);
     if(tipo === 'anual' && oc.dia && oc.mes) return presenteProximaData(oc.dia, oc.mes);
     if(tipo === 'mensal' && oc.dia) return presenteProximaDataMensal(oc.dia);
+    if(tipo === 'avulso' && oc.dataEntrega) return new Date(oc.dataEntrega + 'T00:00:00');
     return null;
   }
   function presenteDiasRotulo(data){
@@ -1649,6 +1650,14 @@
     if(dias === 1) return { texto: 'é amanhã', classe: 'proximo' };
     if(dias <= 30) return { texto: 'em ' + dias + ' dias', classe: 'proximo' };
     return { texto: 'em ' + dias + ' dias', classe: '' };
+  }
+  // Só a data de entrega (avulsa) pode ficar pra trás — anual/mensal são
+  // recorrentes e presenteProximaData(Mensal) já sempre devolve uma data futura.
+  function presenteDiasRotuloAvulso(data){
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const dias = Math.round((data - hoje) / 86400000);
+    if(dias < 0) return { texto: 'atrasado ' + Math.abs(dias) + (Math.abs(dias) === 1 ? ' dia' : ' dias'), classe: 'hoje' };
+    return presenteDiasRotulo(data);
   }
   function presenteOcasiaoIcone(nome){
     const n = (nome || '').toLowerCase();
@@ -1699,6 +1708,10 @@
     } else if(tipo === 'mensal' && oc.dia){
       const rotulo = presenteDiasRotulo(presenteProximaDataMensal(oc.dia));
       meta += `<span>todo dia ${oc.dia}</span><span class="${rotulo.classe}">${rotulo.texto}</span>`;
+    } else if(tipo === 'avulso' && oc.dataEntrega){
+      const [ano, mes, dia] = oc.dataEntrega.split('-');
+      const rotulo = presenteDiasRotuloAvulso(new Date(oc.dataEntrega + 'T00:00:00'));
+      meta += `<span>entrega ${dia}/${mes}/${ano}</span><span class="${rotulo.classe}">${rotulo.texto}</span>`;
     } else {
       meta += `<span>avulsa</span>`;
     }
@@ -1876,12 +1889,13 @@
   const PRESENTE_OCASIAO_NOTAS = {
     anual: 'Só o dia e o mês são usados — o ano do calendário é ignorado, a ocasião se repete todo ano.',
     mensal: 'Todo mês, nesse dia — útil pra um presente ou mimo recorrente que não é ligado a uma data comemorativa fixa.',
-    avulso: 'Sem nenhuma data — pra um presente único, ideia solta.'
+    avulso: 'Não é uma data comemorativa — mas se o presente tem prazo de entrega, pode marcar aqui.'
   };
   function presenteAtualizarCamposTipo(){
     const tipo = document.getElementById('presenteOcasiaoTipoInput').value;
     document.getElementById('presenteOcasiaoDataAnualRow').classList.toggle('hidden', tipo !== 'anual');
     document.getElementById('presenteOcasiaoDataMensalRow').classList.toggle('hidden', tipo !== 'mensal');
+    document.getElementById('presenteOcasiaoDataAvulsoRow').classList.toggle('hidden', tipo !== 'avulso');
     document.getElementById('presenteOcasiaoNota').textContent = PRESENTE_OCASIAO_NOTAS[tipo];
   }
   document.getElementById('presenteOcasiaoTipoInput').addEventListener('change', presenteAtualizarCamposTipo);
@@ -1897,6 +1911,7 @@
       ? (new Date().getFullYear()) + '-' + String(oc.mes).padStart(2, '0') + '-' + String(oc.dia).padStart(2, '0')
       : '';
     document.getElementById('presenteOcasiaoDiaMesInput').value = (tipo === 'mensal' && oc && oc.dia) ? oc.dia : '';
+    document.getElementById('presenteOcasiaoDataEntregaInput').value = (tipo === 'avulso' && oc && oc.dataEntrega) ? oc.dataEntrega : '';
     presenteAtualizarCamposTipo();
     document.getElementById('presenteOcasiaoOrcamentoInput').value = oc && oc.orcamento ? finFmtNum(oc.orcamento) : '';
     document.getElementById('presenteOcasiaoModal').classList.add('active');
@@ -1908,12 +1923,14 @@
     if(!nome){ showAppMessage('Digite o nome da ocasião.', 'error'); return; }
     const tipo = document.getElementById('presenteOcasiaoTipoInput').value;
     const orcamento = finParseNum(document.getElementById('presenteOcasiaoOrcamentoInput').value) || null;
-    const patch = { nome, tipo, orcamento, dia:null, mes:null };
+    const patch = { nome, tipo, orcamento, dia:null, mes:null, dataEntrega:null };
     if(tipo === 'anual'){
       const dataStr = document.getElementById('presenteOcasiaoDataInput').value;
       if(!dataStr){ showAppMessage('Escolha uma data.', 'error'); return; }
       const [, mesStr, diaStr] = dataStr.split('-');
       patch.dia = parseInt(diaStr, 10); patch.mes = parseInt(mesStr, 10);
+    } else if(tipo === 'avulso'){
+      patch.dataEntrega = document.getElementById('presenteOcasiaoDataEntregaInput').value || null;
     } else if(tipo === 'mensal'){
       const dia = parseInt(document.getElementById('presenteOcasiaoDiaMesInput').value, 10);
       if(!dia || dia < 1 || dia > 31){ showAppMessage('Escolha um dia do mês válido (1 a 31).', 'error'); return; }
@@ -1925,5 +1942,100 @@
     else await dbPut(userPath('/PresentesPessoas/' + pessoaId + '/ocasioes/' + id), { ...patch, criadoEm: new Date().toISOString() });
     document.getElementById('presenteOcasiaoModal').classList.remove('active');
     renderPresentes();
+  });
+
+  /* ---------- COMPRAS (lista geral, qualquer coisa — não é o Supermercado) ----------
+     Lista simples, sem aninhamento: cada item tem prioridade (ordena a lista),
+     valor estimado (opcional) e descrição (opcional). Marcar como comprado
+     lança o gasto nas Finanças, mesmo padrão de Presentes/Supermercado. */
+  const COMPRA_PRIORIDADE_LABEL = { alta:'Alta', media:'Média', baixa:'Baixa' };
+  const COMPRA_PRIORIDADE_ORDEM = { alta:0, media:1, baixa:2 };
+
+  function compraItemHtml(id, c){
+    return `
+      <div class="casa-card ${c.comprado ? 'casa-card-feita' : ''}" data-id="${id}">
+        <button type="button" class="casa-check" data-compra-done="${id}" title="${c.comprado ? 'Desmarcar' : 'Marcar como comprado'}">${c.comprado ? '✓' : ''}</button>
+        <div class="casa-card-main">
+          <p class="casa-card-title">${escapeHtml(c.nome)}</p>
+          <div class="casa-card-meta">
+            <span class="compra-prioridade compra-prioridade-${c.prioridade}">${COMPRA_PRIORIDADE_LABEL[c.prioridade] || c.prioridade}</span>
+            ${c.valor ? `<span>· ${finFmt(c.valor)}</span>` : ''}
+            ${c.descricao ? `<span>· ${escapeHtml(c.descricao)}</span>` : ''}
+          </div>
+        </div>
+        <div class="casa-card-actions">
+          <button data-compra-edit="${id}">editar</button>
+          <button data-compra-del="${id}">excluir</button>
+        </div>
+      </div>`;
+  }
+
+  async function renderCompras(){
+    const el = document.getElementById('comprasList');
+    if(!el) return;
+    const dados = await dbGet(userPath('/Compras')) || {};
+    const entries = Object.entries(dados).sort((a, b) => {
+      const compA = a[1].comprado ? 1 : 0, compB = b[1].comprado ? 1 : 0;
+      if(compA !== compB) return compA - compB; // pendentes primeiro
+      const pa = COMPRA_PRIORIDADE_ORDEM[a[1].prioridade] ?? 1, pb = COMPRA_PRIORIDADE_ORDEM[b[1].prioridade] ?? 1;
+      return pa - pb || (a[1].criadoEm || '').localeCompare(b[1].criadoEm || '');
+    });
+    if(!entries.length){ el.innerHTML = '<p class="empty-state">Nada na lista ainda. Toque em "+ Nova compra" pra anotar o que precisa comprar.</p>'; return; }
+    el.innerHTML = entries.map(([id, c]) => compraItemHtml(id, c)).join('');
+
+    el.querySelectorAll('[data-compra-done]').forEach(btn => btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-compra-done');
+      const c = dados[id];
+      if(!c) return;
+      if(!c.comprado){
+        const hoje = todayStr();
+        const lancado = c.valor > 0 ? await finLancarItem(hoje, 'compras', c.nome, -c.valor) : null;
+        await dbPatch(userPath('/Compras/' + id), {
+          comprado:true, lancamentoMesId: lancado ? lancado.mesId : null, lancamentoItemId: lancado ? lancado.itemId : null
+        });
+        if(c.valor > 0) showAppMessage(lancado ? 'Comprado — lançado nas Finanças deste mês.' : 'Comprado, mas o mês atual ainda não existe nas Finanças.', lancado ? 'success' : 'error');
+      } else {
+        await finRemoverItem(c.lancamentoMesId, c.lancamentoItemId);
+        await dbPatch(userPath('/Compras/' + id), { comprado:false, lancamentoMesId:null, lancamentoItemId:null });
+      }
+      await renderCompras();
+    }));
+    el.querySelectorAll('[data-compra-edit]').forEach(btn => btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-compra-edit');
+      compraAbrirModal(id, dados[id]);
+    }));
+    el.querySelectorAll('[data-compra-del]').forEach(btn => btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-compra-del');
+      if(!await showConfirm('Excluir "' + (dados[id].nome || 'esta compra') + '"?')) return;
+      if(dados[id].comprado) await finRemoverItem(dados[id].lancamentoMesId, dados[id].lancamentoItemId);
+      await dbDelete(userPath('/Compras/' + id));
+      await renderCompras();
+    }));
+  }
+
+  let compraEditandoId = null;
+  function compraAbrirModal(id, c){
+    compraEditandoId = id || null;
+    document.getElementById('compraModalTitle').textContent = id ? 'Editar compra' : 'Nova compra';
+    document.getElementById('compraNomeInput').value = c ? c.nome : '';
+    document.getElementById('compraPrioridadeInput').value = c ? c.prioridade : 'media';
+    document.getElementById('compraValorInput').value = c && c.valor ? finFmtNum(c.valor) : '';
+    document.getElementById('compraDescricaoInput').value = c ? (c.descricao || '') : '';
+    document.getElementById('compraModal').classList.add('active');
+    document.getElementById('compraNomeInput').focus();
+  }
+  document.getElementById('compraAddBtn').addEventListener('click', () => compraAbrirModal(null, null));
+  document.getElementById('compraCancelBtn').addEventListener('click', () => document.getElementById('compraModal').classList.remove('active'));
+  document.getElementById('compraOkBtn').addEventListener('click', async () => {
+    const nome = document.getElementById('compraNomeInput').value.trim();
+    if(!nome){ showAppMessage('Digite o que precisa comprar.', 'error'); return; }
+    const prioridade = document.getElementById('compraPrioridadeInput').value;
+    const valor = finParseNum(document.getElementById('compraValorInput').value) || null;
+    const descricao = document.getElementById('compraDescricaoInput').value.trim();
+    const patch = { nome, prioridade, valor, descricao };
+    if(compraEditandoId) await dbPatch(userPath('/Compras/' + compraEditandoId), patch);
+    else await dbPut(userPath('/Compras/' + newId()), { ...patch, comprado:false, criadoEm: new Date().toISOString() });
+    document.getElementById('compraModal').classList.remove('active');
+    await renderCompras();
   });
 

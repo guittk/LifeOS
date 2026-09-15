@@ -627,10 +627,17 @@
     // cada foto "ocupava pouco" de altura, empilhando fotos demais numa coluna
     // curta (cobrindo umas às outras) ou espalhando poucas com vão enorme.
     const boardRatio = (boardWidthPx > 0 && boardHeightPx > 0) ? boardWidthPx / boardHeightPx : 1.6;
-    const cols = Math.max(2, Math.min(7, Math.round(Math.sqrt(count * avgAspect * boardRatio * 0.75))));
+    // Menos colunas do que antes (e uma variação de tamanho bem mais forte por
+    // foto) — com todas quase do mesmo tamanho numa grade regular, o resultado
+    // parecia planilha em vez de colagem. Poucas colunas + fotos de tamanhos
+    // bem diferentes é o que faz um mosaico parecer intercalado de verdade.
+    const cols = Math.max(2, Math.min(6, Math.round(Math.sqrt(count * avgAspect * boardRatio * 0.55))));
     const cellW = 100 / cols;
-    const widthPct = Math.min(40, cellW * 0.94);
-    const colHeights = new Array(cols).fill(0); // acumulado em % da ALTURA do quadro
+    const widthPct = Math.min(VISION_MAX_WIDTH, cellW * 1.05);
+    // Cada coluna começa numa altura inicial ligeiramente diferente (em vez de
+    // todas em 0) — é isso que quebra o efeito "prateleiras alinhadas" e faz
+    // as fotos de colunas vizinhas ficarem intercaladas já de cara.
+    const colHeights = new Array(cols).fill(0).map(() => Math.random() * 10);
     const order = [...Array(count).keys()];
     for(let i = order.length - 1; i > 0; i--){
       const j = Math.floor(Math.random() * (i + 1));
@@ -641,15 +648,25 @@
       // sempre entra na coluna mais curta no momento — mantém o preenchimento parelho,
       // sem vãos grandes nem uma foto avançando sobre a coluna vizinha.
       const col = colHeights.indexOf(Math.min(...colHeights));
-      const w = widthPct * (0.9 + Math.random() * 0.2);
+      // Variação de tamanho bem mais ampla (65%–140% do tamanho-base da coluna)
+      // pra criar hierarquia visual — algumas fotos "heroes", outras pequenas —
+      // em vez do antigo ±10% que deixava tudo com cara de peça padronizada.
+      const w = widthPct * (0.65 + Math.random() * 0.75);
       // w é % da LARGURA; a altura real da foto precisa virar % da ALTURA —
       // daí multiplicar pela razão largura/altura do próprio quadro.
       const heightEst = w * boardRatio * Math.min(1.6, Math.max(0.55, aspects[i]));
-      const jitterX = (Math.random() - 0.5) * cellW * 0.08;
+      // Jitter horizontal bem maior que antes (até 40% da coluna, contra 8%) —
+      // deixa a foto invadir um pouco o território da coluna vizinha, em vez
+      // de ficar sempre centralizada na própria faixa (é isso que "trai" a
+      // grade e faz parecer colunas retas de planilha).
+      const jitterX = (Math.random() - 0.5) * cellW * 0.4;
       const left = col * cellW + cellW / 2 + jitterX;
       const top = colHeights[col] + heightEst / 2;
-      colHeights[col] += heightEst + 1.5;
-      const rotate = Math.round((Math.random() - 0.5) * 8);
+      // Espaçamento vertical pode ficar levemente negativo (fotos se tocando/
+      // sobrepondo de leve) até um respiro pequeno — o efeito "pilha de fotos
+      // jogadas na mesa" que uma colagem de verdade tem.
+      colHeights[col] += heightEst + (Math.random() * 3 - 1);
+      const rotate = Math.round((Math.random() - 0.5) * 10);
       positions[i] = { left: Math.min(98, Math.max(2, left)), top, widthPct: w, rotate };
     });
     // Reescala posição E tamanho juntos, pelo mesmo fator — só esticar/encolher

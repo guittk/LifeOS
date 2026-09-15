@@ -1981,6 +1981,11 @@
   .casa-status{ color: var(--text-dim); }
   .casa-status-pendente{ color: var(--gold); font-weight:500; }
 
+  .compra-prioridade{ font-weight:600; }
+  .compra-prioridade-alta{ color:var(--coral); }
+  .compra-prioridade-media{ color:var(--gold); }
+  .compra-prioridade-baixa{ color:var(--text-dim); font-weight:500; }
+
   .casa-dia-chips{ display:flex; gap:6px; }
   .casa-dia-chip{
     width:32px; height:32px; border-radius:50%; border:1px solid var(--line-strong); background:var(--surface);

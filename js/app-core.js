@@ -835,7 +835,7 @@
   // Toda view também é um comando de navegação.
   const SEARCH_VIEWS = [
     ['hoje','Hoje'], ['storage','Notas'], ['tarefas','Tarefas'], ['monday','Planejamento'],
-    ['agenda','Agenda'], ['presentes','Presentes & datas'], ['rotina','Rotina'], ['casa','Casa'], ['manutencao','Manutenção'],
+    ['agenda','Agenda'], ['presentes','Presentes & datas'], ['compras','Compras'], ['rotina','Rotina'], ['casa','Casa'],
     ['financas','Finanças'],
     ['fluencia','Fluência'], ['bateria','Bateria'], ['academia','Academia'], ['diario','Diário'],
     ['retrospectiva','Retrospectiva'],
