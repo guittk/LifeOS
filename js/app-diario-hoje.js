@@ -251,11 +251,7 @@
   function cloneAcademia(data){ return cloneValue(data) || {}; } // cloneValue: app-db-casa.js
   function setAcademiaDirty(dirty){
     academiaDirty = dirty;
-    const status = document.getElementById('academiaSaveStatus');
-    const saveBtn = document.getElementById('academiaSaveBtn');
-    if(status) status.textContent = dirty ? 'Alterações não salvas' : 'Tudo salvo';
-    if(status) status.style.color = dirty ? 'var(--gold)' : 'var(--text-dim)';
-    if(saveBtn) saveBtn.disabled = !dirty;
+    marcarStatusRascunho(dirty, 'academiaSaveStatus', 'academiaSaveBtn');
   }
   function ensureAcademiaDay(dow){
     if(!academiaDraft[dow]) academiaDraft[dow] = { ativo:false, exercicios:{} };
@@ -442,11 +438,7 @@
   function clonePa(data){ return cloneValue(data) || {}; } // cloneValue: app-db-casa.js
   function setPaDirty(dirty){
     paDirty = dirty;
-    const status = document.getElementById('paSaveStatus');
-    const saveBtn = document.getElementById('paSaveBtn');
-    if(status) status.textContent = dirty ? 'Alterações não salvas' : 'Tudo salvo';
-    if(status) status.style.color = dirty ? 'var(--gold)' : 'var(--text-dim)';
-    if(saveBtn) saveBtn.disabled = !dirty;
+    marcarStatusRascunho(dirty, 'paSaveStatus', 'paSaveBtn');
   }
   function ensurePaDay(dow){
     if(!paDraft[dow]) paDraft[dow] = { refeicoes:{} };
@@ -672,11 +664,7 @@
 
   function setRotinaDirty(dirty){
     rotinaDirty = dirty;
-    const status = document.getElementById('rotinaSaveStatus');
-    const saveBtn = document.getElementById('rotinaSaveBtn');
-    if(status) status.textContent = dirty ? 'Alterações não salvas' : 'Tudo salvo';
-    if(status) status.style.color = dirty ? 'var(--gold)' : 'var(--text-dim)';
-    if(saveBtn) saveBtn.disabled = !dirty;
+    marcarStatusRascunho(dirty, 'rotinaSaveStatus', 'rotinaSaveBtn');
   }
 
   function ensureRotinaBlock(dow, bid){

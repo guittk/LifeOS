@@ -1447,6 +1447,26 @@
     });
   }
 
+  /* ---------- Rascunho + "dirty": Rotina, Academia e Plano Alimentar ----------
+     As três telas editam um rascunho em memória e só gravam no Firebase ao
+     clicar "Salvar alterações" — só o indicador visual (texto de status +
+     botão) era idêntico e repetido três vezes; unificado aqui. Cada tela
+     continua com sua própria variável `xDirty` e seu próprio rascunho — nada
+     do estado em si foi tocado, só a exibição. Finanças fica de fora: usa um
+     status com mais mensagens (Salvando..., erro de conexão) e mostra/esconde
+     Salvar e Cancelar em vez de só desabilitar — forçar as duas formas na
+     mesma função arriscava mudar comportamento visível, e a regra aqui foi
+     não mudar nada visível. */
+  function marcarStatusRascunho(dirty, statusId, saveBtnId){
+    const status = document.getElementById(statusId);
+    if(status){
+      status.textContent = dirty ? 'Alterações não salvas' : 'Tudo salvo';
+      status.style.color = dirty ? 'var(--gold)' : 'var(--text-dim)';
+    }
+    const saveBtn = document.getElementById(saveBtnId);
+    if(saveBtn) saveBtn.disabled = !dirty;
+  }
+
   /* Prompt estilizado da própria aplicação — substitui window.prompt() do navegador.
      Retorna uma Promise<string|null>: o texto digitado (trim) se confirmado e não vazio,
      ou null se cancelado / deixado em branco. */
